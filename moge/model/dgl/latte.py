@@ -6,10 +6,11 @@ import torch.nn.functional as F
 from dgl.heterograph import DGLBlock
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
+from torch import nn as nn, Tensor
+
 from moge.model.PyG.utils import filter_metapaths, max_num_hops, join_metapaths
 from moge.model.dgl.utils import ChainMetaPaths
 from moge.model.relations import RelationAttention, MetapathGATConv
-from torch import nn as nn, Tensor
 
 
 class LATTEConv(nn.Module, RelationAttention):
@@ -140,7 +141,7 @@ class LATTEConv(nn.Module, RelationAttention):
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    def forward(self, g: DGLBlock, feat: Dict[str, Tensor], save_betas=False, verbose=False):
+    def forward(self, g: DGLBlock, feat: Dict[str, Tensor], save_betas=False, verbose=False, **kwargs):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
 
         funcs = {}
@@ -170,7 +171,9 @@ class LATTEConv(nn.Module, RelationAttention):
 
             # If node type doesn't have any messages
             if len(etypes) == 0:
-                h_out[ntype] = feat_dst[ntype]
+                # h_out[ntype] = feat_dst[ntype]
+                continue
+            elif g.num_dst_nodes(ntype) == 0:
                 continue
             # If homogeneous graph
             # if len(g.etypes) == 1:
@@ -182,15 +185,19 @@ class LATTEConv(nn.Module, RelationAttention):
             #     continue
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            h_out[ntype] = torch.stack([g.dstnodes[ntype].data[etype] for etype in etypes] +
-                                       [g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels)],
-                                       dim=1)
+            empty_relations = torch.zeros(g.num_dst_nodes(ntype), self.attn_heads, self.out_channels,
+                                          dtype=self.attn_l.dtype, device=self.attn_l.device)
+            h_out[ntype] = torch.stack(
+                [g.dstnodes[ntype].data[etype] if hasattr(g.dstnodes[ntype].data, etype) else empty_relations \
+                 for etype in etypes] +
+                [g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels)],
+                dim=1)
 
             if verbose:
                 rel_embedding = h_out[ntype].detach().clone()
 
-            h_out[ntype], betas[ntype] = self.relation_conv[ntype].forward(
-                h_out[ntype].view(h_out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim))
+            h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim)
+            h_out[ntype], betas[ntype] = self.relation_conv[ntype].forward(h_out[ntype])
             # beta[ntype] = self.get_beta_weights(query=out[ntype][:, -1, :], key=out[ntype], ntype=ntype)
             # out[ntype] = (out[ntype] * beta[ntype].unsqueeze(-1)).sum(1)
             # out[ntype] = out[ntype].view(out[ntype].size(0), self.embedding_dim)

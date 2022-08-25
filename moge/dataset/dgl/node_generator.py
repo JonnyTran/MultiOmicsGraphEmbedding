@@ -11,15 +11,15 @@ from dgl.dataloading import BlockSampler
 from dgl.sampling import RandomWalkNeighborSampler
 from dgl.utils import prepare_tensor_dict, prepare_tensor
 from logzero import logger
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
 from ogb.nodeproppred import DglNodePropPredDataset
 from pandas import Index, DataFrame
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
 
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
 from ..PyG.node_generator import HeteroNeighborGenerator
@@ -69,7 +69,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
         for ntype, labels in self.y_dict.items():
             if labels.dim() == 2 and labels.shape[1] == 1:
                 labels = labels.squeeze(1)
-            graph.nodes[ntype].data["labels"] = labels
+            graph.nodes[ntype].data["label"] = labels
 
         self.metapaths = graph.canonical_etypes
 
@@ -379,12 +379,13 @@ class DGLNodeGenerator(HeteroGraphDataset):
 
         if add_reverse:
             self.reverse_etypes, self.reverse_eids = {}, {}
-            transform = AddReverse(copy_edata=True, sym_new_etype=True)
+            transform = AddReverse(copy_edata=True, sym_new_etype=False)
             new_g: dgl.DGLHeteroGraph = transform(G)
 
             # Get mapping between orig eid to reversed eid
             for metapath in G.canonical_etypes:
                 rev_metapath = reverse_metapath(metapath)
+                if rev_metapath not in new_g.canonical_etypes: continue
                 src_rev, dst_rev, eid_rev = new_g.all_edges(etype=rev_metapath, form="all")
                 # print(metapath, eid[:10], (src[0], dst[0]))
                 # print(rev_metapath, eid_rev[:10], (src_rev[0], dst_rev[0]))

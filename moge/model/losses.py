@@ -14,11 +14,11 @@ class ClassificationLoss(nn.Module):
         self.n_classes = n_classes
         self.loss_type = loss_type
         self.multilabel = multilabel
-
         self.reduction = reduction
 
         print(f"INFO: Using {loss_type}")
         print(f"class_weight for {class_weight.shape} classes") if class_weight is not None else None
+        print(f"pos_weight for {pos_weight.shape} classes") if pos_weight is not None else None
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.criterion = torch.nn.CrossEntropyLoss(weight=class_weight, reduction=reduction)

@@ -5,14 +5,15 @@ import numpy as np
 import pandas as pd
 import torch
 from colorhash import ColorHash
-from moge.model.PyG.utils import filter_metapaths
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GATConv, GraphNorm
+from torch_geometric.nn import GATConv
 from torch_sparse import SparseTensor
 from torchtyping import TensorType
+
+from moge.model.PyG.utils import filter_metapaths
 
 
 class MetapathGATConv(nn.Module):
@@ -24,14 +25,15 @@ class MetapathGATConv(nn.Module):
         self.self_index = self.n_relations - 1
 
         self.n_layers = n_layers
-        self.layers: List[GATConv] = nn.ModuleList()
         self.attn_heads = attn_heads
         self.out_channels = embedding_dim // attn_heads
+
+        self.layers: List[GATConv] = nn.ModuleList()
         for _ in range(n_layers):
             self.layers.append(GATConv(in_channels=embedding_dim, out_channels=self.out_channels,
                                        heads=attn_heads, dropout=attn_dropout))
 
-        self.norm = GraphNorm(embedding_dim)
+        # self.norm = GraphNorm(embedding_dim)
 
     def generate_fc_edge_index(self, num_nodes_A: int, num_nodes_B: int = None, device=None):
         if num_nodes_B is None:
@@ -66,6 +68,8 @@ class MetapathGATConv(nn.Module):
                                h: TensorType["batch_nodes", "embedding_dim"],
                                alpha_edges: TensorType[2, "batch_edges"],
                                alpha_values: TensorType["batch_edges", "attn_heads"]):
+        node_embs = h[batch.nid == self.self_index]
+
         if alpha_edges is not None and alpha_values is not None:
             src_node_id = batch.nid[alpha_edges[0]]
             dst_node_id = batch.nid[alpha_edges[1]]
@@ -79,20 +83,18 @@ class MetapathGATConv(nn.Module):
         else:
             betas = None
 
-        node_embs = h[batch.nid == self.self_index]
-
         return node_embs, betas
 
     def forward(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]):
         batch: Data = self.construct_multigraph(relation_embs)
 
-        h = torch.relu(torch.dropout(batch.x, p=0.2, train=self.training))
+        h = torch.relu(batch.x)
 
         for i in range(self.n_layers):
             is_last_layer = i + 1 == self.n_layers
 
             if is_last_layer:
-                # Select only edges with dst node as the readout node
+                # Select only edges with dst as the readout node
                 edge_mask = batch.nid[batch.edge_index[1]] == self.self_index
                 edge_index = batch.edge_index[:, edge_mask]
             else:

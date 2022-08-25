@@ -6,12 +6,13 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
-from moge.model.relations import RelationAttention, MetapathGATConv
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
+from moge.model.relations import RelationAttention, MetapathGATConv
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -93,6 +94,11 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             self.dropout = nn.Dropout(p=dropout)
 
         self.reset_parameters()
+
+    def extra_repr(self) -> str:
+        return 'linear_l={}, linear_r={}, attn={}, bias={}'.format(
+            self.linear_l, self.linear_r if hasattr(self, 'linear_r') else None, self.attn,
+            self.bias is not None)
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
@@ -416,7 +422,7 @@ class LATTE(nn.Module):
                               neg_sampling_ratio=neg_sampling_ratio,
                               verbose=hparams.verbose if "verbose" in hparams else False)
             if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
-                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths, skip_undirected=True)
+                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths, skip_undirected=False)
 
             layers.append(layer)
 

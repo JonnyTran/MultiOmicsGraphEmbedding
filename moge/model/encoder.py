@@ -4,12 +4,13 @@ from typing import Dict, Union, List
 
 import torch
 import torch.nn.functional as F
-from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
+
+from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -72,6 +73,9 @@ class HeteroNodeFeatureEncoder(nn.Module):
                                                       # max_norm=2, norm_type=2,
                                                       scale_grad_by_freq=False,
                                                       sparse=False)
+
+                    nn.init.xavier_uniform_(module_dict[ntype].weight)
+
                 else:
                     print(f"Pretrained embeddings freeze={freeze}", ntype)
                     max_norm = pretrain_embeddings[ntype].norm(dim=1).mean()

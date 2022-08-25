@@ -113,61 +113,30 @@ class DenseClassification(nn.Module):
 
         # Activation
         if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
-            print("INFO: Output of `_classifier` is logits")
-        elif "NEGATIVE_LOG_LIKELIHOOD" == hparams.loss_type:
-            print("INFO: Output of `_classifier` is LogSoftmax")
+            print("INFO: Output of `classifier` is logits")
 
-            self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
+        elif "NEGATIVE_LOG_LIKELIHOOD" == hparams.loss_type:
+            print("INFO: Output of `classifier` is LogSoftmax")
+
+            self.fc_classifier.add_module("activation", nn.LogSoftmax(dim=1))
         elif "SOFTMAX_CROSS_ENTROPY" == hparams.loss_type:
-            print("INFO: Output of `_classifier` is logits")
+            print("INFO: Output of `classifier` is logits")
 
         elif "BCE" == hparams.loss_type:
-            print("INFO: Output of `_classifier` is sigmoid probabilities")
-            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
+            print("INFO: Output of `classifier` is sigmoid probabilities")
+            self.fc_classifier.add_module("activation", nn.Sigmoid())
         else:
-            print("INFO: [Else Case] Output of `_classifier` is logits")
-        self.reset_parameters()
+            print("INFO: [Else Case] Output of `classifier` is logits")
 
-    def forward(self, embeddings):
-        return self.fc_classifier(embeddings)
+        self.reset_parameters()
 
     def reset_parameters(self):
         for linear in self.fc_classifier:
             if hasattr(linear, "weight"):
-                glorot(linear.weight)
+                nn.init.xavier_uniform_(linear.weight)
 
-
-class MulticlassClassification(nn.Module):
-    def __init__(self, num_feature, num_class, loss_type):
-        super(MulticlassClassification, self).__init__()
-
-        # Classifier
-        self.fc_classifier = nn.Sequential(OrderedDict([
-            ("layer_1", nn.Linear(num_feature, 512)),
-            ("batchnorm1", nn.BatchNorm1d(512)),
-            ("relu", nn.ReLU()),
-            ("layer_2", nn.Linear(512, 128)),
-            ("batchnorm2", nn.BatchNorm1d(128)),
-            ("relu", nn.ReLU()),
-            ("dropout", nn.Dropout(p=0.2)),
-            ("layer_3", nn.Linear(128, 64)),
-            ("batchnorm3", nn.BatchNorm1d(64)),
-            ("relu", nn.ReLU()),
-            ("dropout", nn.Dropout(p=0.2)),
-            ("layer_out", nn.Linear(64, num_class)),
-        ]))
-
-        if "NEGATIVE_LOG_LIKELIHOOD" == loss_type:
-            print("INFO: Output of `_classifier` is LogSoftmax")
-            self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
-        elif "BCE" == loss_type:
-            print("INFO: Output of `_classifier` is sigmoid probabilities")
-            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
-        else:
-            print("INFO: Output of `_classifier` is logits")
-
-    def forward(self, x):
-        return self.fc_classifier.forward(x)
+    def forward(self, embeddings):
+        return self.fc_classifier(embeddings)
 
 
 class HierarchicalAWX(nn.Module):

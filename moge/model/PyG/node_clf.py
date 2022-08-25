@@ -10,6 +10,14 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -22,13 +30,6 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -390,19 +391,18 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             self.classifier = LabelGraphNodeClassifier(hparams)
 
         elif hparams.nb_cls_dense_size >= 0:
-            if hparams.layer_pooling == "concat":
-                hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-                logging.info("embedding_dim {}".format(hparams.embedding_dim))
-
             self.classifier = DenseClassification(hparams)
         else:
             assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
 
-        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                                                 hparams.use_class_weights else None,
-                                            multilabel=dataset.multilabel,
-                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
+        self.criterion = ClassificationLoss(
+            loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
+                                                 'use_class_weights' in hparams and hparams.use_class_weights else None,
+            pos_weight=dataset.pos_weight if hasattr(dataset, "pos_weight") and
+                                             'use_pos_weights' in hparams and hparams.use_pos_weights else None,
+            multilabel=dataset.multilabel,
+            reduction=hparams.reduction if "reduction" in hparams else "mean")
 
     def configure_sharded_model(self):
         # modules are sharded across processes
@@ -546,26 +546,9 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             super().on_test_end()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters())
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.lr)
 
         return {"optimizer": optimizer}
-
-    @property
-    def num_training_steps(self) -> int:
-        """Total training steps inferred from datamodule and devices."""
-        if self.trainer.max_steps:
-            return self.trainer.max_steps
-
-        limit_batches = self.trainer.limit_train_batches
-        batches = len(self.train_dataloader())
-        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
-
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
-
-        effective_accum = self.trainer.accumulate_grad_batches * num_devices
-        return (batches // effective_accum) * self.trainer.max_epochs
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):

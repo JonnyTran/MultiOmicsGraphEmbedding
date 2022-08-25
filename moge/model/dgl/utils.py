@@ -78,11 +78,11 @@ def metapath_reachable_blocks(src_block: DGLBlock, dst_block: DGLBlock,
                                                 num_nodes_dict=num_nodes_dict,
                                                 idtype=src_block.idtype, device=src_block.device)
     # copy srcnode features
-    new_g.nodes[srctype].data.layers(src_feats)
+    new_g.nodes[srctype].data.update(src_feats)
     # copy dstnode features
     if srctype != dsttype:
         dst_feats = src_block.nodes[dsttype].data
-        new_g.nodes[dsttype].data.layers(dst_feats)
+        new_g.nodes[dsttype].data.update(dst_feats)
 
     return new_g
 

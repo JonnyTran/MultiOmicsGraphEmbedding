@@ -7,6 +7,9 @@ from typing import Dict, List, Iterable
 import dgl
 import torch
 from dgl.heterograph import DGLBlock
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+
 from moge.dataset.dgl.node_generator import DGLNodeGenerator, HANSampler
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
@@ -14,13 +17,10 @@ from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subset
 from moge.model.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-
 from .HGConv.model.HGConv import HGConv as Hgconv
 from .HGT import HGT
 from .conv import HAN as Han
-from ..encoder import HeteroNodeFeatureEncoder
+from ..encoder import HeteroNodeFeatureEncoder, HeteroSequenceEncoder
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes, stack_tensor_dicts, filter_samples_weights
@@ -33,7 +33,7 @@ class LATTENodeClf(NodeClfTrainer):
         super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
-        self.dataset = dataset
+        self.dataset: DGLNodeGenerator = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
         self._name = f"DGL_LATTE-{hparams.n_layers}"
@@ -44,11 +44,11 @@ class LATTENodeClf(NodeClfTrainer):
             self.dataset.neighbor_sampler.fanouts = hparams.fanouts
             self.dataset.neighbor_sampler.num_layers = len(hparams.fanouts)
 
-        # align the dimension of different types of nodes
-        self.feature_projection = nn.ModuleDict({
-            ntype: nn.Linear(in_channels, hparams.embedding_dim) \
-            for ntype, in_channels in dataset.node_attr_shape.items()
-        })
+        # Node attr input
+        if hasattr(dataset, 'seq_tokenizer'):
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
+        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.node_types):
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
                               t_order=hparams.n_layers,
@@ -76,38 +76,30 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.hparams.n_params = self.get_n_params()
 
-    def forward(self, blocks, feat, **kwargs):
+    def forward(self, blocks: List[DGLBlock], feat: Dict[str, Tensor], return_embeddings=False, **kwargs):
         h_dict = {}
 
-        for ntype in self.node_types:
-            if isinstance(feat, torch.Tensor) and ntype in self.feature_projection:
-                h_dict[ntype] = self.feature_projection[ntype](feat)
-            elif isinstance(feat, dict) and ntype in feat and ntype in self.feature_projection:
-                h_dict[ntype] = self.feature_projection[ntype](feat[ntype])
-            else:
-                h_dict[ntype] = feat[ntype]
-
-            if hasattr(self, "batchnorm") and ntype in self.feature_projection:
-                h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+        if len(h_dict) < len(blocks[0].srctypes):
+            embs = self.encoder.forward(feat, global_node_index=blocks[0].srcdata["_ID"])
+            h_dict.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_dict})
 
         embeddings = self.embedder.forward(blocks, h_dict, **kwargs)
 
         y_pred = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
 
+        if return_embeddings:
+            return embeddings, y_pred
+
         return y_pred
 
     def process_blocks(self, blocks):
-        if self.embeddings is not None:
-            batch_inputs = {ntype: self.embeddings[ntype].weight[blocks[0].ndata["_ID"][ntype]].to(self.device) \
-                            for ntype in self.node_types}
-        else:
-            batch_inputs = blocks[0].srcdata['feat']
+        batch_inputs = blocks[0].srcdata['feat']
 
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
 
-        y_true = blocks[-1].dstdata['labels']
+        y_true = blocks[-1].dstdata['label']
         y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
         return batch_inputs, y_true
 
@@ -189,7 +181,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'embedding', 'batchnorm', 'layernorm']
+        no_decay = ['bias', 'alpha_activation']
 
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
@@ -197,11 +189,7 @@ class LATTENodeClf(NodeClfTrainer):
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
              'weight_decay': 0.0}
         ]
-
-        print("weight_decay", [name for name, p in param_optimizer if not any(key in name for key in no_decay)])
-
-        optimizer = torch.optim.Adam(optimizer_grouped_parameters,
-                                     lr=self.hparams.lr)
+        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.hparams.lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
                                                                eta_min=self.hparams.lr / 100)
 
