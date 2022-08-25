@@ -101,9 +101,9 @@ def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights: Optional[Tensor] =
 def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
                       weights: Optional[Dict[str, Tensor]] = None) \
         -> Tuple[Tensor, Tensor, Tensor]:
-    # Filter out node types which have no labels
-    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items() if y_true[ntype].sum() > 0})
-
+    # Filter out node types which have no labels and ensure same order of ntypes
+    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items() if y_true[ntype].numel()})
+    print(tensor_sizes(batch_size=batch_size))
     if isinstance(y_true, dict):
         y_true = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
     if isinstance(y_pred, dict):

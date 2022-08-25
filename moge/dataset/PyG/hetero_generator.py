@@ -8,13 +8,6 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-from umap import UMAP
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -23,6 +16,12 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+from umap import UMAP
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -61,7 +60,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            exclude_metapaths=None, **kwargs):
         hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_pyg_heterodata(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
-                                      label_subset=label_subset, ntype_subset=ntype_subset, sequence=sequence,
+                                      labels_subset=label_subset, ntype_subset=ntype_subset, sequence=sequence,
                                       expression=expression, exclude_metapaths=exclude_metapaths)
 
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
@@ -108,7 +107,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.G = hetero
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
-                             node_mask: Tensor, transform_fn=None, num_workers=10, verbose=False, **kwargs):
+                             node_type: str, node_mask: Tensor,
+                             transform_fn=None, num_workers=10, verbose=False, **kwargs):
         min_expansion_size = min(self.neighbor_sizes)
         # max_expansion_size = self.num_nodes_dict[self.go_ntype]
         max_expansion_size = 100
@@ -142,7 +142,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                    batch_size=batch_size,
                                    # directed=True,
                                    transform=transform_fn,
-                                   input_nodes=(self.head_node_type, node_mask),
+                                   input_nodes=(node_type, node_mask),
                                    shuffle=True,
                                    num_workers=num_workers,
                                    **kwargs)
@@ -322,24 +322,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return H
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
-
-        return dataset
-
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].valid_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
-
-        return dataset
-
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].test_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
-
-        return dataset
-
     def split_labels_by_nodes_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray]):
         assert hasattr(self, "nodes_namespace")
         nodes_namespaces = self.nodes_namespace[self.go_ntype][self.classes]
@@ -355,6 +337,33 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     y_dict.setdefault(ntype, {})[namespace] = labels[:, mask]
 
         return y_dict
+
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        graph = self.G
+        node_mask = graph[self.head_node_type].train_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
+
+        dataset = self.create_graph_sampler(graph, batch_size, node_type=self.head_node_type, node_mask=node_mask,
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
+
+        return dataset
+
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        graph = self.G
+        node_mask = graph[self.head_node_type].valid_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
+
+        dataset = self.create_graph_sampler(self.G, batch_size, node_type=self.head_node_type, node_mask=node_mask,
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
+
+        return dataset
+
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        graph = self.G
+        node_mask = graph[self.head_node_type].test_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
+
+        dataset = self.create_graph_sampler(self.G, batch_size, node_type=self.head_node_type, node_mask=node_mask,
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
+
+        return dataset
 
 
 class HeteroLinkPredDataset(HeteroNodeClfDataset):

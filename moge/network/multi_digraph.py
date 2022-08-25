@@ -2,12 +2,11 @@ from argparse import Namespace
 
 import networkx as nx
 from moge.evaluation.utils import sample_edges
-
 from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.semantic_similarity import *
 from moge.network.train_test_split import TrainTestSplit, mask_test_edges, mask_test_edges_by_nodes, \
     stratify_train_test
-from moge.network.utils import filter_multilabel
+from moge.network.utils import parse_labels
 
 UNDIRECTED = False
 DIRECTED = True
@@ -374,8 +373,8 @@ class MultiDigraphNetwork(AttributedNetwork, TrainTestSplit):
         else:
             print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
 
-        y_label = filter_multilabel(df=self.annotations, column=stratify_label, min_count=n_splits, dropna=dropna,
-                                    delimiter=self.delimiter)
+        y_label = parse_labels(df=self.annotations, column=stratify_label, min_count=n_splits, dropna=dropna,
+                               delimiter=self.delimiter)
         if stratify_omic:
             y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("|")
             y_label = y_label + y_omic

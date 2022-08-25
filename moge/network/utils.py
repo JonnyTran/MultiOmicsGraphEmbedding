@@ -1,39 +1,43 @@
+from collections import defaultdict
 from typing import Union
 
 import numpy as np
 import pandas as pd
-import tqdm
 from numpy import ndarray
 from pandas import Index
 
 
-def filter_multilabel(y_str: pd.Series, min_count: int = None, max_count: int = None,
-                      labels_subset: Union[Index, ndarray] = None,
-                      dropna: bool = False, delimiter: str = "|", verbose=False) -> pd.Series:
+def parse_labels(y_str: pd.Series, min_count: int = None, max_count: int = None,
+                 labels_subset: Union[Index, ndarray] = None,
+                 dropna: bool = False, delimiter: str = "|", verbose=False) -> pd.Series:
     if dropna:
         index = y_str.dropna().index
     else:
         index = y_str.index
 
-    if delimiter:
+    if delimiter and y_str.loc[index].map(lambda x: isinstance(x, str)).all():
         y_list = y_str.loc[index].str.split(delimiter)
     else:
         y_list = y_str.loc[index]
 
-    labels_filter = select_labels(y_list, min_count=min_count, max_count=max_count)
-    if labels_subset is not None:
-        labels_filter = labels_filter.intersection(labels_subset)
+    if min_count or max_count or labels_subset is not None:
+        selected_labels = select_labels(y_list, min_count=min_count, max_count=max_count)
+        if labels_subset is not None:
+            selected_labels = selected_labels.intersection(labels_subset)
 
-    print(f"{y_str.name} num of labels selected: {len(labels_filter)} with min_count={min_count}") if verbose else None
+        print(
+            f"{y_str.name} num of labels selected: {len(selected_labels)} with min_count={min_count}") if verbose else None
+    else:
+        selected_labels = None
 
-    y_df = y_list.map(lambda go_terms: \
-                          [item for item in go_terms if item in labels_filter] \
-                              if isinstance(go_terms, (list, np.ndarray)) else [])
+    y_df = y_list.map(lambda labels:
+                      [item for item in labels if item in selected_labels] if selected_labels else labels \
+                          if isinstance(labels, (list, np.ndarray)) else [])
 
     return y_df
 
 
-def select_labels(y_list: pd.Series, min_count: Union[int, float], max_count: int = None) -> pd.Index:
+def select_labels(y_list: pd.Series, min_count: Union[int, float] = None, max_count: int = None) -> pd.Index:
     """
 
     Args:
@@ -44,7 +48,7 @@ def select_labels(y_list: pd.Series, min_count: Union[int, float], max_count: in
     Returns:
         labels_filter (pd.Index): filter
     """
-    label_counts = {}
+    counts = defaultdict(lambda: 0)
 
     if isinstance(min_count, float) and min_count < 1.0:
         num_genes = y_list.shape[0]
@@ -53,14 +57,14 @@ def select_labels(y_list: pd.Series, min_count: Union[int, float], max_count: in
         min_count = 1
 
     # Filter a label if its label_counts is less than min_count
-    for labels in tqdm.tqdm(y_list, desc=f"Count labels for {y_list.name} with >= {min_count} frequency."):
-        if not isinstance(labels, list): continue
+    for labels in y_list:
+        if labels is None or not isinstance(labels, (str, float)): continue
         for label in labels:
-            label_counts[label] = label_counts.setdefault(label, 0) + 1
+            counts[label] = counts[label] + 1
 
-    label_counts = pd.Series(label_counts)
-    label_counts = label_counts[label_counts >= min_count]
+    counts = pd.Series(counts)
+    counts = counts[counts >= min_count]
     if max_count:
-        label_counts = label_counts[label_counts <= max_count]
+        counts = counts[counts <= max_count]
 
-    return label_counts.index
+    return counts.index

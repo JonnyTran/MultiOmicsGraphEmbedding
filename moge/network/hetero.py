@@ -12,7 +12,7 @@ from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_n
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
-from moge.network.utils import filter_multilabel
+from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
 from openomics.utils.df import concat_uniques
@@ -385,8 +385,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     .drop([target, "omic", SEQUENCE_COL], errors="ignore") \
                     .intersection(node_attr_cols if node_attr_cols is not None else []):
                 if col in self.feature_transformer:
-                    feat_filtered = filter_multilabel(annotations[col], min_count=None,
-                                                      dropna=False, delimiter=self.delimiter)
+                    feat_filtered = parse_labels(annotations[col], min_count=None,
+                                                 dropna=False, delimiter=self.delimiter)
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
                     print(f"{ntype} added {col}")
@@ -425,8 +425,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Node labels
         if target is not None:
             # Define classes set
-            if target not in self.feature_transformer:
-                self.process_feature_tranformer(target=target, min_count=min_count)
+            self.process_feature_tranformer(target=target, min_count=min_count)
 
             if labels_subset is not None:
                 self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
@@ -436,8 +435,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             labels = {}
             for ntype in G.ntypes:
                 if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
-                y_label = filter_multilabel(self.annotations[ntype].loc[self.nodes[ntype], target], min_count=min_count,
-                                            labels_subset=labels_subset, dropna=False, delimiter=self.delimiter)
+                y_label = parse_labels(self.annotations[ntype].loc[self.nodes[ntype], target],
+                                       min_count=None, labels_subset=None,
+                                       dropna=False, delimiter=self.delimiter)
                 labels[ntype] = self.feature_transformer[target].transform(y_label)
                 labels[ntype] = torch.tensor(labels[ntype])
 
@@ -474,7 +474,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         return G, classes, dict(self.nodes), training, validation, testing
 
     def to_pyg_heterodata(self, node_attr_cols: List[str] = [],
-                          target="go_id", min_count=10, label_subset: Optional[Union[Index, np.ndarray]] = None,
+                          target="go_id", min_count=10,
+                          labels_subset: Optional[Union[Index, np.ndarray]] = None,
                           ntype_subset: Optional[List[str]] = None,
                           exclude_metapaths: List[Tuple[str, str, str]] = None,
                           sequence=False, expression=False, train_test_split="node_mask") \
@@ -495,10 +496,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if exclude_metapaths and (
                     metapath in exclude_metapaths or untag_negative_metapath(metapath) in exclude_metapaths): continue
 
-            hetero[metapath].edge_index, edge_attrs = get_edge_index_values(nxgraph, self.nodes[head_type],
-                                                                            self.nodes[tail_type],
-                                                                            edge_attrs=["train_mask", "valid_mask",
-                                                                                        "test_mask"])
+            hetero[metapath].edge_index, edge_attrs = get_edge_index_values(
+                nxgraph, nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
+                edge_attrs=["train_mask", "valid_mask", "test_mask"])
 
             for edge_attr, edge_value in edge_attrs.items():
                 hetero[metapath][edge_attr] = edge_value
@@ -512,8 +512,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     .intersection(node_attr_cols if node_attr_cols is not None else []):
 
                 if col in self.feature_transformer:
-                    feat_filtered = filter_multilabel(annotations[col], min_count=None,
-                                                      dropna=False, delimiter=self.delimiter)
+                    feat_filtered = parse_labels(annotations[col], min_count=None, dropna=False,
+                                                 delimiter=self.delimiter)
                     feat: np.ndarray = self.feature_transformer[col].transform(feat_filtered)
                     hetero[ntype][col] = torch.tensor(feat, dtype=torch.float)
                 else:
@@ -530,33 +530,27 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if sequence and SEQUENCE_COL in annotations:
                 hetero[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL]  # .to_numpy()
 
-        # Labels
-        if target:
-            if target not in self.feature_transformer:
-                self.process_feature_tranformer(target=target, min_count=min_count)
-                y_label = filter_multilabel(pd.concat(self.annotations.values(), join="inner")[target],
-                                            min_count=min_count,
-                                            labels_subset=label_subset, dropna=False, delimiter=self.delimiter)
-                self.feature_transformer[target].fit_transform(y_label)
+        # Node labels
+        if target is not None:
+            # Define classes set
+            self.process_feature_tranformer(target=target, min_count=min_count)
 
-            ## Filter nodes
-            if label_subset is not None:
-                self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
-                                                                           label_subset, assume_unique=True)
+            if labels_subset is not None:
+                self.feature_transformer[target].classes_ = np.intersect1d(
+                    self.feature_transformer[target].classes_, labels_subset, assume_unique=True)
+                print(self.feature_transformer[target].classes_)
             classes = self.feature_transformer[target].classes_
-            print(f"Selected {len(self.feature_transformer[target].classes_)} classes.")
 
-            ## Node labels
-            y_dict = {}
-            for ntype in node_types:
-                if target not in self.annotations[ntype].columns: continue
-                y_label = filter_multilabel(self.annotations[ntype].loc[self.nodes[ntype], target],
-                                            min_count=None, labels_subset=classes, dropna=False,
-                                            delimiter=self.delimiter)
-                y_dict[ntype] = self.feature_transformer[target].transform(y_label)
-                y_dict[ntype] = torch.tensor(y_dict[ntype])
+            labels = {}
+            for ntype in hetero.node_types:
+                if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
+                y_label = parse_labels(self.annotations[ntype].loc[self.nodes[ntype], target],
+                                       min_count=None, labels_subset=None,
+                                       dropna=False, delimiter=self.delimiter)
+                labels[ntype] = self.feature_transformer[target].transform(y_label)
+                labels[ntype] = torch.tensor(labels[ntype])
 
-                hetero[ntype]["y"] = y_dict[ntype]
+                hetero[ntype]['y'] = labels[ntype]
         else:
             classes = None
 
@@ -592,5 +586,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     hetero[ntype].test_mask = mask
                 else:
                     hetero[ntype].test_mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
+        else:
+            train_idx = valid_idx = test_idx = None
 
         return hetero, classes, self.nodes.to_dict(), train_idx, valid_idx, test_idx
