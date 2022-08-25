@@ -655,6 +655,7 @@ class GraphClfTrainer(LightningModule):
 
 
 def print_pred_class_counts(y_pred, y_true, multilabel, n_top_class=8):
+    print()
     if (y_pred < 0.0).any():
         y_pred = torch.sigmoid(y_pred.clone()) if multilabel else torch.softmax(y_pred.clone(), dim=-1)
 

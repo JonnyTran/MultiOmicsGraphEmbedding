@@ -8,8 +8,8 @@ from torch import Tensor
 
 
 class ClassificationLoss(nn.Module):
-    def __init__(self, loss_type: str, n_classes: int = None, class_weight: Tensor = None, multilabel: bool = False,
-                 reduction: str = "mean"):
+    def __init__(self, loss_type: str, n_classes: int = None, class_weight: Tensor = None, pos_weight: Tensor = None,
+                 multilabel: bool = False, reduction: str = "mean"):
         super().__init__()
         self.n_classes = n_classes
         self.loss_type = loss_type
@@ -29,7 +29,7 @@ class ClassificationLoss(nn.Module):
         elif loss_type == "SIGMOID_FOCAL_CROSS_ENTROPY":
             self.criterion = FocalLoss(n_classes, "SIGMOID")
         elif loss_type == "BCE_WITH_LOGITS":
-            self.criterion = torch.nn.BCEWithLogitsLoss(weight=class_weight, reduction=reduction)
+            self.criterion = torch.nn.BCEWithLogitsLoss(weight=class_weight, reduction=reduction, pos_weight=pos_weight)
         elif loss_type == "BCE":
             self.criterion = torch.nn.BCELoss(weight=class_weight, reduction=reduction)
         elif loss_type == "MULTI_LABEL_MARGIN":

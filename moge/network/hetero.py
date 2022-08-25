@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+import tqdm
 from logzero import logger
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
@@ -15,7 +16,6 @@ from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
-from openomics.utils.df import concat_uniques
 from pandas import Series, Index, DataFrame
 from torch import Tensor
 from torch_geometric.data import HeteroData
@@ -35,6 +35,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.multiomics: MultiOmics = multiomics
         self.node_types = node_types
         self.networks: Dict[Tuple, nx.Graph] = {}
+        self.annotations: Dict[str, DataFrame] = {}
 
         networks = {}
         for src_etype_dst, GraphClass in layers.items():
@@ -62,29 +63,24 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.node_to_modality = pd.Series(self.node_to_modality)
 
     def process_annotations(self):
-        self.annotations: Dict[str, DataFrame] = {}
         for modality in self.node_types:
             annotation = self.multiomics[modality].get_annotations()
             self.annotations[modality] = annotation
 
-        self.annotations = pd.Series(self.annotations)
         logger.info("All annotation columns (union): {}".format(
             {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()}))
 
-    def process_feature_tranformer(self, target: str = None, delimiter="\||;", labels_subset=None, min_count=0,
+    def process_feature_tranformer(self, columns: List[str] = None, delimiter="\||;", labels_subset=None, min_count=0,
                                    verbose=False):
         self.delimiter = delimiter
         annotations_list = []
 
         for ntype in self.node_types:
-            annotation = self.annotations[ntype]
-            annotation["omic"] = ntype
-            if not target or (target and target in annotation.columns):
+            annotation: DataFrame = self.annotations[ntype].drop(columns=[SEQUENCE_COL], errors="ignore")
+            if not columns or (columns and columns in annotation.columns):
                 annotations_list.append(annotation)
 
-        all_annotations = pd.concat(annotations_list, join="inner", copy=True)
-        all_annotations = all_annotations.groupby(all_annotations.index).agg(
-            {k: concat_uniques for k in all_annotations.columns})
+        all_annotations = pd.concat(annotations_list, join="inner")
 
         self.feature_transformer = self.get_feature_transformers(all_annotations, self.node_list, labels_subset,
                                                                  min_count, delimiter, verbose=verbose)
@@ -425,7 +421,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Node labels
         if target is not None:
             # Define classes set
-            self.process_feature_tranformer(target=target, min_count=min_count)
+            self.process_feature_tranformer(columns=target, min_count=min_count)
 
             if labels_subset is not None:
                 self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
@@ -531,18 +527,19 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 hetero[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL]  # .to_numpy()
 
         # Node labels
-        if target is not None:
+        if target:
             # Define classes set
-            self.process_feature_tranformer(target=target, min_count=min_count)
+            self.process_feature_tranformer(columns=target, min_count=min_count)
 
             if labels_subset is not None:
                 self.feature_transformer[target].classes_ = np.intersect1d(
                     self.feature_transformer[target].classes_, labels_subset, assume_unique=True)
                 print(self.feature_transformer[target].classes_)
+
             classes = self.feature_transformer[target].classes_
 
             labels = {}
-            for ntype in hetero.node_types:
+            for ntype in tqdm.tqdm(hetero.node_types):
                 if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
                 y_label = parse_labels(self.annotations[ntype].loc[self.nodes[ntype], target],
                                        min_count=None, labels_subset=None,

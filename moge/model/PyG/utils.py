@@ -1,13 +1,14 @@
 import logging
+import traceback
 from collections import OrderedDict
 from typing import Union, Tuple, List, Dict, Optional, Set
 
 import pandas as pd
 import torch
+from logzero import logger
+from moge.dataset.utils import is_negative
 from torch import Tensor
 from torch_sparse import SparseTensor, spspmm
-
-from moge.dataset.utils import is_negative
 
 
 def num_edges(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]]):
@@ -41,9 +42,22 @@ def convert_to_nx_edgelist(edge_index_dict: Dict[Tuple[str, str, str], Tensor], 
 
     return edge_list
 
-def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tuple[str, str, str]], return_dict=False,
-                   tail_types: List[str] = None) \
+
+def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tuple[str, str, str]],
+                   tail_types: List[str] = None, skip_undirected=False, return_dict=False, ) \
         -> Dict[str, List[Tuple[str, str, str]]]:
+    """
+
+    Args:
+        metapaths_A ():
+        metapaths_B ():
+        tail_types ():
+        skip_undirected ():
+        return_dict (): If True, return in from of Dict of new etype as keys and chain of metapaths as values
+
+    Returns:
+
+    """
     if return_dict:
         output_metapaths = {}
     else:
@@ -52,12 +66,14 @@ def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tu
     for metapath_b in metapaths_B:
         if tail_types and metapath_b[-1] not in tail_types: continue
         for metapath_a in metapaths_A:
-            if metapath_a[-1] == metapath_b[0]:
-                if return_dict:
-                    new_metapath = ".".join([metapath_a[1], metapath_b[1]])
-                    output_metapaths[new_metapath] = [metapath_a, metapath_b]
-                else:
-                    output_metapaths.append(metapath_a + metapath_b[1:])
+            if metapath_a[-1] != metapath_b[0]: continue
+            if skip_undirected and metapath_a[0] == metapath_a[-1] and metapath_b[0] == metapath_b[-1]: continue
+
+            if return_dict:
+                new_metapath = ".".join([metapath_a[1], metapath_b[1]])
+                output_metapaths[new_metapath] = [metapath_a, metapath_b]
+            else:
+                output_metapaths.append(metapath_a + metapath_b[1:])
 
     return output_metapaths
 
@@ -165,11 +181,15 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 device = orig_device
 
             try:
-                if values_a is None or values_b is None:
-                    new_edge_index, new_values = spspmm(indexA=edge_index_a.to(device), valueA=None,
-                                                        indexB=edge_index_b.to(device), valueB=None,
-                                                        m=m, k=k, n=n,
-                                                        coalesced=True)
+                if not isinstance(values_a, Tensor):
+                    values_a = None
+                elif values_a.dim() > 1 and values_a.size(1) == 1:
+                    values_a = values_a.squeeze(-1).to(device)
+
+                if not isinstance(values_b, Tensor):
+                    values_b = None
+                elif values_b.dim() > 1 and values_b.size(1) == 1:
+                    values_b = values_b.squeeze(-1).to(device)
 
                 # elif values_a.dim() > 1 and values_a.size(1) > 1:
                 # new_values = []
@@ -181,16 +201,9 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 #     new_values.append(values)
                 # new_values = torch.stack(new_values, dim=1)
 
-                else:
-                    if values_a.dim() > 1 and values_a.size(1) == 1:
-                        values_a = values_a.squeeze(-1)
-                    if values_b.dim() > 1 and values_b.size(1) == 1:
-                        values_b = values_b.squeeze(-1)
-
-                    new_edge_index, new_values = spspmm(indexA=edge_index_a.to(device), valueA=values_a.to(device),
-                                                        indexB=edge_index_b.to(device), valueB=values_b.to(device),
-                                                        m=m, k=k, n=n,
-                                                        coalesced=True)
+                new_edge_index, new_values = spspmm(indexA=edge_index_a.to(device), valueA=values_a,
+                                                    indexB=edge_index_b.to(device), valueB=values_b,
+                                                    m=m, k=k, n=n)
 
                 if new_edge_index.size(1):
                     joined_edge_index[new_metapath] = (
@@ -199,32 +212,31 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 else:
                     joined_edge_index[new_metapath] = None
 
-            # except RuntimeError as re:
-            #     logging.error(re)
-            #     traceback.print_exc()
-            # When CUDA out of memory, perform spspmm in cpu
-            # new_edge_index, new_values = spspmm(indexA=edge_index_a.cpu(),
-            #                                     valueA=values_a.cpu() if isinstance(values_a, Tensor) else None,
-            #                                     indexB=edge_index_b.cpu(),
-            #                                     valueB=values_b.cpu() if isinstance(values_b, Tensor) else None,
-            #                                     m=m, k=k, n=n,
-            #                                     coalesced=True)
-            #
-            # if new_edge_index.size(1):
-            #     joined_edge_index[new_metapath] = (
-            #         new_edge_index.to(orig_device),
-            #         new_values.to(orig_device) if isinstance(new_values, Tensor) else None)
-            # else:
-            #     joined_edge_index[new_metapath] = None
+            except RuntimeError as re:
+                logging.error(re)
+                traceback.print_exc()
+                # When CUDA out of memory, perform spspmm in cpu
+                new_edge_index, new_values = spspmm(indexA=edge_index_a.cpu(),
+                                                    valueA=values_a.cpu() if isinstance(values_a, Tensor) else None,
+                                                    indexB=edge_index_b.cpu(),
+                                                    valueB=values_b.cpu() if isinstance(values_b, Tensor) else None,
+                                                    m=m, k=k, n=n)
+
+                if new_edge_index.size(1):
+                    joined_edge_index[new_metapath] = (
+                        new_edge_index.to(orig_device),
+                        new_values.to(orig_device) if isinstance(new_values, Tensor) else None)
+                else:
+                    joined_edge_index[new_metapath] = None
 
             except Exception as e:
-                logging.error(f"\n{e} "
-                              f"\n{new_metapath} sizes: {dict(m=m, k=k, n=n)}"
-                              f"\n {metapath_a}: "
-                              f"{edge_index_a.max(1).values.tolist(), values_a.shape if values_a is not None else values_a}, "
-                              f"\n {metapath_b}: "
-                              f"{edge_index_b.max(1).values.tolist(), values_b.shape if values_b is not None else values_a}"
-                              )
+                logger.error(f"\n{e} "
+                             f"\n{new_metapath} sizes: {dict(m=m, k=k, n=n)}"
+                             f"\n {metapath_a}: "
+                             f"{edge_index_a.max(1).values.tolist(), values_a.shape if values_a is not None else values_a}, "
+                             f"\n {metapath_b}: "
+                             f"{edge_index_b.max(1).values.tolist(), values_b.shape if values_b is not None else values_a}"
+                             )
                 joined_edge_index[new_metapath] = None
 
     return joined_edge_index

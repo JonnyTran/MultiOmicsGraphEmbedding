@@ -293,8 +293,9 @@ class LATTE(nn.Module):
 
             if t + 1 > 1 and t + 1 <= self.t_order:
                 transform = ChainMetaPaths(
-                    join_metapaths(block.canonical_etypes, blocks[t].canonical_etypes, return_dict=True,
-                                   tail_types=self.head_node_type if last_layer and self.head_node_type else None),
+                    join_metapaths(block.canonical_etypes, blocks[t].canonical_etypes,
+                                   tail_types=self.head_node_type if last_layer and self.head_node_type else None,
+                                   return_dict=True),
                     keep_orig_edges=True)
                 block = transform(block, blocks[t])
 

@@ -202,17 +202,24 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
             raise Exception(f"Unsupported dataset {dataset}")
 
         # Node classifications
+        num_samples = 1  # Used for computing class_weight
         if hasattr(self, "y_dict") and self.y_dict:
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.multilabel = True
-                self.classes = torch.arange(self.y_dict[self.head_node_type].size(1))
+                if not hasattr(self, 'classes') or self.classes is None:
+                    self.classes = torch.arange(self.y_dict[self.head_node_type].size(1))
+
+                num_samples = self.y_dict[self.head_node_type].shape[0]
                 self.class_counts = self.y_dict[self.head_node_type].sum(0)
+
             else:
                 self.multilabel = False
 
                 mask = self.y_dict[self.head_node_type] != -1
                 labels = self.y_dict[self.head_node_type][mask]
-                self.classes = labels.unique()
+
+                if not hasattr(self, 'classes') or self.classes is None:
+                    self.classes = labels.unique()
 
                 if self.y_dict[self.head_node_type].dim() > 1:
                     labels = labels.squeeze(-1).numpy()
@@ -220,7 +227,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                     labels = labels.numpy()
                 self.class_counts = pd.Series(labels).value_counts(sort=False)
 
-            self.n_classes = self.classes.size(0)
+            self.n_classes = self.classes.shape[0]
 
             assert -1 not in self.classes
 
@@ -229,12 +236,16 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
             if self.labels.dim() > 1 and self.labels.size(1) != 1:
                 self.multilabel = True
                 self.n_classes = self.labels.size(1)
-                self.classes = torch.arange(self.labels.size(1))
+                if not hasattr(self, 'classes') or self.classes is None:
+                    self.classes = torch.arange(self.labels.size(1))
+
+                num_samples = self.labels.shape[0]
                 self.class_counts = self.labels.sum(0)
             else:
                 self.multilabel = False
-                self.classes = self.labels.unique()
-                self.n_classes = self.classes.size(0)
+                if not hasattr(self, 'classes') or self.classes is None:
+                    self.classes = self.labels.unique()
+                self.n_classes = self.classes.shape[0]
 
                 self.class_counts = pd.Series(self.labels.numpy()).value_counts(sort=False)
 
@@ -242,8 +253,16 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
             self.multilabel = False
             self.n_classes = None
 
+        # Compute class weights so less frequent classes have higher weight
         if hasattr(self, "class_counts"):
-            self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
+            # self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
+            counts = torch.tensor(self.class_counts, dtype=torch.float)
+
+            counts[counts == 0] = 1
+            self.class_weight = torch.true_divide(num_samples, counts)  # per class: Num samples / num pos examples
+            self.pos_weight = torch.true_divide(num_samples - counts,
+                                                counts)  # per class: num neg examples / num pos examples
+
             assert self.class_weight.numel() == self.n_classes, \
                 f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
 

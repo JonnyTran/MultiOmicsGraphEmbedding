@@ -49,7 +49,7 @@ class MetapathGATConv(nn.Module):
         data_list = []
         for i in torch.arange(num_nodes):
             x = relation_embs[i]
-            node_mask = torch.norm(x, dim=1).detach() != 0
+            node_mask = torch.count_nonzero(x, dim=1).type(torch.bool)
             num_nz_relations = node_mask.sum().item()
 
             g = Data(x=x[node_mask],
@@ -86,7 +86,8 @@ class MetapathGATConv(nn.Module):
     def forward(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]):
         batch: Data = self.construct_multigraph(relation_embs)
 
-        h = batch.x
+        h = torch.relu(torch.dropout(batch.x, p=0.2, train=self.training))
+
         for i in range(self.n_layers):
             is_last_layer = i + 1 == self.n_layers
 

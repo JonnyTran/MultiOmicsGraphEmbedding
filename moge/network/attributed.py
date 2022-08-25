@@ -1,4 +1,5 @@
-from typing import List, Dict
+import traceback
+from typing import List, Dict, Union
 
 import numpy as np
 import openomics
@@ -26,7 +27,7 @@ class AttributedNetwork(Network):
         self.multiomics = multiomics
 
         # Process network & node_list
-        super(AttributedNetwork, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         # Process node attributes
         if annotations:
@@ -73,7 +74,8 @@ class AttributedNetwork(Network):
                                  labels_subset: List[str] = None,
                                  min_count: int = 0,
                                  delimiter="\||;",
-                                 verbose=False) -> Dict[str, preprocessing.MultiLabelBinarizer]:
+                                 verbose=False) -> Dict[
+        str, Union[preprocessing.MultiLabelBinarizer, preprocessing.StandardScaler]]:
         """
         :param annotation: a pandas DataFrame
         :param node_list: list of nodes. Indexes the annotation DataFrame
@@ -82,44 +84,56 @@ class AttributedNetwork(Network):
         :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
         :return: dict of feature transformers
         """
-        feature_transformers = {}
+        transformers: Dict[str, preprocessing.MultiLabelBinarizer] = {}
         for col in annotation.columns:
             if col == SEQUENCE_COL:
                 continue
 
-            if annotation[col].dtypes == np.object:
-                feature_transformers[col] = preprocessing.MultiLabelBinarizer()
+            values: pd.Series = annotation.loc[node_list, col].dropna(axis=0)
+            if values.map(type).nunique() > 1:
+                print(f"WARN: {col} has more than 1 dtypes: {values.map(type).unique()}")
 
-                if annotation[col].str.contains(delimiter, regex=True).any():
-                    print("INFO: Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(col,
-                                                                                                            delimiter)) if verbose else None
-                    features = annotation.loc[node_list, col].dropna(axis=0).str.split(delimiter)
-                    features = features.map(
-                        lambda x: [term.strip() for term in x if len(term) > 0] if isinstance(x, list) else x)
+            try:
+                if annotation[col].dtypes == np.object and (annotation[col].dropna().map(type) == str).all():
+                    transformers[col] = preprocessing.MultiLabelBinarizer()
+
+                    if annotation[col].str.contains(delimiter, regex=True).any():
+                        print("INFO: Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(col,
+                                                                                                                delimiter)) if verbose else None
+                        values = values.str.split(delimiter)
+                        values = values.map(
+                            lambda x: [term.strip() for term in x if len(term) > 0] if isinstance(x, list) else x)
+
+                    if labels_subset is not None and col in labels_subset and min_count:
+                        labels_subset = select_labels(values, min_count=min_count)
+                        values = values.map(lambda labels: [item for item in labels if item not in labels_subset])
+
+                    transformers[col].fit(values)
+
+                elif annotation[col].dtypes == int or annotation[col].dtypes == float:
+                    print(
+                        "INFO: Label {} (of int/float) is transformed by StandardScaler".format(
+                            col)) if verbose else None
+                    transformers[col] = preprocessing.StandardScaler()
+
+                    transformers[col].fit(values.to_numpy().reshape(-1, 1))
+
                 else:
-                    print("INFO: Label {} (of str) is transformed by MultiLabelBinarizer".format(
-                        col)) if verbose else None
-                    features = annotation.loc[node_list, col].dropna(axis=0)
+                    print("INFO: Label {} is transformed by MultiLabelBinarizer".format(col)) if verbose else None
+                    transformers[col] = preprocessing.MultiLabelBinarizer()
+                    values = values[~values.map(type).isin({str, float, int})]
+                    transformers[col].fit(values)
 
-                if labels_subset is not None and col in labels_subset and min_count:
-                    labels_subset = select_labels(features, min_count=min_count)
-                    features = features.map(lambda labels: [item for item in labels if item not in labels_subset])
-                feature_transformers[col].fit(features)
+                if hasattr(transformers[col], 'classes_') and "" in transformers[col].classes_:
+                    print(f"removed '' from classes in {col}")
+                    transformers[col].classes_ = np.delete(transformers[col].classes_,
+                                                           np.where(transformers[col].classes_ == "")[0])
+            except Exception as e:
+                print(e)
+                traceback.print_exc()
+                continue
 
-            elif annotation[col].dtypes == int or annotation[col].dtypes == float:
-                print(
-                    "INFO: Label {} (of int/float) is transformed by StandardScaler".format(col)) if verbose else None
-                feature_transformers[col] = preprocessing.StandardScaler()
-                features = annotation.loc[node_list, col].dropna(axis=0)
-                feature_transformers[col].fit(features.to_numpy().reshape(-1, 1))
-
-            else:
-                print("INFO: Label {} is transformed by MultiLabelBinarizer".format(col)) if verbose else None
-                feature_transformers[col] = preprocessing.MultiLabelBinarizer()
-                features = annotation.loc[node_list, col].dropna(axis=0)
-                feature_transformers[col].fit(features.to_numpy().reshape(-1, 1))
-
-        return feature_transformers
+        return transformers
 
     def get_correlation_edges(self, modality, node_list, threshold=0.7):
         # Filter similarity adj by correlation

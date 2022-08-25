@@ -1,6 +1,6 @@
 from pprint import pprint
 from pprint import pprint
-from typing import List, Tuple, Union, Dict, Optional
+from typing import List, Tuple, Union, Dict, Optional, Callable
 
 import networkx as nx
 import numpy as np
@@ -52,7 +52,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def from_heteronetwork(cls, network: HeteroNetwork, node_attr_cols: List[str] = None,
                            target: str = None, min_count: int = None,
                            expression=False, sequence=False,
-                           label_subset: Optional[Union[Index, np.ndarray]] = None,
+                           labels_subset: Optional[Union[Index, np.ndarray]] = None,
                            ntype_subset: Optional[List[str]] = None,
                            add_reverse_metapaths=True,
                            split_namespace=False,
@@ -60,7 +60,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            exclude_metapaths=None, **kwargs):
         hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_pyg_heterodata(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
-                                      labels_subset=label_subset, ntype_subset=ntype_subset, sequence=sequence,
+                                      labels_subset=labels_subset, ntype_subset=ntype_subset, sequence=sequence,
                                       expression=expression, exclude_metapaths=exclude_metapaths)
 
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
@@ -81,7 +81,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             self.ntype_mapping = {}
             for ntype, df in network.annotations.items():
                 if "namespace" in df.columns:
-                    self.nodes_namespace[ntype] = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]]
+                    self.nodes_namespace[ntype] = network.annotations[ntype]["namespace"]
                     self.ntype_mapping.update(
                         {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 
@@ -97,7 +97,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Add reverse metapaths to allow reverse message passing for directed edges
         if self.use_reverse:
-            transform = T.ToUndirected(merge=False)
+            transform = T.ToUndirected(merge=True)
             hetero: HeteroData = transform(hetero)
 
         self.metapaths = hetero.edge_types
@@ -108,7 +108,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
                              node_type: str, node_mask: Tensor,
-                             transform_fn=None, num_workers=10, verbose=False, **kwargs):
+                             transform_fn: Callable = None, num_workers=10, verbose=False, **kwargs):
         min_expansion_size = min(self.neighbor_sizes)
         # max_expansion_size = self.num_nodes_dict[self.go_ntype]
         max_expansion_size = 100
@@ -130,30 +130,26 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         print(f"{self.neighbor_loader} neighbor_sizes:") if verbose else None
         pprint(self.num_neighbors, width=300) if verbose else None
 
-        if self.neighbor_loader == "NeighborLoader":
-            graph_loader_cls = NeighborLoader
-        elif self.neighbor_loader == "HGTLoader":
-            graph_loader_cls = HGTLoader
-        elif self.neighbor_loader == "HGTLoader":
-            graph_loader_cls = HGTLoader
+        args = dict(data=graph, num_neighbors=self.num_neighbors,
+                    batch_size=batch_size,
+                    # directed=True,
+                    transform=transform_fn,
+                    input_nodes=(node_type, node_mask),
+                    shuffle=True,
+                    num_workers=num_workers,
+                    **kwargs)
 
-        dataset = graph_loader_cls(graph,
-                                   num_neighbors=self.num_neighbors,
-                                   batch_size=batch_size,
-                                   # directed=True,
-                                   transform=transform_fn,
-                                   input_nodes=(node_type, node_mask),
-                                   shuffle=True,
-                                   num_workers=num_workers,
-                                   **kwargs)
+        if self.neighbor_loader == "NeighborLoader":
+            dataset = NeighborLoader(**args)
+        elif self.neighbor_loader == "HGTLoader":
+            dataset = HGTLoader(**args)
+
         return dataset
 
     def transform_heterograph(self, hetero: HeteroData):
         X = {}
         X["x_dict"] = {ntype: x for ntype, x in hetero.x_dict.items() if x.size(0)}
-        X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in hetero.edge_index_dict.items() \
-                                # if "associated" not in metapath[1]
-                                }
+        X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in hetero.edge_index_dict.items()}
         X["global_node_index"] = {ntype: nid for ntype, nid in hetero.nid_dict.items() if nid.numel()}
         X['sizes'] = {ntype: size for ntype, size in hetero.num_nodes_dict.items() if size}
         X['batch_size'] = hetero.batch_size_dict
@@ -170,19 +166,19 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
             if y_dict.dim() == 2 and y_dict.size(1) == 1:
                 y_dict = y_dict.squeeze(-1)
-            elif y_dict.dim() == 1:
-                weights = (y_dict >= 0).to(torch.float)
+
+            weights = (y_dict >= 0).to(torch.float)
 
         elif len(y_dict) > 1:
             weights = {}
-            for ntype, label in y_dict.items():
-                if label.dim() == 2 and label.size(1) == 1:
-                    y_dict[ntype] = label.squeeze(-1)
+            for ntype, y in y_dict.items():
+                if y.dim() == 2 and y.size(1) == 1:
+                    y_dict[ntype] = y.squeeze(-1)
 
-                if label.dim() == 1:
-                    weights[ntype] = (y_dict >= 0).to(torch.float)
-                elif label.dim() == 2:
-                    weights[ntype] = (label.sum(1) > 0).to(torch.float)
+                if y.dim() == 1:
+                    weights[ntype] = (y >= 0).to(torch.float)
+                elif y.dim() == 2:
+                    weights[ntype] = (y.sum(1) > 0).to(torch.float)
         else:
             weights = None
 
