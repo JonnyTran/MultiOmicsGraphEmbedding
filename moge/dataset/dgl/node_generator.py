@@ -11,15 +11,15 @@ from dgl.dataloading import BlockSampler
 from dgl.sampling import RandomWalkNeighborSampler
 from dgl.utils import prepare_tensor_dict, prepare_tensor
 from logzero import logger
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
 from ogb.nodeproppred import DglNodePropPredDataset
 from pandas import Index, DataFrame
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
 from ..PyG.node_generator import HeteroNeighborGenerator
@@ -85,7 +85,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
         G, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                        expression=expression, sequence=sequence,
-                                       label_subset=label_subset, ntype_subset=ntype_subset,
+                                       labels_subset=label_subset, ntype_subset=ntype_subset,
                                        exclude_metapaths=exclude_metapaths,
                                        train_test_split="node_id", **kwargs)
 

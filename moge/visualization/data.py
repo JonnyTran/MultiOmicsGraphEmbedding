@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import xarray as xr
 from datashader import reductions as rd
 from holoviews.operation.datashader import rasterize
+from moge.visualization.utils import configure_layout
 from plotly.subplots import make_subplots
 from scipy.sparse import coo_matrix
 from scipy.sparse import issparse
@@ -79,12 +80,12 @@ def heatmap(table: pd.DataFrame, file_output=None, title=None, autosize=True, wi
         y=table.index if hasattr(table, "index") else None,
         hoverongaps=False, ))
 
-    fig.update_layout(
+    fig = configure_layout(
+        fig,
         title=title,
-        autosize=autosize,
         width=width,
-        height=height,
-    )
+        height=height, ).update_layout(autosize=autosize, )
+
     if file_output:
         fig.write_image(file_output)
 
@@ -116,18 +117,12 @@ def heatmap_compare(y_true, y_pred, file_output=None, title=None, autosize=True,
         hoverongaps=False),
         row=1, col=2)
 
-    fig.update_layout(
+    fig = configure_layout(
+        fig,
         title=title,
-        autosize=autosize,
         width=width,
-        height=height,
-        margin=dict(
-            l=5,
-            r=5,
-            b=5,
-            t=40,
-        ),
-    )
+        height=height, ).update_layout(autosize=autosize, )
+
     if file_output:
         fig.write_image(file_output)
 

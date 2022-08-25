@@ -19,6 +19,7 @@ from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
 from moge.model.metrics import Metrics
+from moge.model.utils import tensor_sizes
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score as aupr
@@ -69,9 +70,12 @@ def get_pid_go_sc(pid_go_sc_file):
     return dict(pid_go_sc)
 
 
-def get_data(fasta_file, pid_go_file=None, feature_type=None, **kwargs):
+def get_data(fasta_file, pid_go_file=None, feature_type=None, subset_pid=None, **kwargs):
     pid_list, seqs = [], []
     for seq in SeqIO.parse(fasta_file, 'fasta'):
+        if subset_pid and seq.id not in subset_pid:
+            continue
+
         pid_list.append(seq.id)
         seqs.append(str(seq.seq))
 
@@ -85,6 +89,7 @@ def get_data(fasta_file, pid_go_file=None, feature_type=None, **kwargs):
             raise ValueError(F'Only support suffix of .npy for np.ndarray or .npz for scipy.csr_matrix as feature.')
 
     go_labels = get_go_list(pid_go_file, pid_list)
+    print(tensor_sizes(go_labels=len(go_labels), pid_list=pid_list))
 
     return pid_list, seqs, go_labels
 
@@ -201,34 +206,21 @@ class GcnNet(nn.Module):
     """
     """
 
-    def __init__(self, n_classes, input_size, hidden_size, num_gcn=0, dropout=0.5, residual=True, **kwargs):
+    def __init__(self, hidden_size, num_gcn=0, dropout=0.5, residual=True, **kwargs):
         super().__init__()
-        logger.info(F'GCN: labels_num={n_classes}, input size={input_size}, hidden_size={hidden_size}, '
-                    F'num_gcn={num_gcn}, dropout={dropout}, residual={residual}')
-        self.embedding = nn.EmbeddingBag(input_size, hidden_size, mode='sum', include_last_offset=True)
-        self.input_bias = nn.Parameter(torch.zeros(hidden_size))
-
-        self.dropout = nn.Dropout(dropout)
 
         self.layers: List[NodeUpdate] = nn.ModuleList([
             NodeUpdate(hidden_size, hidden_size, dropout) for _ in range(num_gcn)])
 
-        self.n_classes = n_classes
-        self.output = nn.Linear(hidden_size, self.n_classes)
         self.residual = residual
         self.num_gcn = num_gcn
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.xavier_uniform_(self.embedding.weight)
         for update in self.layers:
             update.reset_parameters()
-        nn.init.xavier_uniform_(self.output.weight)
 
-    def forward(self, blocks: List[DGLBlock], input, offets, per_sample_weights):
-        h = self.embedding.forward(input, offets, per_sample_weights) + self.input_bias
-        h = self.dropout(F.relu(h))
-
+    def forward(self, blocks: List[DGLBlock], h):
         for i, layer in enumerate(self.layers):
             blocks[i].srcdata['h'] = h
             if self.residual:
@@ -238,7 +230,6 @@ class GcnNet(nn.Module):
                                  fn.sum(msg='ppi_m_out', out='ppi_out'), layer)
             h = blocks[i].dstdata['h']
 
-        h = self.output(h)
         return h
 
 
@@ -256,7 +247,16 @@ class DeepGraphGO(LightningModule):
         self.test_metrics = Metrics(prefix="test_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
                                     multilabel=True, metrics=metrics)
 
+        self.embedding = nn.EmbeddingBag(hparams.input_size, hparams.hidden_size, mode='sum', include_last_offset=True)
+        self.input_bias = nn.Parameter(torch.zeros(hparams.hidden_size))
+        self.dropout = nn.Dropout(hparams.dropout)
+
         self.model = GcnNet(**hparams.__dict__)
+        self.n_classes = hparams.n_classes
+        self.classifier = nn.Linear(hparams.hidden_size, self.n_classes)
+        logger.info(
+            F'GCN: labels_num={hparams.n_classes}, input size={hparams.input_size}, hidden_size={hparams.hidden_size}, '
+            F'num_gcn={hparams.num_gcn}, dropout={hparams.dropout}, residual={hparams.residual}')
 
         model_path.parent.mkdir(parents=True, exist_ok=True)
         self.model_path = model_path
@@ -266,8 +266,13 @@ class DeepGraphGO(LightningModule):
         self.training_idx, self.validation_idx, self.testing_idx = hparams.training_idx, hparams.validation_idx, hparams.testing_idx
 
         self._set_hparams(hparams)
+        self.reset_parameters()
 
-    def forward(self, blocks: List[DGLBlock]):
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.embedding.weight)
+        nn.init.xavier_uniform_(self.classifier.weight)
+
+    def forward(self, blocks: List[DGLBlock], return_embeddings=False):
         node_ids = blocks[0].srcdata["_ID"]
         batch_x = self.node_feats[node_ids.cpu().numpy()]
 
@@ -275,7 +280,14 @@ class DeepGraphGO(LightningModule):
         offsets = torch.from_numpy(batch_x.indptr).to(self.device).long()
         per_sample_weights = torch.from_numpy(batch_x.data).to(self.device).float()
 
-        logits = self.model.forward(blocks, input, offsets, per_sample_weights)
+        h = self.embedding.forward(input, offsets, per_sample_weights) + self.input_bias
+        h = self.dropout(F.relu(h))
+
+        h = self.model.forward(blocks, h)
+        logits = self.classifier(h)
+
+        if return_embeddings:
+            return h, logits
 
         return logits
 
@@ -472,7 +484,7 @@ def main(data_cnf, model_cnf, mode, model_id):
         np.save(res_path, scores)
 
 
-def load_dgl_graph(data_cnf, model_cnf, model_id=None) \
+def load_dgl_graph(data_cnf, model_cnf, model_id=None, subset_pid: List[str] = None) \
         -> Tuple[dgl.DGLGraph, ssp.csr_matrix, Dict[str, int], Tensor, Tensor, Tensor]:
     # Set paths
     data_name, model_name = data_cnf['name'], model_cnf['name']
@@ -487,7 +499,7 @@ def load_dgl_graph(data_cnf, model_cnf, model_id=None) \
     net_pid_map = {pid: i for i, pid in enumerate(net_pid_list)}
 
     # Load DGL Graph
-    dgl_graph = dgl.data.utils.load_graphs(data_cnf['network']['dgl'])[0][0]
+    dgl_graph: dgl.DGLGraph = dgl.data.utils.load_graphs(data_cnf['network']['dgl'])[0][0]
     self_loop = torch.zeros_like(dgl_graph.edata['ppi'])
     nr_ = np.arange(dgl_graph.number_of_nodes())
     self_loop[dgl_graph.edge_ids(nr_, nr_)] = 1.0
@@ -496,14 +508,22 @@ def load_dgl_graph(data_cnf, model_cnf, model_id=None) \
     dgl_graph.edata['ppi'] = dgl_graph.edata['ppi'].float()
     dgl_graph.edata['self'] = dgl_graph.edata['self'].float()
 
-    logger.info(F'{dgl_graph}')
     # Node features
     node_feats = ssp.load_npz(data_cnf['network']['feature'])
 
+    if subset_pid:
+        subset_pid = [node for node in subset_pid if node in net_pid_map]
+        node_ids = torch.tensor([net_pid_map[node] for node in subset_pid], dtype=torch.int64)
+        dgl_graph = dgl.node_subgraph(dgl_graph, nodes=node_ids)
+        node_feats = node_feats[node_ids.numpy()]
+        net_pid_map = {pid: i for i, pid in enumerate(subset_pid)}
+
+    logger.info(F'{dgl_graph}')
+
     # Get train/valid/test split of node lists
-    train_pid_list, _, train_go_labels = get_data(**data_cnf['train'])
-    valid_pid_list, _, valid_go_labels = get_data(**data_cnf['valid'])
-    test_pid_list, _, test_go_labels = get_data(**data_cnf['test'])
+    train_pid_list, _, train_go_labels = get_data(**data_cnf['train'], subset_pid=subset_pid)
+    valid_pid_list, _, valid_go_labels = get_data(**data_cnf['valid'], subset_pid=subset_pid)
+    test_pid_list, _, test_go_labels = get_data(**data_cnf['test'], subset_pid=subset_pid)
 
     # Binarize multilabel GO annotations
     mlb = get_mlb(data_cnf['mlb'], train_go_labels)

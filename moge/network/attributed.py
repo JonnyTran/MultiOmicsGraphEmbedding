@@ -1,15 +1,14 @@
-from typing import List
+from typing import List, Dict
 
 import numpy as np
 import openomics
 import pandas as pd
-from openomics.utils.df import concat_uniques
-from sklearn import preprocessing
-
 from moge.network.base import Network
 from moge.network.base import SEQUENCE_COL
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
 from moge.network.utils import select_labels
+from openomics.utils.df import concat_uniques
+from sklearn import preprocessing
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
@@ -52,7 +51,7 @@ class AttributedNetwork(Network):
 
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0, verbose=False):
+    def process_feature_tranformer(self, delimiter="\||;", labels_subset=None, min_count=0, verbose=False):
         """
         For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer
         is used to convert a list of labels into a vector.
@@ -60,18 +59,25 @@ class AttributedNetwork(Network):
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
         self.delimiter = delimiter
-        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, filter_label,
-                                                                 min_count, delimiter, verbose=verbose)
+
+        if not hasattr(self, "feature_transformer"):
+            self.feature_transformer = {}
+
+        transformers = self.get_feature_transformers(self.annotations, self.node_list, labels_subset, min_count,
+                                                     delimiter, verbose=verbose)
+        self.feature_transformer.update(transformers)
 
     @classmethod
-    def get_feature_transformers(cls, annotation: pd.DataFrame, node_list, filter_label: List[str] = None,
+    def get_feature_transformers(cls, annotation: pd.DataFrame,
+                                 node_list: List[str],
+                                 labels_subset: List[str] = None,
                                  min_count: int = 0,
                                  delimiter="\||;",
-                                 verbose=False):
+                                 verbose=False) -> Dict[str, preprocessing.MultiLabelBinarizer]:
         """
         :param annotation: a pandas DataFrame
         :param node_list: list of nodes. Indexes the annotation DataFrame
-        :param filter_label: str or list of str for the labels to filter by min_count
+        :param labels_subset: str or list of str for the labels to filter by min_count
         :param min_count: minimum frequency of label to keep
         :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
         :return: dict of feature transformers
@@ -95,9 +101,9 @@ class AttributedNetwork(Network):
                         col)) if verbose else None
                     features = annotation.loc[node_list, col].dropna(axis=0)
 
-                if filter_label is not None and col in filter_label and min_count:
-                    labels_filter = select_labels(features, min_count=min_count)
-                    features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
+                if labels_subset is not None and col in labels_subset and min_count:
+                    labels_subset = select_labels(features, min_count=min_count)
+                    features = features.map(lambda labels: [item for item in labels if item not in labels_subset])
                 feature_transformers[col].fit(features)
 
             elif annotation[col].dtypes == int or annotation[col].dtypes == float:

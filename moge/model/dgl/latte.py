@@ -6,11 +6,10 @@ import torch.nn.functional as F
 from dgl.heterograph import DGLBlock
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
-from torch import nn as nn, Tensor
-
 from moge.model.PyG.utils import filter_metapaths, max_num_hops, join_metapaths
 from moge.model.dgl.utils import ChainMetaPaths
 from moge.model.relations import RelationAttention, MetapathGATConv
+from torch import nn as nn, Tensor
 
 
 class LATTEConv(nn.Module, RelationAttention):
@@ -254,7 +253,7 @@ class LATTE(nn.Module):
     def __init__(self, n_layers, t_order: int, embedding_dim: int, num_nodes_dict: Dict[str, int],
                  head_node_type: Union[str, List[str]], metapaths: List[Tuple[str, str, str]], batchnorm=False,
                  layernorm=True, edge_dir="in", activation: str = "relu", dropout=0.2, attn_heads=2,
-                 attn_activation="sharpening", attn_dropout=0.2):
+                 attn_activation="LeakyReLU", attn_dropout=0.2):
         super().__init__()
         self.n_layers = n_layers
         self.t_order = t_order

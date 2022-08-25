@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ..relations import RelationAttention, MetapathGATConv
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
@@ -206,9 +206,9 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                 for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
                                                                      betas[ntype].mean(-1).mean(0),
                                                                      betas[ntype].mean(-1).std(0))):
-                    if etype not in edge_index_dict and etype != ntype: continue
+                    if etype not in edge_attn_dict and etype != ntype: continue
                     print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
-                          f"\tedge_index: {edge_index_dict[etype].size(1) if etype in edge_index_dict else 0}, "
+                          f"\tedge_index: {edge_attn_dict[etype].size(1) if etype in edge_attn_dict else 0}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(rel_embeddings[:, i], dim=0).mean().item() if rel_embeddings.dim() >= 3 else -1:.2f}")
 

@@ -205,7 +205,8 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
             biadj = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
                                                     format="coo")
         except Exception as e:
-            logger.error(f"{metapath}, {e}")
+            logger.error(f"{e.__class__.__name__}:{e} \n"
+                         f"{metapath}, {subgraph}")
             # "\n", subgraph, list(subgraph.edges())[:2],
             # '\n', f"nodes_A {len(nodes_A)} {nodes_A[:5]}", f"nodes_A {len(nodes_A)} {nodes_A[:5]}"
             # traceback.print_exc()

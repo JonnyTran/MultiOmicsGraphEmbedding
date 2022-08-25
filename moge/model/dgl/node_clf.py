@@ -7,9 +7,6 @@ from typing import Dict, List, Iterable
 import dgl
 import torch
 from dgl.heterograph import DGLBlock
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-
 from moge.dataset.dgl.node_generator import DGLNodeGenerator, HANSampler
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
@@ -17,6 +14,9 @@ from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subset
 from moge.model.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+
 from .HGConv.model.HGConv import HGConv as Hgconv
 from .HGT import HGT
 from .conv import HAN as Han
@@ -50,15 +50,18 @@ class LATTENodeClf(NodeClfTrainer):
             for ntype, in_channels in dataset.node_attr_shape.items()
         })
 
-        self.embedder = LATTE(n_layers, t_order=hparams.n_layers, embedding_dim=hparams.embedding_dim,
-                              num_nodes_dict=dataset.num_nodes_dict, head_node_type=dataset.head_node_type,
+        self.embedder = LATTE(n_layers=hparams.n_layers,
+                              t_order=hparams.n_layers,
+                              embedding_dim=hparams.embedding_dim,
+                              num_nodes_dict=dataset.num_nodes_dict,
+                              head_node_type=dataset.head_node_type,
                               metapaths=dataset.get_metapaths(),
-                              batchnorm=hparams.batchnorm_l if "batchnorm" in hparams else False,
+                              batchnorm=hparams.batchnorm if "batchnorm" in hparams else False,
                               layernorm=hparams.layernorm if "layernorm" in hparams else False,
-                              activation=hparams.activation, attn_heads=hparams.attn_heads,
-                              attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout)
+                              attn_heads=hparams.attn_heads,
+                              attn_dropout=hparams.attn_dropout)
 
-        if "batchnorm" in hparams and hparams.batchnorm_l:
+        if "batchnorm" in hparams and hparams.batchnorm:
             self.batchnorm = torch.nn.ModuleDict(
                 {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) for node_type in
                  self.dataset.node_types})
