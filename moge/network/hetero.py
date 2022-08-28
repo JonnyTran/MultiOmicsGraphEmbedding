@@ -8,6 +8,10 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
+from pandas import Series, Index, DataFrame
+from torch import Tensor
+from torch_geometric.data import HeteroData
+
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
@@ -16,9 +20,6 @@ from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
-from pandas import Series, Index, DataFrame
-from torch import Tensor
-from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -486,14 +487,14 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             node_types = [ntype for ntype in node_types if ntype in ntype_subset]
 
         # Edge index
-        for metapath, nxgraph in self.networks.items():
+        for metapath in tqdm.tqdm(self.networks, desc="Create edge_index_dict"):
             head_type, tail_type = metapath[0], metapath[-1]
             if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
             if exclude_metapaths and (
                     metapath in exclude_metapaths or untag_negative_metapath(metapath) in exclude_metapaths): continue
 
             hetero[metapath].edge_index, edge_attrs = get_edge_index_values(
-                nxgraph, nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
+                self.networks[metapath], nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
                 edge_attrs=["train_mask", "valid_mask", "test_mask"])
 
             for edge_attr, edge_value in edge_attrs.items():
@@ -517,8 +518,17 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
                                                                                     'expressions'):
-                node_expression = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]].values
-                hetero[ntype].expression = torch.tensor(node_expression, dtype=torch.float)
+                expressions = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]]
+                if False and hasattr(expressions, 'sparse') and not self.multiomics[ntype].expressions.empty:
+                    print(ntype)
+                    csr_mtx = expressions.sparse.to_coo().tocsr()
+                    hetero[ntype]['x'] = torch.sparse_csr_tensor(crow_indices=csr_mtx.indptr,
+                                                                 col_indices=csr_mtx.indices,
+                                                                 values=csr_mtx.data,
+                                                                 dtype=torch.float,
+                                                                 size=expressions.shape)
+                else:
+                    hetero[ntype]['x'] = torch.tensor(expressions.values, dtype=torch.float)
 
             hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
 

@@ -8,6 +8,13 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+from umap import UMAP
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -16,12 +23,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-from umap import UMAP
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -148,7 +149,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def transform_heterograph(self, hetero: HeteroData):
         X = {}
-        X["x_dict"] = {ntype: x for ntype, x in hetero.x_dict.items() if x.size(0)}
+        X["x_dict"] = {ntype: x for ntype, x in hetero.x_dict.items() if x.numel()}
         X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in hetero.edge_index_dict.items()}
         X["global_node_index"] = {ntype: nid for ntype, nid in hetero.nid_dict.items() if nid.numel()}
         X['sizes'] = {ntype: size for ntype, size in hetero.num_nodes_dict.items() if size}

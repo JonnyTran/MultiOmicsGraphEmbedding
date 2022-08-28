@@ -2,6 +2,7 @@ import logging
 import math
 import traceback
 from argparse import Namespace
+from pprint import pprint
 from typing import Dict, Iterable, Union, Tuple, Any, List
 
 import pandas as pd
@@ -29,7 +30,7 @@ from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, Heter
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
+from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, tensor_sizes
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -422,6 +423,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             self._node_ids = inputs["global_node_index"]
 
         h_out = {}
+        pprint(tensor_sizes(inputs=inputs["x_dict"]))
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
                                                   minibatch=math.sqrt(self.hparams.batch_size // 4)))
@@ -430,11 +432,12 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        embeddings = self.embedder.forward(h_out,
-                                           edge_index_dict=inputs["edge_index_dict"],
-                                           global_node_index=inputs["global_node_index"],
-                                           sizes=inputs["sizes"],
-                                           **kwargs)
+        embeddings = h_out
+        # embeddings = self.embedder.forward(h_out,
+        #                                    edge_index_dict=inputs["edge_index_dict"],
+        #                                    global_node_index=inputs["global_node_index"],
+        #                                    sizes=inputs["sizes"],
+        #                                    **kwargs)
 
         if hasattr(self, "classifier"):
             head_ntype_embeddings = embeddings[self.head_node_type]
