@@ -74,7 +74,7 @@ def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
 
 
 def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights: Optional[Tensor] = None, return_index=False):
-    if weights is None or (isinstance(weights, (Tensor, np.ndarray)) and weights.shape == None):
+    if weights is None or not isinstance(weights, (Tensor, np.ndarray) or weights.shape == None):
         return Y_hat, Y, None
 
     if isinstance(weights, Tensor):

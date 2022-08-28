@@ -70,8 +70,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         self.relation_conv: Dict[str, MetapathGATConv] = nn.ParameterDict({
             ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=1,
                                    attn_heads=attn_heads,
-                                   # attn_dropout=attn_dropout
-                                   ) \
+                                   attn_dropout=attn_dropout) \
             for ntype in self.node_types})
 
         if attn_activation == "sharpening":
@@ -87,8 +86,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         if layernorm:
             self.layernorm = nn.ParameterDict({ntype: nn.LayerNorm(output_dim) for ntype in self.node_types})
 
-        if batchnorm:
-            self.batchnorm = nn.ParameterDict({ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types})
+        # if batchnorm:
+        #     self.batchnorm = nn.ParameterDict({ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types})
 
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
@@ -108,8 +107,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         gain = nn.init.calculate_gain('relu')
         for node_type in self.linear_l:
             nn.init.xavier_normal_(self.linear_l[node_type].weight, gain=gain)
-        # for node_type in self.linear_r:
-        #     nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
+            if hasattr(self, 'linear_r'):
+                nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
 
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
         if hasattr(self, "rel_attn_l"):
@@ -468,15 +467,15 @@ class LATTE(nn.Module):
                 h_layers[ntype].append(h_dict[ntype])
 
         if self.layer_pooling is None or self.layer_pooling in ["last"] or self.n_layers == 1:
-            out = h_dict
+            h_dict = h_dict
 
         elif self.layer_pooling == "concat":
-            out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                   if len(h_list)}
+            h_dict = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                      if len(h_list)}
         else:
             raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
 
-        return out
+        return h_dict
 
     def __getitem__(self, item) -> LATTEConv:
         return self.layers[item]

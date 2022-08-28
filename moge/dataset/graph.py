@@ -140,7 +140,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
         self.node_types = node_types
-        self.head_node_type = head_node_type
+        self.head_node_type: str = head_node_type
         self.inductive = inductive
 
         # OGB Datasets

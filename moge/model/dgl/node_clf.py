@@ -795,7 +795,7 @@ class HGTNodeClf(NodeClfTrainer):
         if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
             non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
             print("non_seq_ntypes", non_seq_ntypes)
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, subset_ntypes=non_seq_ntypes)
 
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                             edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},

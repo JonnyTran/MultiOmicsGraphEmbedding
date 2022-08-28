@@ -16,51 +16,53 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 
 class HeteroNodeFeatureEncoder(nn.Module):
-    def __init__(self, hparams: Namespace, dataset: HeteroGraphDataset, select_ntypes: List[str] = None) -> None:
+    def __init__(self, hparams: Namespace, dataset: HeteroGraphDataset, subset_ntypes: List[str] = None) -> None:
         super().__init__()
-        self.embeddings = self.initialize_embeddings(embedding_dim=hparams.embedding_dim,
-                                                     num_nodes_dict=dataset.num_nodes_dict,
-                                                     in_channels_dict=dataset.node_attr_shape,
-                                                     pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
-                                                     freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True,
-                                                     select_ntypes=select_ntypes, )
+        self.embeddings = self.init_embeddings(embedding_dim=hparams.embedding_dim,
+                                               num_nodes_dict=dataset.num_nodes_dict,
+                                               in_channels_dict=dataset.node_attr_shape,
+                                               pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
+                                               freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True,
+                                               subset_ntypes=subset_ntypes, )
         print("model.encoder.embeddings: ", tensor_sizes(self.embeddings))
 
         # node types that needs a projection to align to the embedding_dim
-        proj_node_types = [ntype for ntype in dataset.node_types \
-                           if (ntype in dataset.node_attr_shape and
-                               dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
-                           or (self.embeddings and ntype in self.embeddings and
-                               self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
+        proj_node_types = []
+        for ntype in dataset.node_types:
+            if ntype in dataset.node_attr_shape and dataset.node_attr_shape[ntype] and \
+                    dataset.node_attr_shape[ntype] != hparams.embedding_dim:
+                proj_node_types.append(ntype)
+            elif ntype in self.embeddings and self.embeddings[ntype].weight.size(1) != hparams.embedding_dim:
+                proj_node_types.append(ntype)
 
-        self.feature_projection: Dict[str, nn.Linear] = nn.ModuleDict({
+        self.linear_proj: Dict[str, nn.Linear] = nn.ModuleDict({
             ntype: nn.Linear(in_features=dataset.node_attr_shape[ntype],
                              out_features=hparams.embedding_dim) \
             for ntype in proj_node_types})
-        print("model.encoder.feature_projection: ", self.feature_projection)
+        print("model.encoder.feature_projection: ", self.linear_proj)
 
-        if "batchnorm" in hparams and hparams.batchnorm:
-            self.batchnorm: Dict[str, nn.BatchNorm1d] = nn.ModuleDict({
-                ntype: nn.BatchNorm1d(input_size) \
-                for ntype, input_size in dataset.node_attr_shape.items()})
+        # if "batchnorm" in hparams and hparams.batchnorm:
+        #     self.batchnorm: Dict[str, nn.BatchNorm1d] = nn.ModuleDict({
+        #         ntype: nn.BatchNorm1d(input_size) \
+        #         for ntype, input_size in dataset.node_attr_shape.items()})
 
         if hasattr(hparams, "dropout") and hparams.dropout:
             self.dropout = hparams.dropout
         else:
             self.dropout = None
 
-    def initialize_embeddings(self, embedding_dim: int, num_nodes_dict: Dict[str, int],
-                              in_channels_dict: Dict[str, int],
-                              pretrain_embeddings: Dict[str, Tensor], select_ntypes: List[str] = None,
-                              freeze=True):
+    def init_embeddings(self, embedding_dim: int, num_nodes_dict: Dict[str, int],
+                        in_channels_dict: Dict[str, int],
+                        pretrain_embeddings: Dict[str, Tensor], subset_ntypes: List[str] = None,
+                        freeze=True) -> Dict[str, nn.Embedding]:
         # If some node type are not attributed, instantiate nn.Embedding for them
         if isinstance(in_channels_dict, dict):
             non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         else:
             non_attr_node_types = []
 
-        if select_ntypes:
-            non_attr_node_types = set(ntype for ntype in non_attr_node_types if ntype in select_ntypes)
+        if subset_ntypes:
+            non_attr_node_types = set(ntype for ntype in non_attr_node_types if ntype in subset_ntypes)
 
         if non_attr_node_types:
             module_dict = {}
@@ -86,7 +88,7 @@ class HeteroNodeFeatureEncoder(nn.Module):
 
             embeddings = nn.ModuleDict(module_dict)
         else:
-            embeddings = None
+            embeddings = {}
 
         return embeddings
 
@@ -100,11 +102,11 @@ class HeteroNodeFeatureEncoder(nn.Module):
                 h_dict[ntype] = self.embeddings[ntype](global_node_index[ntype]).to(global_node_index[ntype].device)
 
             # project to embedding_dim if node features are not same same dimension
-            if ntype in self.feature_projection:
+            if ntype in self.linear_proj:
                 if hasattr(self, "batchnorm"):
                     h_dict[ntype] = self.batchnorm[ntype].forward(h_dict[ntype])
 
-                h_dict[ntype] = self.feature_projection[ntype].forward(h_dict[ntype])
+                h_dict[ntype] = self.linear_proj[ntype].forward(h_dict[ntype])
                 h_dict[ntype] = F.relu(h_dict[ntype])
                 if hasattr(self, "dropout") and self.dropout:
                     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
@@ -162,25 +164,25 @@ class HeteroSequenceEncoder(nn.Module):
         self.seq_encoders: Dict[str, Union[BertForSequenceClassification, LSTMSequenceEncoder]] = \
             nn.ModuleDict(seq_encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: Union[float, int] = None) -> Dict[
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], split_batch_size: Union[float, int] = None) -> Dict[
         str, Tensor]:
         h_out = {}
-        if minibatch != None and isinstance(minibatch, (int, float)):
-            minibatch = max(int(minibatch), 1)
+        if split_batch_size != None and isinstance(split_batch_size, (int, float)):
+            split_batch_size = max(int(split_batch_size), 1)
         else:
-            minibatch = None
+            split_batch_size = None
 
         for ntype, encoding in sequences.items():
             if isinstance(self.seq_encoders[ntype], LSTMSequenceEncoder):
                 lengths = encoding["input_ids"].ne(0).sum(1)
                 h_out[ntype] = self.seq_encoders[ntype].forward(seqs=encoding["input_ids"], lengths=lengths)
 
-            elif minibatch:
+            elif split_batch_size:
                 batch_output = []
                 for input_ids, attention_mask, token_type_ids in \
-                        zip(torch.split(encoding["input_ids"], minibatch),
-                            torch.split(encoding["attention_mask"], minibatch),
-                            torch.split(encoding["token_type_ids"], minibatch)):
+                        zip(torch.split(encoding["input_ids"], split_batch_size),
+                            torch.split(encoding["attention_mask"], split_batch_size),
+                            torch.split(encoding["token_type_ids"], split_batch_size)):
                     out = self.seq_encoders[ntype].forward(input_ids=input_ids,
                                                            attention_mask=attention_mask,
                                                            token_type_ids=token_type_ids)

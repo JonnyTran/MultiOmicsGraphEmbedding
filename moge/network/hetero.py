@@ -331,8 +331,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         for ntype in self.node_types:
             if ntype not in self.multiomics.get_omics_list(): continue
 
-            nodes_w_seq = self.multiomics[ntype].annotations.index[
-                self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
+            nodes_w_seq = self.annotations[ntype].index[self.annotations[ntype][SEQUENCE_COL].notnull()]
             self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
 
     def to_dgl_heterograph(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,

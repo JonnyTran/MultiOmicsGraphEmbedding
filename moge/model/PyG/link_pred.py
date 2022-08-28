@@ -415,7 +415,7 @@ class LATTEFlatLinkPred(PyGLinkPredTrainer):
         non_seq_ntypes = list(set(self.dataset.node_types).difference(
             set(self.seq_encoder.seq_encoders.keys())) if hasattr(dataset, 'seq_tokenizer') else set())
         if not hasattr(self, "seq_encoder") or len(non_seq_ntypes):
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, subset_ntypes=non_seq_ntypes)
 
         self.embedder = LATTEFlat(n_layers=hparams.n_layers,
                                   t_order=min(hparams.t_order, hparams.n_layers),
@@ -462,7 +462,7 @@ class LATTEFlatLinkPred(PyGLinkPredTrainer):
         h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  minibatch=math.sqrt(self.hparams.batch_size // 3)))
+                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 3)))
 
         if len(h_out) < len(input_nodes.keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=input_nodes)
@@ -622,7 +622,7 @@ class LATTELinkPred(LATTEFlatLinkPred):
         non_seq_ntypes = list(set(self.dataset.node_types).difference(
             set(self.seq_encoder.seq_encoders.keys())) if hasattr(dataset, 'seq_tokenizer') else set())
         if not hasattr(self, "seq_encoder") or len(non_seq_ntypes):
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, subset_ntypes=non_seq_ntypes)
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
                               t_order=min(hparams.t_order, hparams.n_layers),
@@ -669,7 +669,7 @@ class LATTELinkPred(LATTEFlatLinkPred):
         h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  minibatch=math.sqrt(self.hparams.batch_size // 3)))
+                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 3)))
 
         if len(h_out) < len(input_nodes.keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=input_nodes)

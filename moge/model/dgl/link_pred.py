@@ -11,6 +11,11 @@ import torch
 import torch.nn as nn
 import tqdm
 from dgl import DGLHeteroGraph
+from pandas import DataFrame
+from torch import Tensor
+from torch.nn import functional as F
+from torch.optim import lr_scheduler
+
 from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace, edge_index_to_adjs
@@ -21,10 +26,6 @@ from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import LinkPredTrainer
-from pandas import DataFrame
-from torch import Tensor
-from torch.nn import functional as F
-from torch.optim import lr_scheduler
 
 
 class DglLinkPredForNodeClfTrainer:
@@ -493,7 +494,7 @@ class HGTLinkPred(DglLinkPredTrainer):
         if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
             non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
             print("non_seq_ntypes", non_seq_ntypes)
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, subset_ntypes=non_seq_ntypes)
 
         etypes = {etype for srctype, etype, dsttype in dataset.get_metapaths()}
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
@@ -545,7 +546,7 @@ class LATTELinkPred(DglLinkPredTrainer):
         if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
             non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
             print("non_seq_ntypes", non_seq_ntypes)
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, subset_ntypes=non_seq_ntypes)
 
         self.embedder = LATTE(n_layers=hparams.n_layers, t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict, head_node_type=dataset.head_node_type,
@@ -602,7 +603,7 @@ class DeepGraphGOLinkPred(DglLinkPredTrainer):
         if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
             non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
             print("non_seq_ntypes", non_seq_ntypes)
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, subset_ntypes=non_seq_ntypes)
 
         self.conv = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                         edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},

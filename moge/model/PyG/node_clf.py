@@ -2,7 +2,6 @@ import logging
 import math
 import traceback
 from argparse import Namespace
-from pprint import pprint
 from typing import Dict, Iterable, Union, Tuple, Any, List
 
 import pandas as pd
@@ -30,7 +29,7 @@ from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, Heter
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, tensor_sizes
+from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -390,11 +389,10 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         # Output layer
         if "cls_graph" in hparams and hparams.cls_graph is not None:
             self.classifier = LabelGraphNodeClassifier(hparams)
-
         elif hparams.nb_cls_dense_size >= 0:
             self.classifier = DenseClassification(hparams)
         else:
-            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
+            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat without self.classifier"
 
         self.criterion = ClassificationLoss(
             loss_type=hparams.loss_type, n_classes=dataset.n_classes,
@@ -423,35 +421,33 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             self._node_ids = inputs["global_node_index"]
 
         h_out = {}
-        pprint(tensor_sizes(inputs=inputs["x_dict"]))
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  minibatch=math.sqrt(self.hparams.batch_size // 4)))
+                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 4)))
 
         if len(h_out) < len(inputs["global_node_index"].keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        embeddings = h_out
-        # embeddings = self.embedder.forward(h_out,
-        #                                    edge_index_dict=inputs["edge_index_dict"],
-        #                                    global_node_index=inputs["global_node_index"],
-        #                                    sizes=inputs["sizes"],
-        #                                    **kwargs)
+        h_out = self.embedder.forward(h_out,
+                                      edge_index_dict=inputs["edge_index_dict"],
+                                      global_node_index=inputs["global_node_index"],
+                                      sizes=inputs["sizes"],
+                                      **kwargs)
 
         if hasattr(self, "classifier"):
-            head_ntype_embeddings = embeddings[self.head_node_type]
+            head_ntype_embeddings = h_out[self.head_node_type]
             if "batch_size" in inputs and self.head_node_type in inputs["batch_size"]:
                 head_ntype_embeddings = head_ntype_embeddings[:inputs["batch_size"][self.head_node_type]]
 
             y_hat = self.classifier.forward(head_ntype_embeddings)
         else:
-            y_hat = embeddings[self.head_node_type]
+            y_hat = h_out[self.head_node_type]
 
         if return_embeddings and return_score:
-            return embeddings, y_hat
+            return h_out, y_hat
         elif return_embeddings:
-            return embeddings
+            return h_out
         else:
             return y_hat
 
@@ -459,7 +455,6 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred = self.forward(X)
 
-        # y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0:
@@ -548,10 +543,6 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         finally:
             super().on_test_end()
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.lr)
-
-        return {"optimizer": optimizer}
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):
