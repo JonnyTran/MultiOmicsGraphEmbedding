@@ -518,15 +518,16 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
                                                                                     'expressions'):
                 expressions = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]]
-                if False and hasattr(expressions, 'sparse') and not self.multiomics[ntype].expressions.empty:
-                    print(ntype)
+                if False and hasattr(expressions, 'sparse') and not expressions.empty:
+                    print(ntype, "sparse")
                     csr_mtx = expressions.sparse.to_coo().tocsr()
-                    hetero[ntype]['x'] = torch.sparse_csr_tensor(crow_indices=csr_mtx.indptr,
-                                                                 col_indices=csr_mtx.indices,
-                                                                 values=csr_mtx.data,
-                                                                 dtype=torch.float,
-                                                                 size=expressions.shape)
-                else:
+                    hetero[ntype]['x'] = csr_mtx
+                    # hetero[ntype]['x'] = torch.sparse_csr_tensor(crow_indices=csr_mtx.indptr,
+                    #                                              col_indices=csr_mtx.indices,
+                    #                                              values=csr_mtx.data,
+                    #                                              dtype=torch.float,
+                    #                                              size=expressions.shape)
+                elif not expressions.empty:
                     hetero[ntype]['x'] = torch.tensor(expressions.values, dtype=torch.float)
 
             hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
@@ -543,7 +544,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if labels_subset is not None:
                 self.feature_transformer[target].classes_ = np.intersect1d(
                     self.feature_transformer[target].classes_, labels_subset, assume_unique=True)
-                print(self.feature_transformer[target].classes_)
 
             classes = self.feature_transformer[target].classes_
 

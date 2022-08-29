@@ -51,6 +51,17 @@ class HeteroNodeFeatureEncoder(nn.Module):
         else:
             self.dropout = None
 
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for ntype, linear in self.linear_proj.items():
+            if hasattr(linear, "weight"):
+                nn.init.xavier_uniform_(linear.weight)
+
+        for ntype, embedding in self.embeddings.items():
+            if hasattr(embedding, "weight"):
+                nn.init.xavier_uniform_(embedding.weight)
+
     def init_embeddings(self, embedding_dim: int, num_nodes_dict: Dict[str, int],
                         in_channels_dict: Dict[str, int],
                         pretrain_embeddings: Dict[str, Tensor], subset_ntypes: List[str] = None,
@@ -72,7 +83,7 @@ class HeteroNodeFeatureEncoder(nn.Module):
                     print("Initialized trainable embeddings: ", ntype)
                     module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                                       embedding_dim=embedding_dim,
-                                                      # max_norm=2, norm_type=2,
+                                                      max_norm=2, norm_type=2,
                                                       scale_grad_by_freq=False,
                                                       sparse=False)
 

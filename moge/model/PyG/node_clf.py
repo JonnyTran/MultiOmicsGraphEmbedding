@@ -416,7 +416,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]],
-                return_embeddings=False, return_score=False, **kwargs) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+                return_embeddings=False, **kwargs) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
@@ -444,10 +444,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         else:
             y_hat = h_out[self.head_node_type]
 
-        if return_embeddings and return_score:
+        if return_embeddings:
             return h_out, y_hat
-        elif return_embeddings:
-            return h_out
         else:
             return y_hat
 

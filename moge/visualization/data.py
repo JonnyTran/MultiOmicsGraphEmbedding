@@ -8,11 +8,12 @@ import plotly.graph_objects as go
 import xarray as xr
 from datashader import reductions as rd
 from holoviews.operation.datashader import rasterize
-from moge.visualization.utils import configure_layout
 from plotly.subplots import make_subplots
 from scipy.sparse import coo_matrix
 from scipy.sparse import issparse
 from sklearn.metrics import classification_report
+
+from moge.visualization.utils import configure_layout
 
 hv.extension('plotly')
 
@@ -44,8 +45,7 @@ def heatmap_fast(mtx, x_label, y_label, size=1000):
 
     agg = cvs.raster(pw_s, agg=rd.mean())
 
-    fig = px.imshow(agg, labels={"x": x_label, "y": y_label})
-    fig['layout'].layers(autosize=False)
+    fig = px.imshow(agg, labels={"x": x_label, "y": y_label}).update_layout(autosize=False, )
     return fig
 
 
