@@ -35,6 +35,9 @@ class Metrics(torch.nn.Module):
         self.prefix = prefix if isinstance(prefix, str) else ""
 
         self.metrics: Dict[Union[str, Tuple[str]], Metric] = {}
+        if metrics is None:
+            metrics = []
+
         for metric in metrics:
             if "precision" == metric:
                 self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)

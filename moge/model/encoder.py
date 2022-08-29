@@ -51,7 +51,7 @@ class HeteroNodeFeatureEncoder(nn.Module):
         else:
             self.dropout = None
 
-        self.reset_parameters()
+        # self.reset_parameters()
 
     def reset_parameters(self):
         for ntype, linear in self.linear_proj.items():

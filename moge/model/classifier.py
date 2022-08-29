@@ -128,7 +128,7 @@ class DenseClassification(nn.Module):
         else:
             print("INFO: [Else Case] Output of `classifier` is logits")
 
-        self.reset_parameters()
+        # self.reset_parameters()
 
     def reset_parameters(self):
         for linear in self.fc_classifier:
