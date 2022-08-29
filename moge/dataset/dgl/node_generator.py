@@ -677,10 +677,9 @@ class NodeClfPyGCollator(dgl.dataloading.NodeCollator):
         else:
             items = prepare_tensor(self.g, items, 'items')
 
-        blocks: List[dgl.DGLHeteroGraph] = self.graph_sampler.sample_blocks(self.g, items)
-        print(len(blocks))
+        input_nodes, seeds, blocks = self.graph_sampler.sample_blocks(self.g, items)
+
         output_nodes = blocks[-1].dstdata[dgl.NID]
-        input_nodes = blocks[0].srcdata[dgl.NID]
 
         X = {}
         for i, block in enumerate(blocks):
@@ -704,8 +703,6 @@ class NodeClfPyGCollator(dgl.dataloading.NodeCollator):
         X["x_dict"] = {ntype: feat \
                        for ntype, feat in blocks[0].srcdata["feat"].items() \
                        if feat.size(0) != 0}
-        if len(X["x_dict"]) == 0:
-            X.pop("x_dict")
 
         if SEQUENCE_COL in blocks[0].srcdata and len(blocks[0].srcdata[SEQUENCE_COL]):
             X[SEQUENCE_COL] = {ntype: feat \

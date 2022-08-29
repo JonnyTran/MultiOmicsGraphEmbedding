@@ -114,7 +114,7 @@ class LATTENodeClf(NodeClfTrainer):
         y_pred = self.forward(blocks, batch_inputs)
         loss = self.criterion.forward(y_pred, y_true)
 
-        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights=None)
 
         self.log("loss", loss, logger=True, on_step=True)
         if batch_nb % 25 == 0:
@@ -137,7 +137,7 @@ class LATTENodeClf(NodeClfTrainer):
         # if batch_nb == 0:
         #     print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights=None)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
         return val_loss
 
@@ -155,29 +155,9 @@ class LATTENodeClf(NodeClfTrainer):
         if batch_nb == 0:
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights=None)
         self.log("test_loss", test_loss, logger=True)
         return test_loss
-
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
-
-    def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=None,
-                                                batch_size=self.hparams.batch_size,
-                                                num_workers=0)
-
-    def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=None,
-                                            batch_size=self.hparams.batch_size,
-                                            num_workers=0)
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
@@ -852,7 +832,7 @@ class HGTNodeClf(NodeClfTrainer):
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
-        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights=None)
 
         self.log("loss", loss, logger=True, on_step=True)
         if batch_nb % 25 == 0:
@@ -875,7 +855,7 @@ class HGTNodeClf(NodeClfTrainer):
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
-        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights=None)
         self.log("val_loss", loss, prog_bar=True, logger=True)
         return loss
 
@@ -893,24 +873,10 @@ class HGTNodeClf(NodeClfTrainer):
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
-        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights=None)
         self.log("test_loss", loss, logger=True)
         return loss
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
-
-    def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
-
-    def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=None,
-                                            batch_size=self.hparams.batch_size,
-                                            num_workers=0)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters())

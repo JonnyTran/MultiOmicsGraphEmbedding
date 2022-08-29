@@ -14,7 +14,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
 from torch import nn, Tensor
-from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
@@ -25,7 +24,7 @@ from moge.model.PyG.latte import LATTE
 from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
 from moge.model.PyG.link_pred import LATTEFlatLinkPred
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
-from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, HeteroNodeFeatureEncoder
+from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
@@ -35,7 +34,9 @@ from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activat
 class LATTENodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["accuracy"],
                  collate_fn="neighbor_sampler") -> None:
-        super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = list(dataset.num_nodes_dict.keys())
         self.dataset = dataset
@@ -44,12 +45,12 @@ class LATTENodeClf(NodeClfTrainer):
         self._name = f"LATTE-{hparams.t_order}"
         self.collate_fn = collate_fn
 
-        if "fanouts" in hparams and isinstance(hparams.fanouts,
-                                               Iterable) and self.dataset.neighbor_sizes != hparams.fanouts:
-            self.set_fanouts(self.dataset, hparams.fanouts)
-            hparams.n_layers = len(dataset.neighbor_sizes)
+        # Node attr input
+        if hasattr(dataset, 'seq_tokenizer'):
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
-        assert hparams.n_layers == len(dataset.neighbor_sizes)
+        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.node_types):
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
                               t_order=min(hparams.t_order, hparams.n_layers),
@@ -60,7 +61,7 @@ class LATTENodeClf(NodeClfTrainer):
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout,
-                              layer_pooling=hparams.layer_pooling,
+                              layer_pooling=hparams.layer_pooling if 'layer_pooling' in hparams else 'last',
                               use_proximity=hparams.use_proximity \
                                   if hasattr(hparams, "use_proximity") else False,
                               neg_sampling_ratio=hparams.neg_sampling_ratio \
@@ -68,54 +69,18 @@ class LATTENodeClf(NodeClfTrainer):
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
                               hparams=hparams)
 
-        if "vocab" not in hparams or hparams.vocab is None:
-            self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
-                                                         dataset.num_nodes_dict,
-                                                         dataset.node_attr_shape,
-                                                         pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
-                                                         freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True)
-
-            # node types that needs a projection to align to the embedding_dim
-            self.proj_ntypes = [ntype for ntype in self.node_types \
-                                if (ntype in dataset.node_attr_shape and
-                                    dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
-                                or (self.embeddings and ntype in self.embeddings and
-                                    self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
-
-            self.feature_projection = nn.ModuleDict({
-                ntype: nn.Linear(
-                    in_features=dataset.node_attr_shape[ntype] \
-                        if not self.embeddings or ntype not in self.embeddings \
-                        else self.embeddings[ntype].weight.size(1),
-                    out_features=hparams.embedding_dim) \
-                for ntype in self.proj_ntypes})
-
-            if hparams.batchnorm:
-                self.batchnorm = nn.ModuleDict({
-                    ntype: nn.BatchNorm1d(hparams.embedding_dim) \
-                    for ntype in self.proj_ntypes
-                })
-
-            self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
-
-        else:
-            self.sequence_encoders = nn.ModuleDict({
-                ntype: LSTMSequenceEncoder(vocab_size=len(vocab.vocab), embedding_dim=hparams.embedding_dim) \
-                for ntype, vocab in hparams.vocab.items()})
-
-        if hparams.nb_cls_dense_size >= 0:
-            if hparams.layer_pooling == "concat":
-                hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
-                logging.info("embedding_dim {}".format(hparams.embedding_dim))
-            elif hparams.layer_pooling == "order_concat":
-                hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
-
-            if "cls_graph" in hparams and hparams.cls_graph:
-                self.classifier = LabelGraphNodeClassifier(hparams)
-            else:
-                self.classifier = DenseClassification(hparams)
+        if hparams.layer_pooling == "concat":
+            hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
+            logging.info("embedding_dim {}".format(hparams.embedding_dim))
+        elif hparams.layer_pooling == "order_concat":
+            hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
         else:
             assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
+
+        if "cls_graph" in hparams and hparams.cls_graph:
+            self.classifier = LabelGraphNodeClassifier(hparams)
+        else:
+            self.classifier = DenseClassification(hparams)
 
         self.criterion = ClassificationLoss(
             loss_type=hparams.loss_type, n_classes=dataset.n_classes,
@@ -129,8 +94,6 @@ class LATTENodeClf(NodeClfTrainer):
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
 
-        self.val_moving_loss = torch.tensor([2.5, ] * 5, dtype=torch.float)
-
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -140,94 +103,39 @@ class LATTENodeClf(NodeClfTrainer):
             for ntype in self.feature_projection:
                 nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
 
-    def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict,
-                              pretrain_embeddings: Dict[str, torch.Tensor],
-                              freeze=True):
-        # If some node type are not attributed, instantiate nn.Embedding for them
-        if isinstance(in_channels_dict, dict):
-            non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
-        else:
-            non_attr_node_types = []
-
-
-        if non_attr_node_types:
-            module_dict = {}
-
-            for ntype in non_attr_node_types:
-                if pretrain_embeddings is None or ntype not in pretrain_embeddings:
-                    print("Initialized trainable embeddings", ntype)
-                    module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
-                                                      embedding_dim=embedding_dim,
-                                                      scale_grad_by_freq=True,
-                                                      sparse=False)
-                else:
-                    print(f"Pretrained embeddings freeze={freeze}", ntype)
-                    max_norm = pretrain_embeddings[ntype].norm(dim=1).mean()
-                    module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
-                                                                      freeze=freeze,
-                                                                      scale_grad_by_freq=True,
-                                                                      max_norm=max_norm)
-
-            embeddings = nn.ModuleDict(module_dict)
-        else:
-            embeddings = None
-
-        return embeddings
-
-    def transform_inp_feats(self, node_feats: Dict[str, torch.Tensor], global_node_idx: Dict[str, torch.Tensor]):
-        h_dict = {}
-
-        for ntype in global_node_idx:
-            if global_node_idx[ntype].numel() == 0: continue
-
-            if ntype not in node_feats:
-                node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
-
-            # project to embedding_dim if node features are not same same dimension
-            if ntype in self.proj_ntypes:
-                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
-
-                if hasattr(self, "batchnorm"):
-                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
-
-                h_dict[ntype] = F.relu(h_dict[ntype])
-                # if self.dropout:
-                #     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
-
-            else:
-                # Skips projection
-                h_dict[ntype] = node_feats[ntype]
-
-
-        return h_dict
-
-    def forward(self, inputs: Dict[str, Union[Tensor, Dict[str, Tensor]]], **kwargs):
+    def forward(self, inputs: Dict[str, Union[Tensor, Dict[str, Tensor]]], return_embeddings=False, **kwargs):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        if "x_dict" in inputs or hasattr(self, "embeddings"):
-            h_out = self.transform_inp_feats(inputs["x_dict"], global_node_idx=inputs["global_node_index"][0])
+        h_out = {}
+        if 'sequences' in inputs and hasattr(self, "seq_encoder"):
+            h_out.update(self.seq_encoder.forward(inputs['sequences'],
+                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 4)))
 
-        elif "sequence" in inputs:
-            h_out = {ntype: self.sequence_encoders[ntype](inputs["sequence"][ntype], inputs["seq_len"][ntype]) \
-                     for ntype in inputs["sequence"]}
+        input_nodes = inputs["global_node_index"][0]
+        if len(h_out) < len(input_nodes.keys()):
+            embs = self.encoder.forward(inputs["x_dict"], global_node_index=input_nodes)
+            h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        embeddings = self.embedder(h_out,
-                                   inputs["edge_index"],
-                                   inputs["sizes"],
-                                   inputs["global_node_index"], **kwargs)
+        h_out, edge_pred_dict = self.embedder.forward(h_out,
+                                                      inputs["edge_index"],
+                                                      inputs["sizes"],
+                                                      inputs["global_node_index"], **kwargs)
 
         if isinstance(self.head_node_type, str):
-            y_hat = self.classifier(embeddings[self.head_node_type]) \
-                if hasattr(self, "classifier") else embeddings[self.head_node_type]
+            logits = self.classifier(h_out[self.head_node_type]) \
+                if hasattr(self, "classifier") else h_out[self.head_node_type]
 
         elif isinstance(self.head_node_type, Iterable):
             if hasattr(self, "classifier"):
-                y_hat = {ntype: self.classifier(emb) for ntype, emb in embeddings.items()}
+                logits = {ntype: self.classifier(emb) for ntype, emb in h_out.items()}
             else:
-                y_hat = embeddings
+                logits = h_out
 
-        return y_hat
+        if return_embeddings:
+            return h_out, logits
+        else:
+            return logits
 
     def on_test_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
@@ -259,7 +167,7 @@ class LATTENodeClf(NodeClfTrainer):
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
+        self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights)
 
         if batch_nb % 100 == 0:
             logs = self.train_metrics.compute_metrics()
@@ -280,7 +188,7 @@ class LATTENodeClf(NodeClfTrainer):
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
+        self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
 
         self.log("val_loss", val_loss)
 
@@ -299,7 +207,7 @@ class LATTENodeClf(NodeClfTrainer):
         if batch_nb == 0:
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
+        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
 
         self.log("test_loss", test_loss)
 
@@ -351,11 +259,13 @@ class LATTENodeClf(NodeClfTrainer):
         return y_true, y_pred
 
 
-class LATTEFlatNodeClf(NodeClfTrainer):
+class LATTEFlatNodeClf(LATTENodeClf):
     dataset: HeteroNodeClfDataset
 
     def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"], collate_fn=None) -> None:
-        super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
         self.dataset = dataset
@@ -389,10 +299,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         # Output layer
         if "cls_graph" in hparams and hparams.cls_graph is not None:
             self.classifier = LabelGraphNodeClassifier(hparams)
-        elif hparams.nb_cls_dense_size >= 0:
-            self.classifier = DenseClassification(hparams)
         else:
-            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat without self.classifier"
+            self.classifier = DenseClassification(hparams)
 
         self.criterion = ClassificationLoss(
             loss_type=hparams.loss_type, n_classes=dataset.n_classes,
@@ -440,14 +348,14 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             if "batch_size" in inputs and self.head_node_type in inputs["batch_size"]:
                 head_ntype_embeddings = head_ntype_embeddings[:inputs["batch_size"][self.head_node_type]]
 
-            y_hat = self.classifier.forward(head_ntype_embeddings)
+            logits = self.classifier.forward(head_ntype_embeddings)
         else:
-            y_hat = h_out[self.head_node_type]
+            logits = h_out[self.head_node_type]
 
         if return_embeddings:
-            return h_out, y_hat
+            return h_out, logits
         else:
-            return y_hat
+            return logits
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
@@ -502,22 +410,6 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         return test_loss
 
-    def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                y_pred: Tensor, y_true: Tensor, weights: Tensor, subset=None):
-        if isinstance(metrics, dict):
-            y_pred_dict = self.dataset.split_labels_by_nodes_namespace(y_pred)
-            y_true_dict = self.dataset.split_labels_by_nodes_namespace(y_true)
-
-            for namespace in y_true_dict.keys():
-                go_type = "BPO" if namespace == 'biological_process' else \
-                    "CCO" if namespace == 'cellular_component' else \
-                        "MFO" if namespace == 'molecular_function' else namespace
-
-                metrics[go_type].update_metrics(y_pred_dict[namespace], y_true_dict[namespace],
-                                                weights=weights, subset=subset)
-
-        else:
-            metrics.update_metrics(y_pred, y_true, weights=weights, subset=subset)
 
     def on_validation_end(self) -> None:
         super().on_validation_end()

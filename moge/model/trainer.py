@@ -10,6 +10,14 @@ import torch
 import torch.nn.functional as F
 import wandb
 from logzero import logger
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
+from torch.utils.data.distributed import DistributedSampler
+
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -19,13 +27,6 @@ from moge.model.PyG.latte import LATTE
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
-from torch.utils.data.distributed import DistributedSampler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -396,6 +397,23 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         self.log_dict(metrics_dict, prog_bar=True)
         return None
 
+    def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
+                                y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, subset=None):
+        if isinstance(metrics, dict):
+            y_pred_dict = self.dataset.split_labels_by_nodes_namespace(y_pred)
+            y_true_dict = self.dataset.split_labels_by_nodes_namespace(y_true)
+
+            for namespace in y_true_dict.keys():
+                go_type = "BPO" if namespace == 'biological_process' else \
+                    "CCO" if namespace == 'cellular_component' else \
+                        "MFO" if namespace == 'molecular_function' else namespace
+
+                metrics[go_type].update_metrics(y_pred_dict[namespace], y_true_dict[namespace],
+                                                weights=weights, subset=subset)
+
+        else:
+            metrics.update_metrics(y_pred, y_true, weights=weights, subset=subset)
+
     def get_node_loss(self, targets: Tensor, y_pred: Tensor, global_node_index: Dict[str, Tensor] = None):
         losses = F.binary_cross_entropy(y_pred.detach(),
                                         target=targets.float(),
@@ -405,41 +423,43 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         return losses
 
-    def train_dataloader(self, **kwargs):
+    def train_dataloader(self, batch_size=None, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.training_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
         else:
             train_sampler = None
 
-        dataset = self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size, batch_sampler=train_sampler,
+        dataset = self.dataset.train_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
+                                                batch_size=batch_size if batch_size else self.hparams.batch_size,
+                                                batch_sampler=train_sampler,
                                                 **kwargs)
         return dataset
 
-    def val_dataloader(self, **kwargs):
+    def val_dataloader(self, batch_size=None, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.validation_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
         else:
             train_sampler = None
 
-        dataset = self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size, batch_sampler=train_sampler,
+        dataset = self.dataset.valid_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
+                                                batch_size=batch_size if batch_size else self.hparams.batch_size,
+                                                batch_sampler=train_sampler,
                                                 **kwargs)
 
         return dataset
 
-
-    def test_dataloader(self, **kwargs):
+    def test_dataloader(self, batch_size=None, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.testing_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
         else:
             train_sampler = None
 
-        dataset = self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                               batch_size=self.hparams.batch_size, batch_sampler=train_sampler,
+        dataset = self.dataset.test_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
+                                               batch_size=batch_size if batch_size else self.hparams.batch_size,
+                                               batch_sampler=train_sampler,
                                                **kwargs)
         return dataset
 

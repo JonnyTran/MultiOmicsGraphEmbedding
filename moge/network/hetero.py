@@ -366,7 +366,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     key: torch.ones_like(edge_index[0], dtype=torch.bool) \
                     for key in {"train_mask", "valid_mask", "test_mask"}.difference(edge_attr.keys())}
 
-        G: dgl.DGLHeteroGraph = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
+        num_nodes_dict = {ntype: num_nodes for ntype, num_nodes in self.num_nodes_dict.items() \
+                          if ntype_subset is None or ntype in ntype_subset}
+        G: dgl.DGLHeteroGraph = dgl.heterograph(edge_index_dict, num_nodes_dict=num_nodes_dict)
 
         # Edge attributes
         for metapath, edge_attr in edge_attr_dict.items():
@@ -388,10 +390,22 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     print(f"{ntype} added {col}")
                     G.nodes[ntype].data[col] = torch.from_numpy(feat)
 
+            # Expression values
             if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
                                                                                     'expressions'):
-                node_expression = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]].values
-                G[ntype].data['expression'] = torch.tensor(node_expression, dtype=torch.float)
+                expressions = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]]
+                if hasattr(expressions, 'sparse') and not expressions.empty:
+                    print(ntype, "sparse")
+                    csr_mtx = expressions.sparse.to_coo().tocsr()
+                    # G[ntype].data['x'] = csr_mtx
+                    G[ntype].data['x'] = torch.sparse_csr_tensor(crow_indices=csr_mtx.indptr,
+                                                                 col_indices=csr_mtx.indices,
+                                                                 values=csr_mtx.data,
+                                                                 dtype=torch.float,
+                                                                 size=expressions.shape)
+
+                elif not expressions.empty:
+                    G[ntype].data['x'] = torch.tensor(expressions.values, dtype=torch.float)
 
             # DNA/RNA sequence
             if sequence and SEQUENCE_COL in annotations:

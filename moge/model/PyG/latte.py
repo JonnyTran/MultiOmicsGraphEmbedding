@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
+from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ..relations import RelationAttention, MetapathGATConv
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
@@ -19,16 +19,14 @@ from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
     def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0,
-                 attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
-                 neg_sampling_ratio=1.0, layer_pooling=None) -> None:
+                 attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2, edge_threshold=0.0,
+                 layer_pooling=None) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.t_order = t_order
         self.node_types = node_types
         self.metapaths = list(metapaths)
         self.embedding_dim = output_dim
-        self.use_proximity = use_proximity
-        self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
         self.edge_threshold = edge_threshold
@@ -191,6 +189,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                                                                        prev_l_dict=prev_h_in,
                                                                        prev_edge_index_dict=prev_edge_index_dict,
                                                                        sizes=sizes)
+            edge_pred_dict.update(edge_attn_dict)
             h_out[ntype][:, -1] = l_dict[ntype][:sizes[self.layer][ntype][1]]
 
             if verbose:
@@ -206,9 +205,17 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                 for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
                                                                      betas[ntype].mean(-1).mean(0),
                                                                      betas[ntype].mean(-1).std(0))):
-                    if etype not in edge_attn_dict and etype != ntype: continue
+                    if etype in edge_attn_dict:
+                        edge_index = edge_attn_dict[etype] \
+                            if isinstance(edge_attn_dict[etype], Tensor) else edge_attn_dict[etype][0]
+                        edge_size = edge_index.size(1)
+                    elif etype != ntype:
+                        continue
+                    else:
+                        edge_size = None
+
                     print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
-                          f"\tedge_index: {edge_attn_dict[etype].size(1) if etype in edge_attn_dict else 0}, "
+                          f"\tedge_index: {edge_size}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(rel_embeddings[:, i], dim=0).mean().item() if rel_embeddings.dim() >= 3 else -1:.2f}")
 
@@ -483,10 +490,11 @@ class LATTE(nn.Module):
                           activation=activation,
                           batchnorm=False if "batchnorm" not in hparams else hparams.batchnorm,
                           layernorm=False if "layernorm" not in hparams else hparams.layernorm,
-                          dropout=False if "dropout" not in hparams else hparams.dropout,
-                          attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
+                          dropout=None if "dropout" not in hparams else hparams.dropout,
+                          attn_heads=attn_heads,
+                          attn_activation=attn_activation,
+                          attn_dropout=attn_dropout,
                           edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
-                          use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
                           layer_pooling=layer_pooling if is_last_layer else None))
 
             if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
