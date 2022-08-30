@@ -109,8 +109,8 @@ class Metrics(torch.nn.Module):
             y_true:
             weights:
         """
-        y_pred = y_pred.detach()
-        y_true = y_true.detach()
+        y_pred = y_pred.detach().clone()
+        y_true = y_true.detach().clone()
 
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights)
         y_pred_act = activation(y_pred, loss_type=self.loss_type)

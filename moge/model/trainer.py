@@ -10,6 +10,14 @@ import torch
 import torch.nn.functional as F
 import wandb
 from logzero import logger
+from moge.criterion.clustering import clustering_metrics
+from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
+from moge.dataset.dgl.node_generator import DGLNodeGenerator
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.utils import edge_index_to_adjs
+from moge.model.metrics import Metrics
+from moge.model.utils import tensor_sizes, preprocess_input
+from moge.visualization.attention import plot_sankey_flow
 from pandas import DataFrame, Series
 from pytorch_lightning import LightningModule
 from pytorch_lightning.loggers import WandbLogger
@@ -17,16 +25,6 @@ from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.optim import lr_scheduler
 from torch.utils.data.distributed import DistributedSampler
-
-from moge.criterion.clustering import clustering_metrics
-from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
-from moge.dataset.dgl.node_generator import DGLNodeGenerator
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.utils import edge_index_to_adjs
-from moge.model.PyG.latte import LATTE
-from moge.model.metrics import Metrics
-from moge.model.utils import tensor_sizes, preprocess_input
-from moge.visualization.attention import plot_sankey_flow
 
 
 class ClusteringEvaluator(LightningModule):
@@ -155,7 +153,6 @@ class ClusteringEvaluator(LightningModule):
 
 class NodeEmbeddingEvaluator(LightningModule):
     dataset: HeteroGraphDataset
-    embedder: LATTE
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.attn_plot_name = "sankey_flow"

@@ -7,9 +7,6 @@ from typing import Dict, List, Iterable
 import dgl
 import torch
 from dgl.heterograph import DGLBlock
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-
 from moge.dataset.dgl.node_generator import DGLNodeGenerator, HANSampler
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
@@ -17,6 +14,9 @@ from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subset
 from moge.model.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+
 from .HGConv.model.HGConv import HGConv as Hgconv
 from .HGT import HGT
 from .conv import HAN as Han
@@ -117,9 +117,6 @@ class LATTENodeClf(NodeClfTrainer):
         self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights=None)
 
         self.log("loss", loss, logger=True, on_step=True)
-        if batch_nb % 25 == 0:
-            logs = self.train_metrics.compute_metrics()
-            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
         return loss
 
@@ -772,15 +769,11 @@ class HGTNodeClf(NodeClfTrainer):
                 and len(self.dataset.neighbor_sizes) != len(hparams.fanouts):
             self.set_fanouts(self.dataset, hparams.fanouts)
 
-        if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
-            non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
-            print("non_seq_ntypes", non_seq_ntypes)
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, subset_ntypes=non_seq_ntypes)
+        self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                             edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                            n_inp=self.dataset.node_attr_shape[self.head_node_type] \
-                                if self.dataset.node_attr_shape else hparams.embedding_dim,
+                            n_inp=hparams.embedding_dim,
                             n_hid=hparams.embedding_dim,
                             n_out=hparams.embedding_dim,
                             n_layers=hparams.n_layers,
@@ -798,8 +791,8 @@ class HGTNodeClf(NodeClfTrainer):
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, blocks: List[DGLBlock], x: Dict[str, Tensor], return_embeddings: bool = False, **kwargs):
-        if len(x) == 0 or sum(a.numel() for a in x.values()) == 0:
-            x = self.encoder.forward(feats=x, global_node_index=blocks[0].srcdata["_ID"])
+        input_nodes = blocks[0].srcdata["_ID"]
+        x = self.encoder.forward(feats=x, global_node_index=input_nodes)
 
         embeddings = self.embedder(blocks, x)
 
@@ -835,9 +828,6 @@ class HGTNodeClf(NodeClfTrainer):
         self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights=None)
 
         self.log("loss", loss, logger=True, on_step=True)
-        if batch_nb % 25 == 0:
-            logs = self.train_metrics.compute_metrics()
-            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
         return loss
 

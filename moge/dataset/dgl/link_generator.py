@@ -14,7 +14,6 @@ from ogb.linkproppred import DglLinkPropPredDataset
 from pandas import Index, DataFrame, Series
 from torch import Tensor
 from torch_sparse import SparseTensor
-from umap import UMAP
 
 from .node_generator import DGLNodeGenerator
 from ..PyG.hetero_generator import HeteroLinkPredDataset
@@ -259,8 +258,14 @@ class DGLLinkGenerator(DGLNodeGenerator):
              "loss": node_losses},
             index=pd.Index(np.concatenate([global_node_index[ntype] for ntype in global_node_index]), name="nid"))
 
-        tsne = UMAP(n_components=2, n_jobs=-1)
-        # tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1)
+        try:
+            from umap import UMAP
+            tsne = UMAP(n_components=2, n_jobs=-1)
+        except Exception as e:
+            print(e)
+            import MulticoreTSNE
+            tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1)
+
         nodes_pos = tsne.fit_transform(nodes_emb)
         nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))

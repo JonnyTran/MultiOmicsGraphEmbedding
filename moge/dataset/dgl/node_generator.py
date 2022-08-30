@@ -11,15 +11,15 @@ from dgl.dataloading import BlockSampler
 from dgl.sampling import RandomWalkNeighborSampler
 from dgl.utils import prepare_tensor_dict, prepare_tensor
 from logzero import logger
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
 from ogb.nodeproppred import DglNodePropPredDataset
 from pandas import Index, DataFrame
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
 from ..PyG.node_generator import HeteroNeighborGenerator
@@ -98,10 +98,13 @@ class DGLNodeGenerator(HeteroGraphDataset):
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
         self.y_dict = G.ndata["label"]
-        self.multilabel = any((label.sum(1) > 1).any() if label.dim() == 2 else False \
-                              for label in self.y_dict.values())
+        if isinstance(self.y_dict, dict):
+            self.multilabel = any((label.sum(1) > 1).any() if label.dim() == 2 else False \
+                                  for label in self.y_dict.values())
+        else:
+            self.multilabel = (self.y_dict.sum(1) > 1).any() if self.y_dict.dim() == 2 else False
 
-        # Whether to use split namespace
+            # Whether to use split namespace
         self.split_namespace = split_namespace
         if split_namespace:
             self.nodes_namespace = {}
@@ -393,7 +396,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
                 self.reverse_etypes[metapath] = rev_metapath
 
             self.metapaths = new_g.canonical_etypes
-            assert new_g.num_nodes() == G.num_nodes() and len(new_g.canonical_etypes) > len(G.canonical_etypes)
+            assert new_g.num_nodes() == G.num_nodes() and len(new_g.canonical_etypes) >= len(G.canonical_etypes)
 
             logger.info(
                 f"Added reverse edges with {len(new_g.canonical_etypes) - len(G.canonical_etypes)} new etypes") if verbose else None

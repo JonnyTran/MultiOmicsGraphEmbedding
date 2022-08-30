@@ -8,10 +8,6 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
-from pandas import Series, Index, DataFrame
-from torch import Tensor
-from torch_geometric.data import HeteroData
-
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
@@ -20,6 +16,9 @@ from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
+from pandas import Series, Index, DataFrame
+from torch import Tensor
+from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -394,18 +393,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
                                                                                     'expressions'):
                 expressions = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]]
-                if hasattr(expressions, 'sparse') and not expressions.empty:
-                    print(ntype, "sparse")
-                    csr_mtx = expressions.sparse.to_coo().tocsr()
-                    # G[ntype].data['x'] = csr_mtx
-                    G[ntype].data['x'] = torch.sparse_csr_tensor(crow_indices=csr_mtx.indptr,
-                                                                 col_indices=csr_mtx.indices,
-                                                                 values=csr_mtx.data,
-                                                                 dtype=torch.float,
-                                                                 size=expressions.shape)
-
-                elif not expressions.empty:
-                    G[ntype].data['x'] = torch.tensor(expressions.values, dtype=torch.float)
+                if not expressions.empty:
+                    G.nodes[ntype].data['feat'] = torch.tensor(expressions.values, dtype=torch.float)
 
             # DNA/RNA sequence
             if sequence and SEQUENCE_COL in annotations:

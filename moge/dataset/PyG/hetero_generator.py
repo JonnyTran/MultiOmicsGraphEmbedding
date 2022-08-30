@@ -8,13 +8,6 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-from umap import UMAP
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -23,6 +16,11 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -236,8 +234,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
              "loss": node_losses},
             index=pd.Index(np.concatenate([global_node_index[ntype] for ntype in global_node_index]), name="nid"))
 
-        tsne = UMAP(n_components=2, n_jobs=-1)
-        # tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1)
+        try:
+            from umap import UMAP
+            tsne = UMAP(n_components=2, n_jobs=-1)
+        except Exception as e:
+            print(e)
+            import MulticoreTSNE
+            tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1)
+
         nodes_pos = tsne.fit_transform(nodes_emb)
         nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))

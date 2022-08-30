@@ -235,11 +235,10 @@ class GcnNet(nn.Module):
 
 class DeepGraphGO(LightningModule):
     def __init__(self, hparams: Namespace, model_path: Path, dgl_graph: dgl.DGLGraph, node_feats: ssp.csr_matrix,
-                 metrics: List[str]):
+                 metrics: List[str] = None):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__()
-
         self.train_metrics = Metrics(prefix="", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
                                      multilabel=True, metrics=metrics)
         self.valid_metrics = Metrics(prefix="val_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
@@ -281,7 +280,6 @@ class DeepGraphGO(LightningModule):
         per_sample_weights = torch.from_numpy(batch_x.data).to(self.device).float()
 
         h = self.embedding.forward(input, offsets, per_sample_weights) + self.input_bias
-        h = self.dropout(F.relu(h))
 
         h = self.model.forward(blocks, h)
         logits = self.classifier(h)
@@ -299,7 +297,7 @@ class DeepGraphGO(LightningModule):
         loss = self.criterion(logits, y_true)
         self.log("loss", loss, logger=True, prog_bar=True, on_step=False, on_epoch=True)
 
-        self.train_metrics.update_metrics(torch.sigmoid(logits), y_true)
+        # self.train_metrics.update_metrics(torch.sigmoid(logits), y_true)
         scores = torch.sigmoid(logits).detach().cpu().numpy()
         y_true = y_true.detach().cpu().numpy()
         (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
@@ -315,7 +313,7 @@ class DeepGraphGO(LightningModule):
         loss = self.criterion(logits, y_true)
         self.log("val_loss", loss, logger=True, on_step=False, on_epoch=True)
 
-        self.valid_metrics.update_metrics(torch.sigmoid(logits), y_true)
+        # self.valid_metrics.update_metrics(torch.sigmoid(logits), y_true)
         scores = torch.sigmoid(logits).detach().cpu().numpy()
         y_true = y_true.detach().cpu().numpy()
         (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
@@ -331,12 +329,12 @@ class DeepGraphGO(LightningModule):
         loss = self.criterion(logits, y_true)
         self.log("test_loss", loss, logger=True, on_step=False, on_epoch=True)
 
-        self.test_metrics.update_metrics(torch.sigmoid(logits), y_true)
-        # scores = torch.sigmoid(logits).detach().cpu().numpy()
-        # y_true = y_true.detach().cpu().numpy()
-        # (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        # self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True,
-        #               on_step=False, on_epoch=True)
+        # self.test_metrics.update_metrics(torch.sigmoid(logits), y_true)
+        scores = torch.sigmoid(logits).detach().cpu().numpy()
+        y_true = y_true.detach().cpu().numpy()
+        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True,
+                      on_step=False, on_epoch=True)
         return loss
 
     # def train(self, train_data:Tuple[np.ndarray, ssp.csr_matrix], valid_data:Tuple[np.ndarray, ssp.csr_matrix],
@@ -385,31 +383,34 @@ class DeepGraphGO(LightningModule):
         self.test_metrics.reset_metrics()
         self.log_dict(metrics_dict, prog_bar=True)
 
-    def train_dataloader(self):
+    def train_dataloader(self, batch_size=None, num_workers=0):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
 
         collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.training_idx,
                                                 graph_sampler=neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=self.batch_size, shuffle=True, drop_last=False, )
+                                batch_size=batch_size if batch_size else self.batch_size, shuffle=True, drop_last=False,
+                                num_workers=num_workers)
         return dataloader
 
-    def val_dataloader(self):
+    def val_dataloader(self, batch_size=None, num_workers=0):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
 
         collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.validation_idx,
                                                 graph_sampler=neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=self.batch_size, shuffle=True, drop_last=False, )
+                                batch_size=batch_size if batch_size else self.batch_size, shuffle=True, drop_last=False,
+                                num_workers=num_workers)
         return dataloader
 
-    def test_dataloader(self):
+    def test_dataloader(self, batch_size=None, num_workers=0):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
 
         collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.testing_idx,
                                                 graph_sampler=neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=self.batch_size, shuffle=True, drop_last=False, )
+                                batch_size=batch_size if batch_size else self.batch_size, shuffle=True, drop_last=False,
+                                num_workers=num_workers)
         return dataloader
 
     def configure_optimizers(self):
