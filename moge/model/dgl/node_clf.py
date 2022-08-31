@@ -68,11 +68,14 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.classifier = DenseClassification(hparams)
 
-        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                                                 hparams.use_class_weights else None,
-                                            multilabel=dataset.multilabel,
-                                            reduction=hparams.reduction if hasattr(dataset, "reduction") else "mean")
+        self.criterion = ClassificationLoss(
+            loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
+                                                 'use_class_weights' in hparams and hparams.use_class_weights else None,
+            pos_weight=dataset.pos_weight if hasattr(dataset, "pos_weight") and
+                                             'use_pos_weights' in hparams and hparams.use_pos_weights else None,
+            multilabel=dataset.multilabel,
+            reduction="mean" if "reduction" not in hparams else hparams.reduction)
 
         self.hparams.n_params = self.get_n_params()
 

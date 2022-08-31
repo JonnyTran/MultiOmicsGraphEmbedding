@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import List, Dict, Union, Iterable, Tuple, Optional, Callable
+from typing import List, Dict, Union, Tuple, Optional, Callable
 
 import dgl
 import numpy as np
@@ -42,8 +42,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
         self.edge_dir = edge_dir
         self.neighbor_sizes = neighbor_sizes
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
-                         edge_dir=edge_dir, reshuffle_train=reshuffle_train,
-                         add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
+                         edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         assert isinstance(self.G, dgl.DGLHeteroGraph)
 
         if add_reverse_metapaths:
@@ -57,12 +56,9 @@ class DGLNodeGenerator(HeteroGraphDataset):
 
     def process_dgl_heterodata(self, graph: dgl.DGLHeteroGraph):
         self.G = graph
-
         self.node_types = graph.ntypes
-
         self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in graph.ntypes}
         self.global_node_index = {ntype: torch.arange(graph.num_nodes(ntype)) for ntype in graph.ntypes}
-
         self.x_dict = graph.ndata["feat"]
 
         self.y_dict = {}
@@ -84,10 +80,10 @@ class DGLNodeGenerator(HeteroGraphDataset):
                            split_namespace=False, **kwargs):
         G, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
-                                       expression=expression, sequence=sequence,
-                                       labels_subset=labels_subset, ntype_subset=ntype_subset,
-                                       exclude_metapaths=exclude_metapaths,
-                                       train_test_split="node_id", **kwargs)
+                                       labels_subset=labels_subset, head_node_type=head_node_type,
+                                       ntype_subset=ntype_subset, exclude_metapaths=exclude_metapaths,
+                                       sequence=sequence, expression=expression,
+                                       train_test_split="node_id")
 
         self = cls(dataset=G, metapaths=G.canonical_etypes, add_reverse_metapaths=add_reverse_metapaths,
                    head_node_type=head_node_type, sampler=sampler, neighbor_sizes=neighbor_sizes,
@@ -103,6 +99,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
                                   for label in self.y_dict.values())
         else:
             self.multilabel = (self.y_dict.sum(1) > 1).any() if self.y_dict.dim() == 2 else False
+        self.update_classes()
 
             # Whether to use split namespace
         self.split_namespace = split_namespace
@@ -143,54 +140,6 @@ class DGLNodeGenerator(HeteroGraphDataset):
                     self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
 
             self.metapaths = [metapath for metapath in self.G.canonical_etypes if self.G.num_edges(etype=metapath)]
-
-        return self
-
-    @classmethod
-    def from_dgl_heterograph(cls, g: dgl.DGLHeteroGraph, labels: Union[Tensor, Dict[str, Tensor]],
-                             num_classes: int, train_idx: Dict[str, Tensor], val_idx, test_idx,
-                             **kwargs):
-        if "classes" in kwargs:
-            classes = kwargs.pop("classes")
-        else:
-            classes = None
-
-        self = cls(dataset=g, metapaths=g.canonical_etypes, **kwargs)
-        self.node_types = g.ntypes
-
-        self.y_dict = {}
-        if not isinstance(labels, dict):
-            self.y_dict[self.head_node_type] = labels
-            self.G.nodes[self.head_node_type].data["label"] = labels  # [:self.G.num_nodes(self.head_node_type)]
-        elif isinstance(labels, dict):
-            if self.head_node_type is not None and isinstance(self.head_node_type, str):
-                self.y_dict = labels
-                self.G.nodes[self.head_node_type].data["label"] = labels[self.head_node_type]
-
-        self.n_classes = num_classes
-        if isinstance(labels, dict):
-            label = list(labels.values()).pop()
-            if not isinstance(label, Tensor):
-                label = torch.tensor(label)
-            self.multilabel = True if label.dim() > 1 and label.size(1) > 1 else False
-        else:
-            self.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
-
-        self.classes = classes
-
-        if isinstance(train_idx, dict) and isinstance(self.head_node_type, str):
-            self.training_idx = torch.tensor(train_idx[self.head_node_type])
-            self.validation_idx = torch.tensor(val_idx[self.head_node_type])
-            self.testing_idx = torch.tensor(test_idx[self.head_node_type])
-
-        elif isinstance(train_idx, dict) and isinstance(self.head_node_type, Iterable):
-            self.training_idx = {ntype: train_idx[ntype] for ntype in self.head_node_type}
-            self.validation_idx = {ntype: val_idx[ntype] for ntype in self.head_node_type}
-            self.testing_idx = {ntype: test_idx[ntype] for ntype in self.head_node_type}
-        else:
-            self.training_idx = torch.tensor(train_idx)
-            self.validation_idx = torch.tensor(val_idx)
-            self.testing_idx = torch.tensor(test_idx)
 
         return self
 
@@ -238,7 +187,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
         # Labels
         labels = dataset.y_dict[dataset.head_node_type][g.nodes(dataset.head_node_type)]
 
-        self = cls.from_heteronetwork(g=g, labels=labels,
+        self = cls.from_heteronetwork(g, labels=labels,
                                       num_classes=dataset.n_classes,
                                       train_idx=dataset.training_idx,
                                       val_idx=dataset.validation_idx,

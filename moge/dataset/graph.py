@@ -2,11 +2,16 @@ from abc import abstractmethod
 from typing import Union, List, Tuple, Dict, Optional
 
 import dgl
+import moge.model.PyG.utils
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
+from moge.dataset.utils import get_reverse_metapaths
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -15,11 +20,6 @@ from torch import Tensor
 from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
-
-import moge.model.PyG.utils
-from moge.dataset.utils import get_reverse_metapaths
-from moge.network.hetero import HeteroNetwork
-from moge.network.sequence import BertSequenceTokenizer
 
 
 class Graph:
@@ -126,16 +126,10 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
     network: HeteroNetwork
     tokenizer: BertSequenceTokenizer
 
-    def __init__(self,
-                 dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
-                                DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
-                 node_types: List[str] = None,
-                 metapaths: List[Tuple[str, str, str]] = None,
-                 head_node_type: str = None,
-                 edge_dir: str = "in",
-                 reshuffle_train: float = None,
-                 add_reverse_metapaths: bool = True,
-                 inductive: bool = False, **kwargs):
+    def __init__(self, dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
+                                      DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
+                 node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
+                 edge_dir: str = "in", add_reverse_metapaths: bool = True, inductive: bool = False, **kwargs):
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
@@ -202,6 +196,17 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
+        self.update_classes()
+
+        if not hasattr(self, "x_dict") or self.x_dict is None or len(self.x_dict) == 0:
+            self.x_dict = {}
+
+        self.train_ratio = self.get_train_ratio()
+        print("train_ratio", self.train_ratio)
+
+    def update_classes(self):
+        print("update_classes", tensor_sizes(y_dict=self.y_dict))
+
         # Node classifications
         num_samples = 1  # Used for computing class_weight
         if hasattr(self, "y_dict") and self.y_dict:
@@ -253,7 +258,6 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         else:
             self.multilabel = False
             self.n_classes = None
-
         # Compute class weights so less frequent classes have higher weight
         if hasattr(self, "class_counts"):
             # self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
@@ -266,18 +270,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
 
             assert self.class_weight.numel() == self.n_classes, \
                 f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
-
         assert hasattr(self, "num_nodes_dict")
-
-        if not hasattr(self, "x_dict") or self.x_dict is None or len(self.x_dict) == 0:
-            self.x_dict = {}
-
-        if reshuffle_train is not None and reshuffle_train:
-            self.resample_training_idx(reshuffle_train)
-        else:
-            if hasattr(self, "training_idx"):
-                self.train_ratio = self.get_train_ratio()
-                print("train_ratio", self.train_ratio)
 
     def name(self):
         if not hasattr(self, "_name"):
@@ -321,17 +314,6 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         validation_idx = indices[int(num_indices * train_ratio):]
         testing_idx = indices[int(num_indices * train_ratio):]
         return training_idx, validation_idx, testing_idx
-
-    def resample_training_idx(self, train_ratio: float):
-        if train_ratio == 1.0:
-            ratio = self.get_train_ratio()
-        else:
-            ratio = train_ratio
-
-            all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-            self.training_idx, self.validation_idx, self.testing_idx = \
-                self.split_train_val_test(train_ratio=ratio, sample_indices=all_idx)
-        print(f"Resampled training set at {self.get_train_ratio()}%")
 
     def get_metapaths(self, khop=False):
         """
@@ -438,11 +420,22 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         return (edge_index, values)
 
     def get_train_ratio(self):
-        if self.validation_idx.size() != self.testing_idx.size() or not (self.validation_idx == self.testing_idx).all():
-            train_ratio = self.training_idx.numel() / \
-                          sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+        if hasattr(self, "training_idx"):
+            train_size = self.training_idx.numel()
+            valid_size = self.validation_idx.numel()
+            test_size = self.testing_idx.numel()
+        elif hasattr(self, "train_mask"):
+            train_size = self.train_mask.sum()
+            valid_size = self.valid_mask.sum()
+            test_size = self.test_mask.sum()
         else:
-            train_ratio = self.training_idx.numel() / sum([self.training_idx.numel(), self.validation_idx.numel()])
+            return None
+
+        if valid_size != test_size:
+            train_ratio = train_size / \
+                          sum([train_size, valid_size, test_size])
+        else:
+            train_ratio = train_size / sum([train_size, valid_size])
         return train_ratio
 
 

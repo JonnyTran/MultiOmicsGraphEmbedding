@@ -1,11 +1,10 @@
 import dgl
 import torch
 import tqdm
+from moge.dataset.graph import HeteroGraphDataset
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 from torch.utils.data import DataLoader
-
-from moge.dataset.graph import HeteroGraphDataset
 
 
 class DGLGraphSampler(HeteroGraphDataset):
@@ -16,8 +15,7 @@ class DGLGraphSampler(HeteroGraphDataset):
         self.add_self_loop = add_self_loop
 
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
-                         edge_dir=edge_dir, reshuffle_train=reshuffle_train,
-                         add_reverse_metapaths=add_reverse_metapaths, inductive=inductive)
+                         edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive)
 
     def process_DglGraphDataset_homo(self, dataset: DglGraphPropPredDataset):
         a_graph, _ = dataset[0]

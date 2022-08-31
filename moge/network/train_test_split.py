@@ -9,10 +9,9 @@ import pandas as pd
 import tqdm
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 from logzero import logger
+from moge.model.utils import tensor_sizes
 from networkx.classes.reportviews import EdgeView
 from sklearn.preprocessing import MultiLabelBinarizer
-
-from moge.model.utils import tensor_sizes
 
 
 def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):
@@ -31,6 +30,10 @@ class TrainTestSplit():
         self.training = None
         self.testing = None
         self.validation = None
+
+        self.train_nodes = defaultdict(lambda x: {})
+        self.valid_nodes = defaultdict(lambda x: {})
+        self.test_nodes = defaultdict(lambda x: {})
 
     @abstractmethod
     def split_edges(self, node_list=None, test_frac=.05, val_frac=.01, seed=0, verbose=False):

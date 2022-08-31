@@ -5,22 +5,22 @@ from argparse import Namespace
 from typing import Union
 
 import dgl
+import moge
+import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
 from cogdl.datasets.gtn_data import GTNDataset
-from ogb.graphproppred import DglGraphPropPredDataset
-from ogb.linkproppred import PygLinkPropPredDataset
-from ogb.nodeproppred import DglNodePropPredDataset
-from openomics.database.ontology import GeneOntology
-from torch_geometric.datasets import AMiner
-
-import moge
-import moge.dataset.PyG.triplet_generator
 from moge.dataset import HeteroNeighborGenerator, DGLNodeGenerator, HeteroLinkPredDataset, HeteroNodeClfDataset
 from moge.dataset.dgl.graph_generator import DGLGraphSampler
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
+from ogb.graphproppred import DglGraphPropPredDataset
+from ogb.linkproppred import PygLinkPropPredDataset
+from ogb.nodeproppred import DglNodePropPredDataset
 from run.utils import add_node_embeddings
+from torch_geometric.datasets import AMiner
+
+from openomics.database.ontology import GeneOntology
 
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
@@ -62,10 +62,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         min_count = 0.01
         label_col = 'go_id'
         dataset = DGLNodeGenerator.from_heteronetwork(
-            *network.to_dgl_heterograph(target=label_col,
-                                        min_count=min_count,
-                                        sequence=False,
-                                        ),
+            *network.to_dgl_heterograph(target=label_col, min_count=min_count, sequence=False),
             sampler="MultiLayerNeighborSampler",
             neighbor_sizes=args.neighbor_sizes,
             head_node_type="Protein",  # network.node_types if "LATTE" in method else "MessengerRNA",
@@ -158,7 +155,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
             use_sequence = False
 
         hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, sequence=use_sequence,
-                                                           expression=False, add_reverse=args.use_reverse)
+                                                           expression=False)
 
         n_neighbors = args.n_neighbors if args.neighbor_loader == "HGTLoader" else args.n_neighbors // 8
 
@@ -228,7 +225,7 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
             use_sequence = False
 
         hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, sequence=use_sequence,
-                                                           expression=False, add_reverse=hparams.use_reverse)
+                                                           expression=False)
 
         n_neighbors = hparams.n_neighbors if hparams.neighbor_loader == "HGTLoader" else hparams.n_neighbors // 8
         dataset = HeteroLinkPredDataset.from_heteronetwork(hetero, classes, nodes,

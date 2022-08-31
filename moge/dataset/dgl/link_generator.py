@@ -62,8 +62,8 @@ class DGLLinkGenerator(DGLNodeGenerator):
                            split_namespace=False, **kwargs):
         G, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
-                                       expression=expression, sequence=sequence,
-                                       labels_subset=labels_subset, ntype_subset=ntype_subset)
+                                       labels_subset=labels_subset, ntype_subset=ntype_subset, sequence=sequence,
+                                       expression=expression)
 
         self = cls(dataset=G, metapaths=G.canonical_etypes, add_reverse_metapaths=add_reverse_metapaths,
                    pred_metapaths=network.pred_metapaths, neg_pred_metapaths=network.neg_pred_metapaths,

@@ -9,6 +9,7 @@ import dgl
 import dgl.function as fn
 import joblib
 import numpy as np
+import pandas as pd
 import scipy.sparse as ssp
 import torch
 import torch.nn.functional as F
@@ -19,7 +20,6 @@ from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
 from moge.model.metrics import Metrics
-from moge.model.utils import tensor_sizes
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score as aupr
@@ -89,7 +89,6 @@ def get_data(fasta_file, pid_go_file=None, feature_type=None, subset_pid=None, *
             raise ValueError(F'Only support suffix of .npy for np.ndarray or .npz for scipy.csr_matrix as feature.')
 
     go_labels = get_go_list(pid_go_file, pid_list)
-    print(tensor_sizes(go_labels=len(go_labels), pid_list=pid_list))
 
     return pid_list, seqs, go_labels
 
@@ -439,8 +438,9 @@ def main(data_cnf, model_cnf, mode, model_id):
     model_id = F'-Model-{model_id}' if model_id is not None else ''
     data_name, model_name = data_cnf['name'], model_cnf['name']
     run_name = F'{model_name}{model_id}-{data_name}'
-    dgl_graph, node_feats, net_pid_map, train_idx, valid_idx, test_idx = load_dgl_graph(data_cnf, model_cnf,
-                                                                                        model_id=model_id)
+    dgl_graph, node_feats, net_pid_list, train_idx, valid_idx, test_idx = load_dgl_graph(data_cnf, model_cnf,
+                                                                                         model_id=model_id)
+    net_pid_map = {pid: i for i, pid in enumerate(net_pid_list)}
 
     if mode is None or mode == 'train':
         train_pid_list, train_seqs, train_go_labels = get_data(**data_cnf['train'])
@@ -543,4 +543,79 @@ def load_dgl_graph(data_cnf, model_cnf, model_id=None, subset_pid: List[str] = N
     dgl_graph.ndata["label"][valid_idx] = torch.tensor(valid_y.todense())
     dgl_graph.ndata["label"][test_idx] = torch.tensor(test_y.todense())
 
-    return dgl_graph, node_feats, net_pid_map, train_idx, valid_idx, test_idx
+    return dgl_graph, node_feats, net_pid_list, train_idx, valid_idx, test_idx
+
+
+def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFrame:
+    def get_pid_list(pid_list_file):
+        with open(pid_list_file) as fp:
+            return [line.split()[0] for line in fp]
+
+    net_pid_list = get_pid_list(os.path.join(path, 'ppi_pid_list.txt'))
+    dgl_graph: dgl.DGLGraph = dgl.data.utils.load_graphs(f'{path}/ppi_dgl_top_100')[0][0]
+    self_loop = torch.zeros_like(dgl_graph.edata['ppi'])
+    nr_ = np.arange(dgl_graph.number_of_nodes())
+    self_loop[dgl_graph.edge_ids(nr_, nr_)] = 1.0
+
+    dgl_graph.edata['self'] = self_loop
+    dgl_graph.edata['ppi'] = dgl_graph.edata['ppi'].float()
+    dgl_graph.edata['self'] = dgl_graph.edata['self'].float()
+
+    all_pid = set(net_pid_list)
+    for namespace in namespaces:
+        all_pid = all_pid.union(get_pid_list(os.path.join(path, f'{namespace}_train_pid_list.txt')))
+        all_pid = all_pid.union(get_pid_list(os.path.join(path, f'{namespace}_valid_pid_list.txt')))
+        all_pid = all_pid.union(get_pid_list(os.path.join(path, f'{namespace}_test_pid_list.txt')))
+
+    uniprot_go_id = pd.DataFrame({"train_mask": False, "valid_mask": False, "test_mask": False, "sequence": None},
+                                 index=pd.Index(all_pid, name="protein_id"))
+    uniprot_go_id["go_id"] = [[], ] * uniprot_go_id.index.size
+
+    for namespace in namespaces:
+        data_cnf = {'mlb': f'{path}/{namespace}_go.mlb',
+                    'model_path': 'models',
+                    'name': namespace,
+                    'network': {'blastdb': f'{path}/ppi_blastdb',
+                                'dgl': f'{path}/ppi_dgl_top_100',
+                                'feature': f'{path}/ppi_interpro.npz',
+                                'pid_list': f'{path}/ppi_pid_list.txt',
+                                'weight_mat': f'{path}/ppi_mat.npz'},
+                    'results': 'results',
+                    'test': {'fasta_file': f'{path}/{namespace}_test.fasta',
+                             'name': 'test',
+                             'pid_go_file': f'{path}/{namespace}_test_go.txt',
+                             'pid_list_file': f'{path}/{namespace}_test_pid_list.txt'},
+                    'train': {'fasta_file': f'{path}/{namespace}_train.fasta',
+                              'name': 'train',
+                              'pid_go_file': f'{path}/{namespace}_train_go.txt',
+                              'pid_list_file': f'{path}/{namespace}_train_pid_list.txt'},
+                    'valid': {'fasta_file': f'{path}/{namespace}_valid.fasta',
+                              'name': 'valid',
+                              'pid_go_file': f'{path}/{namespace}_valid_go.txt',
+                              'pid_list_file': f'{path}/{namespace}_valid_pid_list.txt'}}
+
+        train_pid_list, train_seqs, train_go_labels = get_data(**data_cnf['train'], subset_pid=None)
+        valid_pid_list, valid_seqs, valid_go_labels = get_data(**data_cnf['valid'], subset_pid=None)
+        test_pid_list, test_seqs, test_go_labels = get_data(**data_cnf['test'], subset_pid=None)
+
+        uniprot_go_id.loc[train_pid_list, "go_id"] = uniprot_go_id.loc[train_pid_list, "go_id"] + pd.Series(
+            train_go_labels, index=train_pid_list)
+        uniprot_go_id.loc[valid_pid_list, "go_id"] = uniprot_go_id.loc[valid_pid_list, "go_id"] + pd.Series(
+            valid_go_labels, index=valid_pid_list)
+        uniprot_go_id.loc[test_pid_list, "go_id"] = uniprot_go_id.loc[test_pid_list, "go_id"] + pd.Series(
+            test_go_labels, index=test_pid_list)
+
+        uniprot_go_id.loc[train_pid_list, "train_mask"] = True
+        uniprot_go_id.loc[valid_pid_list, "valid_mask"] = True
+        uniprot_go_id.loc[test_pid_list, "test_mask"] = True
+
+        uniprot_go_id.loc[train_pid_list, "sequence"] = train_seqs
+        uniprot_go_id.loc[valid_pid_list, "sequence"] = valid_seqs
+        uniprot_go_id.loc[test_pid_list, "sequence"] = test_seqs
+
+    uniprot_go_id[['train_mask', 'valid_mask', 'test_mask']] = uniprot_go_id[
+        ['train_mask', 'valid_mask', 'test_mask']].apply(lambda x: ~x if not x.any() else x, axis=1)
+    uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(
+        lambda li: None if isinstance(li, list) and len(li) == 0 else li)
+
+    return uniprot_go_id

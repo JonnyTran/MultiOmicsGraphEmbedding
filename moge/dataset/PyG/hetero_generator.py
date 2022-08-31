@@ -31,16 +31,14 @@ def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
     nodes_namespace: Dict[str, Series]
-    def __init__(self, dataset: HeteroData,
-                 seq_tokenizer: SequenceTokenizers = None,
+
+    def __init__(self, dataset: HeteroData, seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
-                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
-                 node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
-                 edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = False,
-                 inductive: bool = False, **kwargs):
+                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
+                 metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None, edge_dir: str = "in",
+                 add_reverse_metapaths: bool = False, inductive: bool = False, **kwargs):
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
-                         edge_dir=edge_dir, reshuffle_train=reshuffle_train,
-                         add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
+                         edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         if seq_tokenizer:
             self.seq_tokenizer = seq_tokenizer
 
@@ -52,15 +50,19 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            target: str = None, min_count: int = None,
                            expression=False, sequence=False,
                            labels_subset: Optional[Union[Index, np.ndarray]] = None,
+                           head_node_type: Optional[str] = None,
                            ntype_subset: Optional[List[str]] = None,
                            add_reverse_metapaths=True,
                            split_namespace=False,
                            go_ntype=None,
-                           exclude_metapaths=None, **kwargs):
+                           exclude_metapaths=None,
+                           train_test_split="node_mask", **kwargs):
         hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_pyg_heterodata(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
-                                      labels_subset=labels_subset, ntype_subset=ntype_subset, sequence=sequence,
-                                      expression=expression, exclude_metapaths=exclude_metapaths)
+                                      labels_subset=labels_subset, head_node_type=head_node_type,
+                                      ntype_subset=ntype_subset,
+                                      exclude_metapaths=exclude_metapaths, sequence=sequence, expression=expression,
+                                      train_test_split=train_test_split)
 
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
                    edge_dir="in", **kwargs)
@@ -372,12 +374,19 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                  negative_sampling_size=1000,
                  seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
-                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
-                 metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None, edge_dir: str = "in",
-                 reshuffle_train: float = None, add_reverse_metapaths: bool = True, inductive: bool = False,
+                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
+                 node_types: List[str] = None,
+                 metapaths: List[Tuple[str, str, str]] = None,
+                 head_node_type: str = None,
+                 edge_dir: str = "in",
+                 add_reverse_metapaths: bool = True,
+                 inductive: bool = False,
+                 train_test_split="edge_mask",
                  **kwargs):
-        super().__init__(dataset, seq_tokenizer, neighbor_loader, neighbor_sizes, node_types, metapaths, head_node_type,
-                         edge_dir, reshuffle_train, add_reverse_metapaths, inductive, **kwargs)
+        super().__init__(dataset, seq_tokenizer=seq_tokenizer, neighbor_loader=neighbor_loader,
+                         neighbor_sizes=neighbor_sizes, node_types=node_types, metapaths=metapaths,
+                         head_node_type=head_node_type, edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths,
+                         inductive=inductive, train_test_split=train_test_split, **kwargs)
         self.negative_sampling_size = negative_sampling_size
         self.eval_negative_sampling_size = 1000
 
@@ -385,6 +394,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.multilabel = False
 
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
+                                                       node_type=head_node_type,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
                                                        transform_fn=super().transform_heterograph,
                                                        num_workers=0)

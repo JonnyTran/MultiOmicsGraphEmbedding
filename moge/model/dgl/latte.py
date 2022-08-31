@@ -6,11 +6,10 @@ import torch.nn.functional as F
 from dgl.heterograph import DGLBlock
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
-from torch import nn as nn, Tensor
-
 from moge.model.PyG.utils import filter_metapaths, max_num_hops, join_metapaths
 from moge.model.dgl.utils import ChainMetaPaths
 from moge.model.relations import RelationAttention, MetapathGATConv
+from torch import nn as nn, Tensor
 
 
 class LATTEConv(nn.Module, RelationAttention):
@@ -203,8 +202,6 @@ class LATTEConv(nn.Module, RelationAttention):
             # out[ntype] = out[ntype].view(out[ntype].size(0), self.embedding_dim)
 
             if verbose:
-                global_node_index = {ntype: nid[:betas[ntype].size(0)] \
-                                     for ntype, nid in g.ndata["_ID"].items() if ntype in betas}
                 num_edges = {metapath: g.num_edges(etype=metapath) for metapath in g.canonical_etypes}
 
                 print("  >", ntype, h_out[ntype].shape, )
@@ -214,8 +211,7 @@ class LATTEConv(nn.Module, RelationAttention):
                     print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
                           f"\tedge_index: {num_edges[etype] if etype in num_edges else None}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(rel_embedding[:, i], dim=0).mean().item() if rel_embedding.dim() >= 3 else -1:.2f}"
-                          f"\n")
+                          f"\tnorm: {torch.norm(rel_embedding[:, i], dim=0).mean().item() if rel_embedding.dim() >= 3 else -1:.2f}")
 
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])
@@ -225,6 +221,13 @@ class LATTEConv(nn.Module, RelationAttention):
 
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+
+            if verbose:
+                print(f"   -> {self.activation.__name__ if hasattr(self, 'activation') else ''} "
+                      f"{'dropout:' + str(self.dropout) if hasattr(self, 'dropout') else ''} "
+                      f"{'batchnorm' if hasattr(self, 'batchnorm') else ''} "
+                      f"{'layernorm' if hasattr(self, 'layernorm') else ''}: "
+                      f"{torch.norm(h_out[ntype], dim=1).mean().item():.2f}")
 
         if save_betas:
             beta_mean = {ntype: betas[ntype].mean(2) for ntype in betas}

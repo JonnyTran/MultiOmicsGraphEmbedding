@@ -2,14 +2,15 @@ import traceback
 from typing import List, Dict, Union
 
 import numpy as np
-import openomics
 import pandas as pd
 from moge.network.base import Network
 from moge.network.base import SEQUENCE_COL
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
 from moge.network.utils import select_labels
-from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
+
+import openomics
+from openomics.utils.df import concat_uniques
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
@@ -52,30 +53,37 @@ class AttributedNetwork(Network):
 
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def process_feature_tranformer(self, delimiter="\||;", labels_subset=None, min_count=0, verbose=False):
+    def process_feature_tranformer(self, columns=None, delimiter="\||;", labels_subset=None, min_count=0,
+                                   verbose=False):
         """
         For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer
         is used to convert a list of labels into a vector.
         :param delimiter (str): default "|".
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
+
+        Args:
+            columns ():
         """
         self.delimiter = delimiter
 
         if not hasattr(self, "feature_transformer"):
             self.feature_transformer = {}
 
-        transformers = self.get_feature_transformers(self.annotations, self.node_list, labels_subset, min_count,
-                                                     delimiter, verbose=verbose)
+        df = self.annotations
+        if columns:
+            df.filter(columns, axis='columns')
+        transformers = self.get_feature_transformers(df, node_list=self.node_list, labels_subset=labels_subset,
+                                                     min_count=min_count,
+                                                     delimiter=delimiter, verbose=verbose)
         self.feature_transformer.update(transformers)
 
     @classmethod
     def get_feature_transformers(cls, annotation: pd.DataFrame,
-                                 node_list: List[str],
                                  labels_subset: List[str] = None,
                                  min_count: int = 0,
                                  delimiter="\||;",
-                                 verbose=False) -> Dict[
-        str, Union[preprocessing.MultiLabelBinarizer, preprocessing.StandardScaler]]:
+                                 verbose=False) \
+            -> Dict[str, Union[preprocessing.MultiLabelBinarizer, preprocessing.StandardScaler]]:
         """
         :param annotation: a pandas DataFrame
         :param node_list: list of nodes. Indexes the annotation DataFrame
@@ -89,7 +97,7 @@ class AttributedNetwork(Network):
             if col == SEQUENCE_COL:
                 continue
 
-            values: pd.Series = annotation.loc[node_list, col].dropna(axis=0)
+            values: pd.Series = annotation[col].dropna(axis=0)
             if values.map(type).nunique() > 1:
                 print(f"WARN: {col} has more than 1 dtypes: {values.map(type).unique()}")
 
@@ -116,12 +124,13 @@ class AttributedNetwork(Network):
                             col)) if verbose else None
                     transformers[col] = preprocessing.StandardScaler()
 
-                    transformers[col].fit(values.to_numpy().reshape(-1, 1))
+                    values = values.dropna().to_numpy()
+                    transformers[col].fit(values.reshape(-1, 1))
 
                 else:
                     print("INFO: Label {} is transformed by MultiLabelBinarizer".format(col)) if verbose else None
                     transformers[col] = preprocessing.MultiLabelBinarizer()
-                    values = values[~values.map(type).isin({str, float, int})]
+                    values = values[~values.map(type).isin({str, float, int, bool, type(None)})]
                     transformers[col].fit(values)
 
                 if hasattr(transformers[col], 'classes_') and "" in transformers[col].classes_:

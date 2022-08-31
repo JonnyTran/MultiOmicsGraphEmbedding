@@ -14,11 +14,12 @@ from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology, GeneOntology
 from pandas import Series, Index, DataFrame
 from torch import Tensor
 from torch_geometric.data import HeteroData
+
+from openomics import MultiOmics
+from openomics.database.ontology import Ontology, GeneOntology
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -70,20 +71,22 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         logger.info("All annotation columns (union): {}".format(
             {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()}))
 
-    def process_feature_tranformer(self, columns: List[str] = None, delimiter="\||;", labels_subset=None, min_count=0,
-                                   verbose=False):
+    def process_feature_tranformer(self, columns=None, ntype_subset: List[str] = None, delimiter: List[str] = "\||;",
+                                   labels_subset=None, min_count=0, verbose=False):
         self.delimiter = delimiter
-        annotations_list = []
+        dfs = []
 
         for ntype in self.node_types:
-            annotation: DataFrame = self.annotations[ntype].drop(columns=[SEQUENCE_COL], errors="ignore")
-            if not columns or (columns and columns in annotation.columns):
-                annotations_list.append(annotation)
+            if ntype_subset and ntype not in ntype_subset: continue
+            df = self.annotations[ntype].drop(columns=[SEQUENCE_COL], errors="ignore")
+            if not columns or (columns and columns in df.columns):
+                dfs.append(df)
 
-        all_annotations = pd.concat(annotations_list, join="inner")
+        all_annotations = pd.concat(dfs, join="inner")
 
-        self.feature_transformer = self.get_feature_transformers(all_annotations, self.node_list, labels_subset,
-                                                                 min_count, delimiter, verbose=verbose)
+        self.feature_transformer = self.get_feature_transformers(all_annotations, labels_subset=labels_subset,
+                                                                 min_count=min_count, delimiter=delimiter,
+                                                                 verbose=verbose)
 
     def add_nodes(self, nodes: List[str], ntype: str, annotations: pd.DataFrame = None):
         self.node_types.append(ntype)
@@ -177,9 +180,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self._name = f"{src_ntype}-{dst_ntype}_{train_date}-{test_date}"
 
         # Split annotations between genes and GO terms by dates
-        train_ann, valid_ann, test_ann = ontology.annotation_train_val_test_split(
-            train_date=train_date, valid_date=valid_date, test_date=test_date,
-            groupby=groupby, filter_go_id=nodes)
+        train_ann, valid_ann, test_ann = ontology.split_annotations(src_node_col=src_node_col, dst_node_col="go_id",
+                                                                    train_date=train_date, valid_date=valid_date,
+                                                                    test_date=test_date,
+                                                                    groupby=groupby, filter_go_id=nodes)
 
         if split_etype:
             nx_options = dict(edge_key=split_etype, create_using=nx.MultiGraph, edge_attr=True)
@@ -224,7 +228,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if use_neg_annotations:
                 neg_pred_metapaths = []
 
-                neg_dst_node_col = "neg_" + dst_node_col
+                neg_dst_node_col = f"neg_{dst_node_col}"
                 neg_annotations = go_ann[neg_dst_node_col].dropna().explode().to_frame().reset_index()
                 neg_graph = nx.from_pandas_edgelist(neg_annotations, source=src_node_col, target=neg_dst_node_col,
                                                     **nx_options)
@@ -335,9 +339,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
     def to_dgl_heterograph(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,
                            labels_subset: Optional[Union[Index, np.ndarray]] = None,
+                           head_node_type: Optional[str] = None,
                            ntype_subset: Optional[List[str]] = None,
-                           exclude_metapaths: List[Tuple[str, str, str]] = None,
-                           sequence=False, expression=False, train_test_split="edge_id") \
+                           exclude_metapaths: List[Tuple[str, str, str]] = None, sequence=False, expression=False,
+                           train_test_split="edge_id") \
             -> Tuple[dgl.DGLHeteroGraph, Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
         if sequence:
@@ -346,24 +351,25 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Edge index
         edge_index_dict = {}
         edge_attr_dict = {}
-        for metapath, etype_graph in self.networks.items():
+        for metapath, etype_graph in tqdm.tqdm(self.networks.items(), desc="Add etype's to DGLHeteroGraph"):
             head_type, tail_type = metapath[0], metapath[-1]
             if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
             if exclude_metapaths and (
                     metapath in exclude_metapaths or untag_negative_metapath(metapath) in exclude_metapaths): continue
 
-            edge_index, edge_attr = get_edge_index_values(etype_graph, nodes_A=self.nodes[head_type],
-                                                          nodes_B=self.nodes[tail_type],
-                                                          edge_attrs=["train_mask", "valid_mask", "test_mask"],
-                                                          format="dgl")
-
+            edge_index, edge_attr = get_edge_index_values(
+                etype_graph, nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
+                edge_attrs=["train_mask", "valid_mask", "test_mask"] if "edge" in train_test_split else None,
+                format="dgl")
             edge_index_dict[metapath] = edge_index
-            if len(edge_attr) == 3:
-                edge_attr_dict[metapath] = edge_attr
-            else:
-                edge_attr_dict[metapath] = {
-                    key: torch.ones_like(edge_index[0], dtype=torch.bool) \
-                    for key in {"train_mask", "valid_mask", "test_mask"}.difference(edge_attr.keys())}
+
+            if "edge" in train_test_split:
+                if len(edge_attr) == 3:
+                    edge_attr_dict[metapath] = edge_attr
+                else:
+                    edge_attr_dict[metapath] = {
+                        key: torch.ones_like(edge_index[0], dtype=torch.bool) \
+                        for key in {"train_mask", "valid_mask", "test_mask"}.difference(edge_attr.keys())}
 
         num_nodes_dict = {ntype: num_nodes for ntype, num_nodes in self.num_nodes_dict.items() \
                           if ntype_subset is None or ntype in ntype_subset}
@@ -424,7 +430,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Node labels
         if target is not None:
             # Define classes set
-            self.process_feature_tranformer(columns=target, min_count=min_count)
+            self.process_feature_tranformer(ntype_subset=head_node_type, min_count=min_count)
 
             if labels_subset is not None:
                 self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
@@ -472,12 +478,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         return G, classes, dict(self.nodes), training, validation, testing
 
-    def to_pyg_heterodata(self, node_attr_cols: List[str] = [],
-                          target="go_id", min_count=10,
-                          labels_subset: Optional[Union[Index, np.ndarray]] = None,
+    def to_pyg_heterodata(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,
+                          labels_subset: Optional[Union[Index, np.ndarray]] = None, head_node_type=None,
                           ntype_subset: Optional[List[str]] = None,
-                          exclude_metapaths: List[Tuple[str, str, str]] = None,
-                          sequence=False, expression=False, train_test_split="node_mask") \
+                          exclude_metapaths: List[Tuple[str, str, str]] = None, sequence=False, expression=False,
+                          train_test_split="node_mask") \
             -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
         if sequence:
@@ -489,7 +494,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             node_types = [ntype for ntype in node_types if ntype in ntype_subset]
 
         # Edge index
-        for metapath in tqdm.tqdm(self.networks, desc="Create edge_index_dict"):
+        for metapath in tqdm.tqdm(self.networks, desc="Adding edge_index's to HeteroData"):
             head_type, tail_type = metapath[0], metapath[-1]
             if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
             if exclude_metapaths and (
@@ -497,7 +502,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             hetero[metapath].edge_index, edge_attrs = get_edge_index_values(
                 self.networks[metapath], nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
-                edge_attrs=["train_mask", "valid_mask", "test_mask"])
+                edge_attrs=["train_mask", "valid_mask", "test_mask"] if 'edge' in train_test_split else None)
 
             for edge_attr, edge_value in edge_attrs.items():
                 hetero[metapath][edge_attr] = edge_value
@@ -542,7 +547,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Node labels
         if target:
             # Define classes set
-            self.process_feature_tranformer(columns=target, min_count=min_count)
+            self.process_feature_tranformer(ntype_subset=head_node_type, min_count=min_count)
 
             if labels_subset is not None:
                 self.feature_transformer[target].classes_ = np.intersect1d(
@@ -550,6 +555,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             classes = self.feature_transformer[target].classes_
 
+            # Transform labels matrix
             labels = {}
             for ntype in tqdm.tqdm(hetero.node_types):
                 if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue

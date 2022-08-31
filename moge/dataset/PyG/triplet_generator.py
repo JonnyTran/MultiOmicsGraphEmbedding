@@ -3,22 +3,19 @@ from typing import Dict, Tuple, List
 import numpy as np
 import pandas as pd
 import torch
-from ogb.linkproppred import PygLinkPropPredDataset
-from torch import Tensor
-
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import merge_node_index, get_relabled_edge_index, is_negative
+from ogb.linkproppred import PygLinkPropPredDataset
+from torch import Tensor
 
 
 class TripletDataset(HeteroGraphDataset):
     def __init__(self, dataset: PygLinkPropPredDataset, node_types=None, metapaths=None, head_node_type=None,
                  edge_dir=True,
                  reshuffle_train=None, add_reverse_metapaths=True, **kwargs):
-        super().__init__(dataset, node_types=node_types, metapaths=metapaths,
-                         head_node_type=head_node_type, edge_dir=edge_dir,
-                         reshuffle_train=reshuffle_train,
-                         add_reverse_metapaths=add_reverse_metapaths, **kwargs)
+        super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
+                         edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.n_classes = None
         self.classes = None
         assert hasattr(self, "validation_idx") and hasattr(self, "triples")
