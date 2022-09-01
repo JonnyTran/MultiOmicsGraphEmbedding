@@ -73,9 +73,9 @@ def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
     return Y_hat, Y
 
 
-def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights: Optional[Tensor] = None, return_index=False):
+def filter_samples_weights(y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, return_index=False):
     if weights is None or not isinstance(weights, (Tensor, np.ndarray) or weights.shape == None):
-        return Y_hat, Y, None
+        return y_pred, y_true, None
 
     if isinstance(weights, Tensor):
         idx = torch.nonzero(weights).view(-1)
@@ -85,17 +85,17 @@ def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights: Optional[Tensor] =
     if return_index:
         return idx
 
-    if Y.dim() > 1:
-        Y = Y[idx, :]
+    if y_true.dim() > 1:
+        y_true_out = y_true[idx, :]
     else:
-        Y = Y[idx]
+        y_true_out = y_true[idx]
 
-    if Y_hat.dim() > 1:
-        Y_hat = Y_hat[idx, :]
+    if y_pred.dim() > 1:
+        y_pred_out = y_pred[idx, :]
     else:
-        Y_hat = Y_hat[idx]
+        y_pred_out = y_pred[idx]
 
-    return Y_hat, Y, weights[idx]
+    return y_pred_out, y_true_out, weights[idx]
 
 
 def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
@@ -106,18 +106,18 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
                               if ntype in y_true and y_true[ntype].numel()})
 
     if isinstance(y_true, dict):
-        y_true = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+        y_true_concat = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
 
     if isinstance(y_pred, dict):
-        y_pred = torch.cat([y_pred[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+        y_pred_concat = torch.cat([y_pred[ntype][:size] for ntype, size in batch_size.items()], dim=0)
     elif isinstance(y_pred, Tensor):
         size = list(batch_size.values())[0]
-        y_pred = y_pred[:size]
+        y_pred_concat = y_pred[:size]
 
     if isinstance(weights, dict):
         weights = torch.cat([weights[ntype][:size] for ntype, size in batch_size.items()], dim=0)
 
-    return y_pred, y_true, weights
+    return y_pred_concat, y_true_concat, weights
 
 
 def stack_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],

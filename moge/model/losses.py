@@ -44,7 +44,7 @@ class ClassificationLoss(nn.Module):
             assert "LOGITS" not in loss_type
             self.criterion = ContrastiveLoss()
         else:
-            raise TypeError(f"Unsupported loss type:{loss_type}")
+            raise TypeError(f"Unsupported loss type: {loss_type}")
 
     def forward(self, logits: Tensor, targets: Tensor, weights: Optional[Tensor] = None) -> Tensor:
         """

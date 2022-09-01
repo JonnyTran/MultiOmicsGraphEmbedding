@@ -2,7 +2,7 @@ import copy
 import logging
 import os
 from argparse import Namespace
-from typing import Dict, List, Iterable
+from typing import Dict, List, Iterable, Tuple
 
 import dgl
 import torch
@@ -51,7 +51,7 @@ class LATTENodeClf(NodeClfTrainer):
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
-                              t_order=hparams.n_layers,
+                              t_order=hparams.t_order,
                               embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
                               head_node_type=dataset.head_node_type,
@@ -63,8 +63,8 @@ class LATTENodeClf(NodeClfTrainer):
 
         if "batchnorm" in hparams and hparams.batchnorm:
             self.batchnorm = torch.nn.ModuleDict(
-                {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) for node_type in
-                 self.dataset.node_types})
+                {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) \
+                 for node_type in self.dataset.node_types})
 
         self.classifier = DenseClassification(hparams)
 
@@ -96,7 +96,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         return y_pred
 
-    def process_blocks(self, blocks):
+    def process_blocks(self, blocks: List[DGLBlock]) -> Tuple[Dict[str, Tensor], Tensor]:
         batch_inputs = blocks[0].srcdata['feat']
 
         if not isinstance(batch_inputs, dict):
@@ -114,10 +114,13 @@ class LATTENodeClf(NodeClfTrainer):
 
         batch_inputs, y_true = self.process_blocks(blocks)
 
-        y_pred = self.forward(blocks, batch_inputs)
-        loss = self.criterion.forward(y_pred, y_true)
+        logits = self.forward(blocks, batch_inputs)
+        loss = self.criterion.forward(logits, y_true)
 
-        self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights=None)
+        if batch_nb % 100 == 0:
+            print_pred_class_counts(logits, y_true, multilabel=self.dataset.multilabel)
+
+        self.update_node_clf_metrics(self.train_metrics, logits, y_true, weights=None)
 
         self.log("loss", loss, logger=True, on_step=True)
 
@@ -131,13 +134,13 @@ class LATTENodeClf(NodeClfTrainer):
 
         batch_inputs, y_true = self.process_blocks(blocks)
 
-        y_pred = self.forward(blocks, batch_inputs)
-        val_loss = self.criterion.forward(y_pred, y_true)
+        logits = self.forward(blocks, batch_inputs)
+        val_loss = self.criterion.forward(logits, y_true)
 
-        # if batch_nb == 0:
-        #     print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+        if batch_nb == 0:
+            print_pred_class_counts(logits, y_true, multilabel=self.dataset.multilabel)
 
-        self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights=None)
+        self.update_node_clf_metrics(self.valid_metrics, logits, y_true, weights=None)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
         return val_loss
 
@@ -149,13 +152,13 @@ class LATTENodeClf(NodeClfTrainer):
 
         batch_inputs, y_true = self.process_blocks(blocks)
 
-        y_pred = self.forward(blocks, batch_inputs)
-        test_loss = self.criterion.forward(y_pred, y_true)
+        logits = self.forward(blocks, batch_inputs)
+        test_loss = self.criterion.forward(logits, y_true)
 
         if batch_nb == 0:
-            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+            print_pred_class_counts(logits, y_true, multilabel=self.dataset.multilabel)
 
-        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights=None)
+        self.update_node_clf_metrics(self.test_metrics, logits, y_true, weights=None)
         self.log("test_loss", test_loss, logger=True)
         return test_loss
 
@@ -229,7 +232,7 @@ class HGConv(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         loss = self.criterion.forward(y_pred,
                                       y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -256,7 +259,7 @@ class HGConv(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred,
                                           y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -278,7 +281,7 @@ class HGConv(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         test_loss = self.criterion.forward(y_pred,
                                            y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -371,7 +374,7 @@ class R_HGNN(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         loss = self.criterion.forward(y_pred,
                                       y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -399,7 +402,7 @@ class R_HGNN(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred,
                                           y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -422,7 +425,7 @@ class R_HGNN(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         test_loss = self.criterion.forward(y_pred,
                                            y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -540,7 +543,7 @@ class NARSNodeCLf(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         loss = self.criterion.forward(y_pred,
                                       y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -565,7 +568,7 @@ class NARSNodeCLf(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred,
                                           y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -585,7 +588,7 @@ class NARSNodeCLf(NodeClfTrainer):
         elif y_pred.dim() == 2:
             weights = (y_true.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         test_loss = self.criterion.forward(y_pred,
                                            y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
@@ -825,7 +828,7 @@ class HGTNodeClf(NodeClfTrainer):
                    for ntype, label in y_true.items() if label.numel()}
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights=weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
         self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights=None)
@@ -845,7 +848,7 @@ class HGTNodeClf(NodeClfTrainer):
                    for ntype, label in y_true.items() if label.numel()}
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights=weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights=None)
@@ -863,7 +866,7 @@ class HGTNodeClf(NodeClfTrainer):
                    for ntype, label in y_true.items() if label.numel()}
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights=weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
         self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights=None)

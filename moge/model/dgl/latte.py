@@ -1,6 +1,7 @@
 import copy
 from typing import Union, Dict, List, Tuple
 
+import pandas as pd
 import torch
 import torch.nn.functional as F
 from dgl.heterograph import DGLBlock
@@ -26,6 +27,10 @@ class LATTEConv(nn.Module, RelationAttention):
         self.metapaths = metapaths
         self.etypes = [(metapath[0], ".".join(metapath[1::2]), metapath[-1]) for metapath in metapaths]
         self.etype_id = {".".join(metapath[1::2]): i for i, metapath in enumerate(self.etypes)}
+        dup_etypes = pd.Series(self.etype_id.keys())
+        dup_etypes = dup_etypes[dup_etypes.duplicated()].tolist()
+        if dup_etypes:
+            print(f"Duplicated etypes: {dup_etypes}")
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = out_dim
         self.attn_heads = attn_heads
@@ -59,7 +64,7 @@ class LATTEConv(nn.Module, RelationAttention):
         #     ntype: nn.Parameter(torch.ones(attn_heads, self.out_channels)) \
         #     for ntype in self.node_types})
 
-        self.relation_conv: Dict[str, MetapathGATConv] = nn.ParameterDict({
+        self.relation_conv: Dict[str, MetapathGATConv] = nn.ModuleDict({
             ntype: MetapathGATConv(out_dim, n_layers=1,
                                    metapaths=self.get_tail_relations(ntype),
                                    attn_heads=attn_heads, attn_dropout=attn_dropout) \
@@ -99,15 +104,17 @@ class LATTEConv(nn.Module, RelationAttention):
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
 
-        att_l = (edges.src["k"] * self.attn_l[self.etype_id[etype]]).sum(dim=-1)
-        att_r = (edges.dst["v"] * self.attn_r[self.etype_id[etype]]).sum(dim=-1)
+        att_l = edges.src["q"] * self.attn_l[self.etype_id[etype]]
+        att_r = edges.dst["k"] * self.attn_r[self.etype_id[etype]]
 
-        att = att_l + att_r
+        att = (att_l + att_r).sum(dim=-1)
         att = F.dropout(att, p=self.attn_dropout, training=self.training)
-        att = self.alpha_activation(att) if isinstance(self.alpha_activation, nn.Module) else \
+        if isinstance(self.alpha_activation, nn.Module):
+            att = self.alpha_activation(att)
+        else:
             att * self.alpha_activation[self.etype_id[etype]]
 
-        return {etype: att, "h": edges.dst["v"]}
+        return {etype: att, "h": edges.dst["k"]}
 
     def message_func(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
@@ -118,18 +125,19 @@ class LATTEConv(nn.Module, RelationAttention):
         '''
             Softmax based on target node's id (edge_index_i).
         '''
-        output = {}
+        msg = {}
         for srctype, etype, dsttype in self.etypes:
             if etype in nodes.mailbox:
                 att = F.softmax(nodes.mailbox[etype], dim=1)
                 h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['h'], dim=1)
-                output[etype] = h
+                msg[etype] = h
             else:
-                output[etype] = torch.zeros(nodes.batch_size(), self.attn_heads, self.out_channels,
-                                            device=self.linear_l[srctype].weight.device,
-                                            dtype=self.linear_l[srctype].weight.dtype)
+                msg[etype] = torch.zeros(nodes.batch_size(), self.attn_heads, self.out_channels,
+                                         requires_grad=False,
+                                         device=self.linear_l[srctype].weight.device,
+                                         dtype=self.linear_l[srctype].weight.dtype)
 
-        return output
+        return msg
 
     def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str):
         beta_l = F.relu(query * self.rel_attn_l[ntype], )
@@ -142,25 +150,22 @@ class LATTEConv(nn.Module, RelationAttention):
 
     def forward(self, g: DGLBlock, feat: Dict[str, Tensor], save_betas=False, verbose=False, **kwargs):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
-
         funcs = {}
         for srctype in set(srctype for srctype, etype, dsttype in g.canonical_etypes):
-            g.srcnodes[srctype].data['k'] = self.linear_l[srctype](feat_src[srctype]) \
+            g.srcnodes[srctype].data['q'] = self.linear_l[srctype](feat_src[srctype]) \
                 .view(-1, self.attn_heads, self.out_channels)
 
         for dsttype in set(dsttype for srctype, etype, dsttype in g.canonical_etypes):
-            g.dstnodes[dsttype].data['v'] = self.linear_r[dsttype](feat_dst[dsttype]) \
+            g.dstnodes[dsttype].data['k'] = self.linear_r[dsttype](feat_dst[dsttype]) \
                 .view(-1, self.attn_heads, self.out_channels)
 
         for srctype, etype, dsttype in g.canonical_etypes:
             if (srctype, etype, dsttype) not in self.etypes: continue
             # Compute node-level attention coefficients
             g.apply_edges(func=self.edge_attention, etype=etype)
-
-            # if g.batch_num_edges(etype=etype).nelement() > 1 or g.batch_num_edges(etype=etype).item() > 0:
             funcs[etype] = (self.message_func, self.reduce_func)
 
-        g.multi_update_all(funcs, cross_reducer='mean')
+        g.multi_update_all(funcs, cross_reducer="mean")
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         betas = {}
@@ -184,12 +189,9 @@ class LATTEConv(nn.Module, RelationAttention):
             #     continue
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            empty_relations = torch.zeros(g.num_dst_nodes(ntype), self.attn_heads, self.out_channels,
-                                          dtype=self.attn_l.dtype, device=self.attn_l.device)
             h_out[ntype] = torch.stack(
-                [g.dstnodes[ntype].data[etype] if hasattr(g.dstnodes[ntype].data, etype) else empty_relations \
-                 for etype in etypes] +
-                [g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels)],
+                [g.dstnodes[ntype].data[etype] for etype in etypes] +
+                [g.dstnodes[ntype].data["k"].view(-1, self.attn_heads, self.out_channels)],
                 dim=1)
 
             if verbose:
@@ -208,26 +210,28 @@ class LATTEConv(nn.Module, RelationAttention):
                 for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
                                                                      betas[ntype].mean(-1).mean(0),
                                                                      betas[ntype].mean(-1).std(0))):
-                    print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
-                          f"\tedge_index: {num_edges[etype] if etype in num_edges else None}, "
+                    print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}: "
+                          f"\tedge_index: {num_edges[etype] if etype in num_edges else 0}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(rel_embedding[:, i], dim=0).mean().item() if rel_embedding.dim() >= 3 else -1:.2f}")
 
-            if hasattr(self, "activation"):
-                h_out[ntype] = self.activation(h_out[ntype])
+            # if hasattr(self, "activation"):
+            #     h_out[ntype] = self.activation(h_out[ntype])
 
             if hasattr(self, "dropout"):
                 h_out[ntype] = F.dropout(h_out[ntype], p=self.dropout, training=self.training)
 
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+            elif hasattr(self, "batchnorm"):
+                h_out[ntype] = self.batchnorm[ntype](h_out[ntype])
 
             if verbose:
                 print(f"   -> {self.activation.__name__ if hasattr(self, 'activation') else ''} "
                       f"{'dropout:' + str(self.dropout) if hasattr(self, 'dropout') else ''} "
                       f"{'batchnorm' if hasattr(self, 'batchnorm') else ''} "
                       f"{'layernorm' if hasattr(self, 'layernorm') else ''}: "
-                      f"{torch.norm(h_out[ntype], dim=1).mean().item():.2f}")
+                      f"{torch.norm(h_out[ntype], dim=1).mean().item():.2f} \n")
 
         if save_betas:
             beta_mean = {ntype: betas[ntype].mean(2) for ntype in betas}
@@ -272,44 +276,40 @@ class LATTE(nn.Module):
         self.metapaths = metapaths
         self.head_node_type = head_node_type
 
-        layer_t_orders = {
-            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
-                if (t_order - (n_layers - (l + 1))) > 0 \
-                else [1] \
-            for l in reversed(range(n_layers))}
-
         layers = []
         higher_order_metapaths = copy.deepcopy(metapaths)
         for l in range(n_layers):
             is_last_layer = (l + 1 == n_layers)
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
-                                                 order=layer_t_orders[l],  # Select only up to t-order
-                                                 tail_type=head_node_type if is_last_layer and head_node_type else None
-                                                 )
+                                                 order=list(range(1, min(l + 1, t_order) + 1)),
+                                                 # Select only up to t-order
+                                                 tail_type=head_node_type if is_last_layer else None)
 
             layers.append(LATTEConv(in_dim=embedding_dim, out_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
                                     metapaths=l_layer_metapaths, layer=l, t_order=t_order, batchnorm=batchnorm,
                                     layernorm=layernorm, edge_dir=edge_dir, activation=activation, dropout=dropout,
                                     attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout))
 
-            higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
+            if l + 1 < t_order:
+                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
 
     def forward(self, blocks: Union[DGLBlock, List[str]], h_dict: Dict[str, Tensor], **kwargs):
         block = blocks[0] if isinstance(blocks, (tuple, list)) else blocks
-        for t in range(self.n_layers):
-            last_layer = (t + 1 == self.n_layers)
+        for l in range(self.n_layers):
+            last_layer = (l + 1 == self.n_layers)
 
-            if t + 1 > 1 and t + 1 <= self.t_order:
-                transform = ChainMetaPaths(
-                    join_metapaths(block.canonical_etypes, blocks[t].canonical_etypes,
-                                   tail_types=self.head_node_type if last_layer and self.head_node_type else None,
-                                   return_dict=True),
-                    keep_orig_edges=True)
-                block = transform(block, blocks[t])
+            if l + 1 > 1 and l + 1 <= self.t_order:
+                metapaths = join_metapaths(block.canonical_etypes, blocks[l].canonical_etypes,
+                                           tail_types=self.head_node_type if last_layer and self.head_node_type else None,
+                                           return_dict=True)
+                metapaths = {etype: mtp_chain for etype, mtp_chain in metapaths.items() \
+                             if etype in self.layers[l].etype_id.keys()}
+                transform = ChainMetaPaths(metapaths, keep_orig_edges=True)
+                block = transform(block, blocks[l], device='cpu')
 
-            h_new = self.layers[t].forward(block, h_dict, **kwargs)
+            h_new = self.layers[l].forward(block, h_dict, **kwargs)
             for ntype in h_new:
                 h_dict[ntype] = torch.cat([h_new[ntype], h_dict[ntype][h_new[ntype].size(0):]], dim=0)
 

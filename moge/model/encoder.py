@@ -82,7 +82,7 @@ class HeteroNodeFeatureEncoder(nn.Module):
                     print("Initialized trainable embeddings: ", ntype)
                     module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                                       embedding_dim=embedding_dim,
-                                                      scale_grad_by_freq=False,
+                                                      scale_grad_by_freq=True,
                                                       sparse=False)
 
                     nn.init.xavier_uniform_(module_dict[ntype].weight)
@@ -92,7 +92,7 @@ class HeteroNodeFeatureEncoder(nn.Module):
                     max_norm = pretrain_embeddings[ntype].norm(dim=1).mean()
                     module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
                                                                       freeze=freeze,
-                                                                      scale_grad_by_freq=False,
+                                                                      scale_grad_by_freq=True,
                                                                       max_norm=max_norm)
 
             embeddings = nn.ModuleDict(module_dict)

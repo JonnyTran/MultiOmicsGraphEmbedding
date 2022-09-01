@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ..relations import RelationAttention, MetapathGATConv
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
@@ -84,7 +84,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         #     ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
         #     for ntype in self.node_types})
 
-        self.relation_conv: Dict[str, MetapathGATConv] = nn.ParameterDict({
+        self.relation_conv: Dict[str, MetapathGATConv] = nn.ModuleDict({
             ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=2,
                                    attn_heads=attn_heads, attn_dropout=attn_dropout) \
             for ntype in self.node_types})
@@ -466,17 +466,13 @@ class LATTE(nn.Module):
         layers = []
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
 
-        layer_t_orders = {
-            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
-                if (t_order - (n_layers - (l + 1))) > 0 \
-                else [1] \
-            for l in reversed(range(n_layers))}
 
         for l in range(n_layers):
             is_last_layer = (l + 1 == n_layers)
 
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
-                                                 order=layer_t_orders[l],  # Select only up to t-order
+                                                 order=list(range(1, min(l + 1, t_order) + 1)),
+                                                 # Select only up to t-order
                                                  # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
                                                  tail_type=self.head_node_type if is_last_layer else None)
 
@@ -497,7 +493,7 @@ class LATTE(nn.Module):
                           edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
                           layer_pooling=layer_pooling if is_last_layer else None))
 
-            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
+            if l + 1 < t_order:
                 higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)

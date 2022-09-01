@@ -1,19 +1,19 @@
 import itertools
+from abc import ABC
 from typing import Tuple, List, Dict
 
 import numpy as np
 import pandas as pd
 import torch
 from colorhash import ColorHash
+from moge.model.PyG.utils import filter_metapaths
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GATConv
+from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
 from torchtyping import TensorType
-
-from moge.model.PyG.utils import filter_metapaths
 
 
 class MetapathGATConv(nn.Module):
@@ -28,17 +28,18 @@ class MetapathGATConv(nn.Module):
         self.attn_heads = attn_heads
         self.out_channels = embedding_dim // attn_heads
 
-        self.layers: List[GATConv] = nn.ModuleList()
-        for _ in range(n_layers):
-            self.layers.append(GATConv(in_channels=embedding_dim, out_channels=self.out_channels,
-                                       heads=attn_heads, dropout=attn_dropout))
-
+        self.layers: List[GATConv] = nn.ModuleList([
+            GATv2Conv(in_channels=embedding_dim, out_channels=self.out_channels, add_self_loops=False,
+                      heads=attn_heads, dropout=attn_dropout) \
+            for _ in range(n_layers)
+        ])
         # self.norm = GraphNorm(embedding_dim)
 
-    def generate_fc_edge_index(self, num_nodes_A: int, num_nodes_B: int = None, device=None):
-        if num_nodes_B is None:
-            num_nodes_B = num_nodes_A
-        edge_index = torch.tensor(list(itertools.product(range(num_nodes_A), range(num_nodes_B))),
+    def generate_fc_edge_index(self, src_num_nodes: int, dst_num_nodes: int = None, device=None):
+        if dst_num_nodes is None:
+            dst_num_nodes = src_num_nodes
+
+        edge_index = torch.tensor(list(itertools.product(range(src_num_nodes), range(dst_num_nodes))),
                                   device=device,
                                   dtype=torch.long).T
         return edge_index
@@ -47,6 +48,8 @@ class MetapathGATConv(nn.Module):
             -> Data:
         num_nodes = relation_embs.size(0)
         nid = torch.arange(self.n_relations, device=relation_embs.device)
+        edge_indexes = {i: self.generate_fc_edge_index(i, device=relation_embs.device) \
+                        for i in range(1, self.n_relations + 1)}
 
         data_list = []
         for i in torch.arange(num_nodes):
@@ -54,9 +57,8 @@ class MetapathGATConv(nn.Module):
             node_mask = torch.count_nonzero(x, dim=1).type(torch.bool)
             num_nz_relations = node_mask.sum().item()
 
-            g = Data(x=x[node_mask],
-                     nid=nid[node_mask],
-                     edge_index=self.generate_fc_edge_index(num_nz_relations, device=relation_embs.device))
+            g = Data(x=x[node_mask], nid=nid[node_mask],
+                     edge_index=edge_indexes[num_nz_relations])
             data_list.append(g)
 
         loader = DataLoader(data_list, batch_size=len(data_list), shuffle=False)
@@ -102,14 +104,15 @@ class MetapathGATConv(nn.Module):
 
             h, (alpha_edges, alpha_values) = self.layers[i].forward(h, edge_index, return_attention_weights=True)
 
+            h = torch.relu(h)
             if hasattr(self, 'norm'):
-                h = self.norm.forward(h)
+                h = self.norm(h)
 
         node_embs, betas = self.deconstruct_multigraph(batch, h, alpha_edges, alpha_values)
         return node_embs, betas
 
 
-class RelationAttention:
+class RelationAttention(ABC):
     metapaths: List[Tuple[str, str, str]]
 
     def __init__(self):

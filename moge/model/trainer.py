@@ -670,7 +670,7 @@ class GraphClfTrainer(LightningModule):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
                                             batch_size=self.hparams.batch_size)
 
-
+@torch.no_grad()
 def print_pred_class_counts(y_pred, y_true, multilabel, n_top_class=8):
     print()
     if (y_pred < 0.0).any():

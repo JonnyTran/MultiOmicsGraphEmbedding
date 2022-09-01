@@ -92,23 +92,23 @@ class ChainMetaPaths(BaseTransform):
         self.metapaths = metapaths
         self.keep_orig_edges = keep_orig_edges
 
-    def __call__(self, src_block: DGLBlock, dst_block: DGLBlock) -> DGLBlock:
+    def __call__(self, src_block: DGLBlock, dst_block: DGLBlock, device=None) -> DGLBlock:
         data_dict = dict()
 
+        block_A = src_block.to(device) if device else src_block
+        block_B = dst_block.to(device) if device else dst_block
+
         for meta_etype, metapath_chain in self.metapaths.items():
-            meta_g = metapath_reachable_blocks(src_block, dst_block, metapath_chain)
+            meta_g = metapath_reachable_blocks(block_A, block_B, metapath_chain)
             u_type = metapath_chain[0][0]
             v_type = metapath_chain[-1][-1]
             data_dict[(u_type, meta_etype, v_type)] = meta_g.edges()
 
         if self.keep_orig_edges:
-            for c_etype in src_block.canonical_etypes:
-                data_dict[c_etype] = src_block.edges(etype=c_etype)
-            new_g = update_graph_structure(src_block, data_dict, copy_edata=False)
+            for c_etype in block_A.canonical_etypes:
+                data_dict[c_etype] = block_A.edges(etype=c_etype)
+            new_g = update_graph_structure(block_A, data_dict, copy_edata=False)
         else:
-            new_g = update_graph_structure(src_block, data_dict, copy_edata=False)
+            new_g = update_graph_structure(block_A, data_dict, copy_edata=False)
 
-        return new_g
-
-
-
+        return new_g.to(src_block.device)

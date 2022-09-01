@@ -7,11 +7,10 @@ import dgl
 import networkx as nx
 import numpy as np
 import torch
+from moge.model.dgl.HGT import HGT
 from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
-
-from moge.model.dgl.HGT import HGT
 
 
 class LabelGraphNodeClassifier(nn.Module):
@@ -96,47 +95,51 @@ class LabelGraphNodeClassifier(nn.Module):
 
 
 class DenseClassification(nn.Module):
-    def __init__(self, hparams: Namespace) -> None:
+    def __init__(self, hparams: Namespace):
         super().__init__()
         # Classifier
         if hasattr(hparams, 'nb_cls_dense_size') and hparams.nb_cls_dense_size > 0:
-            self.fc_classifier = nn.Sequential(OrderedDict([
+            self.linears = nn.Sequential(OrderedDict([
                 ("linear_1", nn.Linear(hparams.embedding_dim, hparams.nb_cls_dense_size)),
                 ("relu", nn.ReLU()),
                 ("dropout", nn.Dropout(p=hparams.nb_cls_dropout)),
                 ("linear", nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes))
             ]))
         else:
-            self.fc_classifier = nn.Sequential(OrderedDict([
+            self.linears = nn.Sequential(OrderedDict([
                 ("linear", nn.Linear(hparams.embedding_dim, hparams.n_classes))
             ]))
 
         # Activation
-        if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
+        self.loss_type = hparams.loss_type
+        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
             print("INFO: Output of `classifier` is logits")
 
-        elif "NEGATIVE_LOG_LIKELIHOOD" == hparams.loss_type:
+        elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type:
             print("INFO: Output of `classifier` is LogSoftmax")
+            self.linears.add_module("activation", nn.LogSoftmax(dim=1))
 
-            self.fc_classifier.add_module("activation", nn.LogSoftmax(dim=1))
-        elif "SOFTMAX_CROSS_ENTROPY" == hparams.loss_type:
+        elif "SOFTMAX_CROSS_ENTROPY" == self.loss_type:
             print("INFO: Output of `classifier` is logits")
 
-        elif "BCE" == hparams.loss_type:
+        elif "BCE" == self.loss_type:
             print("INFO: Output of `classifier` is sigmoid probabilities")
-            self.fc_classifier.add_module("activation", nn.Sigmoid())
+            self.linears.add_module("activation", nn.Sigmoid())
+
         else:
             print("INFO: [Else Case] Output of `classifier` is logits")
 
-        # self.reset_parameters()
+        self.reset_parameters()
 
     def reset_parameters(self):
-        for linear in self.fc_classifier:
+        for linear in self.linears:
             if hasattr(linear, "weight"):
                 nn.init.xavier_uniform_(linear.weight)
 
-    def forward(self, embeddings):
-        return self.fc_classifier(embeddings)
+    def forward(self, h):
+        h = self.linears(h)
+
+        return h
 
 
 class HierarchicalAWX(nn.Module):

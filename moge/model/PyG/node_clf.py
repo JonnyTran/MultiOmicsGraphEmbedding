@@ -10,13 +10,6 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -29,6 +22,12 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -163,13 +162,13 @@ class LATTENodeClf(NodeClfTrainer):
         y_pred = self.forward(X)
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights)
 
-        if batch_nb % 100 == 0:
+        if batch_nb % 100 == 0 and isinstance(self.train_metrics, Metrics):
             logs = self.train_metrics.compute_metrics()
             self.log("loss", loss, logger=True, on_step=True)
         else:
@@ -184,7 +183,7 @@ class LATTENodeClf(NodeClfTrainer):
         y_pred = self.forward(X, save_betas=False)
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
@@ -199,7 +198,7 @@ class LATTENodeClf(NodeClfTrainer):
         y_pred = self.forward(X, save_betas=True)
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         test_loss = self.criterion(y_pred, y_true, weights=weights)
@@ -232,7 +231,7 @@ class LATTENodeClf(NodeClfTrainer):
             y_test_pred, _, edge_index = self.forward(X_test, save_betas=True)
 
             y_test_pred, y_test, w_test = stack_tensor_dicts(y_test_pred, y_test, w_test)
-            mask_idx = filter_samples_weights(Y_hat=y_test_pred, Y=y_test, weights=w_test, return_index=True)
+            mask_idx = filter_samples_weights(y_pred=y_test_pred, y_true=y_test, weights=w_test, return_index=True)
 
             y_test = y_test[mask_idx]
             y_test_pred = activation(y_test_pred, loss_type=self.hparams["loss_type"])[mask_idx]
@@ -362,7 +361,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         y_pred = self.forward(X)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
 
@@ -379,7 +378,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         y_pred = self.forward(X)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
 
@@ -395,7 +394,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         y_pred = self.forward(X, save_betas=False)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
 
@@ -701,7 +700,7 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
 
         # y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
 
         loss = self.criterion.forward(y_pred, y_true, neg_edges=weights)
@@ -717,7 +716,7 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
         y_pred = self.forward(X)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
 
@@ -733,7 +732,7 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
         y_pred = self.forward(X, save_betas=False)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
 
         test_loss = self.criterion(y_pred, y_true, weights=weights)
