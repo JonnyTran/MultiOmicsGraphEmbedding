@@ -120,8 +120,14 @@ class RelationAttention(ABC):
         self._beta_std = {}
         self._beta_avg = {}
 
-    def get_head_relations(self, head_node_type, order=None, str_form=False) -> List[Tuple[str, str, str]]:
-        relations = filter_metapaths(self.metapaths, order=order, head_type=head_node_type)
+    def get_src_ntypes(self):
+        return {metapath[0] for metapath in self.metapaths}
+
+    def get_dst_ntypes(self):
+        return {metapath[-1] for metapath in self.metapaths}
+
+    def get_head_relations(self, src_node_type, order=None, str_form=False) -> List[Tuple[str, str, str]]:
+        relations = filter_metapaths(self.metapaths, order=order, head_type=src_node_type)
 
         if str_form:
             relations = [".".join(metapath) if isinstance(metapath, tuple) else metapath \
@@ -129,8 +135,8 @@ class RelationAttention(ABC):
 
         return relations
 
-    def get_tail_relations(self, tail_node_type, order=None, str_form=False) -> List[Tuple[str, str, str]]:
-        relations = filter_metapaths(self.metapaths, order=order, tail_type=tail_node_type)
+    def get_tail_relations(self, dst_node_type, order=None, str_form=False) -> List[Tuple[str, str, str]]:
+        relations = filter_metapaths(self.metapaths, order=order, tail_type=dst_node_type)
 
         if str_form:
             relations = [".".join(metapath) if isinstance(metapath, tuple) else metapath \

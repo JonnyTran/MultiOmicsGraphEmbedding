@@ -6,9 +6,10 @@ from typing import Union, Tuple, List, Dict, Optional, Set
 import pandas as pd
 import torch
 from logzero import logger
-from moge.dataset.utils import is_negative
 from torch import Tensor
 from torch_sparse import SparseTensor, spspmm
+
+from moge.dataset.utils import is_negative
 
 
 def num_edges(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]]):
@@ -101,8 +102,8 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, Li
     return [m for m in sorted(OrderedDict.fromkeys(metapaths)) if filter_func(m)]
 
 
-def get_edge_index_values(edge_index_tup: Union[Tuple[Tensor, Tensor], Tensor],
-                          filter_edge=False, threshold=0.5, drop_edge_values=False):
+def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],
+                          filter_edge=False, threshold=0.3, use_edge_values=False):
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
 
@@ -123,7 +124,7 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[Tensor, Tensor], Tensor],
 
     # if edge_values.dtype != torch.float:
     #     edge_values = edge_values.to(torch.float)
-    if drop_edge_values:
+    if not use_edge_values:
         edge_values = None
 
     return edge_index, edge_values
@@ -135,7 +136,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       layer: Optional[int] = None,
                       filter_metapaths: Union[List[Tuple[str, str, str]], Set[Tuple[str, str, str]]] = None,
                       edge_threshold: Optional[float] = None,
-                      device=None) \
+                      use_edge_values=False,
+                      device=None, ) \
         -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
     """
     Return a cartesian product from two set of adjacency matrices, such that each metapath_A have same tail node type
@@ -146,7 +148,10 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
         return {}
 
     for metapath_b, edge_index_b in edge_index_dict_B.items():
-        edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False, drop_edge_values=True)
+        edge_index_b, values_b = get_edge_index_values(edge_index_b,
+                                                       filter_edge=True if edge_threshold else False,
+                                                       threshold=edge_threshold,
+                                                       use_edge_values=use_edge_values)
         if edge_index_b is None or edge_index_b.size(1) < 1: continue
 
         # In the current LATTE layer that calls this method, a metapath is not higher-order
@@ -161,7 +166,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
 
             edge_index_a, values_a = get_edge_index_values(edge_index_a,
                                                            filter_edge=True if edge_threshold else False,
-                                                           threshold=edge_threshold, drop_edge_values=True)
+                                                           threshold=edge_threshold,
+                                                           use_edge_values=use_edge_values)
             if edge_index_a is None or edge_index_a.size(1) < 1 or is_negative(metapath_a): continue
 
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
@@ -176,21 +182,24 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 k = sizes[middle]
                 n = sizes[tail]
 
+            device = orig_device if device is None else device
             orig_device = edge_index_a.device
-            if device is None:
-                device = orig_device
+
+            if not isinstance(values_a, Tensor):
+                values_a = None  # torch.ones(edge_index_a.size(1), dtype=torch.float, device=device)
+            elif values_a.dim() >= 2 and values_a.size(1) == 1:
+                values_a = values_a.squeeze(-1).to(device)
+            else:
+                values_a = values_a.to(device)
+
+            if not isinstance(values_b, Tensor):
+                values_b = None  # torch.ones(edge_index_b.size(1), dtype=torch.float, device=device)
+            elif values_b.dim() > 1 and values_b.size(1) == 1:
+                values_b = values_b.squeeze(-1).to(device)
+            else:
+                values_b = values_b.to(device)
 
             try:
-                if not isinstance(values_a, Tensor):
-                    values_a = None
-                elif values_a.dim() > 1 and values_a.size(1) == 1:
-                    values_a = values_a.squeeze(-1).to(device)
-
-                if not isinstance(values_b, Tensor):
-                    values_b = None
-                elif values_b.dim() > 1 and values_b.size(1) == 1:
-                    values_b = values_b.squeeze(-1).to(device)
-
                 # elif values_a.dim() > 1 and values_a.size(1) > 1:
                 # new_values = []
                 # for d in range(values_a.size(1)):
@@ -200,21 +209,13 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 #                                     coalesced=True)
                 #     new_values.append(values)
                 # new_values = torch.stack(new_values, dim=1)
-
                 new_edge_index, new_values = spspmm(indexA=edge_index_a.to(device), valueA=values_a,
                                                     indexB=edge_index_b.to(device), valueB=values_b,
                                                     m=m, k=k, n=n)
 
-                if new_edge_index.size(1):
-                    joined_edge_index[new_metapath] = (
-                        new_edge_index.to(orig_device),
-                        new_values.to(orig_device) if isinstance(new_values, Tensor) else None)
-                else:
-                    joined_edge_index[new_metapath] = None
-
             except RuntimeError as re:
-                logging.error(re)
                 traceback.print_exc()
+                logging.error(re.__repr__())
                 # When CUDA out of memory, perform spspmm in cpu
                 new_edge_index, new_values = spspmm(indexA=edge_index_a.cpu(),
                                                     valueA=values_a.cpu() if isinstance(values_a, Tensor) else None,
@@ -222,29 +223,37 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                                                     valueB=values_b.cpu() if isinstance(values_b, Tensor) else None,
                                                     m=m, k=k, n=n)
 
-                if new_edge_index.size(1):
+            except Exception as e:
+                traceback.print_exc()
+                logger.error(f"\n{e.__repr__()} "
+                             f"\n{new_metapath} sizes: {dict(m=m, k=k, n=n)}"
+                             f"\n {metapath_a}: {edge_index_a.size(1)} "
+                             f"{edge_index_a.max(1).values.tolist(), values_a.shape if isinstance(values_a, Tensor) else values_a}, "
+                             f"\n {metapath_b}: {edge_index_b.size(1)} "
+                             f"{edge_index_b.max(1).values.tolist(), values_b.shape if isinstance(values_b, Tensor) else values_b}"
+                             )
+                new_edge_index = new_values = None
+
+            finally:
+                if isinstance(new_edge_index, Tensor) and new_edge_index.size(1):
                     joined_edge_index[new_metapath] = (
                         new_edge_index.to(orig_device),
                         new_values.to(orig_device) if isinstance(new_values, Tensor) else None)
                 else:
                     joined_edge_index[new_metapath] = None
 
-            except Exception as e:
-                logger.error(f"\n{e} "
-                             f"\n{new_metapath} sizes: {dict(m=m, k=k, n=n)}"
-                             f"\n {metapath_a}: "
-                             f"{edge_index_a.max(1).values.tolist(), values_a.shape if values_a is not None else values_a}, "
-                             f"\n {metapath_b}: "
-                             f"{edge_index_b.max(1).values.tolist(), values_b.shape if values_b is not None else values_a}"
-                             )
-                joined_edge_index[new_metapath] = None
-
     return joined_edge_index
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=True, sampling=False):
-    assert valueA.dim() == 1
-    assert valueB.dim() == 1
+    if isinstance(valueA, Tensor):
+        assert valueA.dim() == 1, f'valueA.size = {valueA.shape}'
+    else:
+        valueA = torch.ones(indexA.size(1), dtype=torch.float, device=indexA.device)
+    if isinstance(valueB, Tensor):
+        assert valueB.dim() == 1, f'valueB.size = {valueA.shape}'
+    else:
+        valueB = torch.ones(indexB.size(1), dtype=torch.float, device=indexB.device)
 
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
                      sparse_sizes=(m, k), is_sorted=not coalesced)
@@ -255,9 +264,9 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=True, samplin
     deg_B = B.sum(1)
     deg_normalized = 1.0 / (deg_A + deg_B)
 
-    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     value=deg_normalized.type_as(valueA),
+    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=indexA.device),
+                     col=torch.arange(deg_normalized.size(0), device=indexB.device),
+                     value=deg_normalized.type_as(indexA),
                      sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)), is_sorted=True)
 
     # print("A", A.sizes(), "D", D.sizes(), "B", B.sizes(), )

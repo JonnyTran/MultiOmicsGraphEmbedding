@@ -90,9 +90,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                       train_test_split=train_test_split)
 
         self = cls(hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
-                   edge_dir="in", **kwargs)
+                   edge_dir="in", head_node_type=head_node_type, **kwargs)
         self.classes = classes
-        self.head_node_type = head_node_type
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
         self.network = network
@@ -410,13 +409,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def from_heteronetwork(cls, network: HeteroNetwork, node_attr_cols: List[str] = None, target: str = None,
                            min_count: int = None, expression=False, sequence=False,
                            label_subset: Optional[Union[Index, np.ndarray]] = None,
+                           head_node_type: Optional[str] = None,
                            ntype_subset: Optional[List[str]] = None, exclude_metapaths=None,
                            add_reverse_metapaths=True,
                            split_namespace=False,
                            **kwargs):
         self = super().from_heteronetwork(network, node_attr_cols=node_attr_cols,
                                           target=target, min_count=min_count, expression=expression, sequence=sequence,
-                                          label_subset=label_subset, ntype_subset=ntype_subset,
+                                          label_subset=label_subset, head_node_type=head_node_type,
+                                          ntype_subset=ntype_subset,
                                           exclude_metapaths=network.pred_metapaths,
                                           add_reverse_metapaths=add_reverse_metapaths, **kwargs)
 

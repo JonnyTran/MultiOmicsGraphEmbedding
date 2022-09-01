@@ -86,8 +86,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         if layernorm:
             self.layernorm = nn.ParameterDict({ntype: nn.LayerNorm(output_dim) for ntype in self.node_types})
 
-        # if batchnorm:
-        #     self.batchnorm = nn.ParameterDict({ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types})
+        if batchnorm:
+            self.batchnorm = nn.ParameterDict({ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types})
 
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
@@ -165,8 +165,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         Returns:
              output_emb, edge_attn_scores
         """
-        l_dict = self.projection(feats, linears=self.linear_l)
-        r_dict = self.projection(feats, linears=self.linear_r)
+        l_dict = self.projection(feats, linears=self.linear_l, subset=self.get_src_ntypes())
+        r_dict = self.projection(feats, linears=self.linear_r, subset=self.get_dst_ntypes())
 
         print("\nLayer", self.layer + 1, ) if verbose else None
 
@@ -224,6 +224,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+            if hasattr(self, "batchnorm"):
+                h_out[ntype] = self.batchnorm[ntype](h_out[ntype])
 
             if verbose:
                 print(f"   -> {self.activation.__name__ if hasattr(self, 'activation') else ''} "
@@ -238,11 +240,12 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
         return h_out, edge_pred_dicts
 
-    def projection(self, feats: Dict[str, Tensor], linears: ModuleDict):
-        h_dict = {ntype: linears[ntype].forward(x).relu_() for ntype, x in feats.items()}
+    def projection(self, feats: Dict[str, Tensor], linears: ModuleDict, subset=None):
+        h_dict = {ntype: linears[ntype].forward(x).relu_() \
+                  for ntype, x in feats.items() if not subset or ntype in subset}
 
-        h_dict = {ntype: h_dict[ntype].view(feats[ntype].size(0), self.attn_heads, self.out_channels) \
-                  for ntype in h_dict}
+        h_dict = {ntype: h.view(feats[ntype].size(0), self.attn_heads, self.out_channels) \
+                  for ntype, h in h_dict.items()}
 
         return h_dict
 
@@ -295,8 +298,9 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                                                         edge_index_dict_B=edge_index_dict,
                                                         sizes=sizes,
                                                         filter_metapaths=higher_relations,
-                                                        edge_threshold=None,
-                                                        device="cpu")
+                                                        # edge_threshold=0.5,
+                                                        device="cpu",
+                                                        )
         else:
             higher_order_edge_index = edge_pred_dict
 

@@ -10,6 +10,14 @@ import torch
 import torch.nn.functional as F
 import wandb
 from logzero import logger
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
+from torch.utils.data.distributed import DistributedSampler
+
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -18,13 +26,6 @@ from moge.dataset.utils import edge_index_to_adjs
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
-from torch.utils.data.distributed import DistributedSampler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -420,7 +421,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         return losses
 
-    def train_dataloader(self, batch_size=None, **kwargs):
+    def train_dataloader(self, batch_size=None, num_workers=10, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.training_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
@@ -429,11 +430,11 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         dataset = self.dataset.train_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
                                                 batch_size=batch_size if batch_size else self.hparams.batch_size,
-                                                batch_sampler=train_sampler,
+                                                batch_sampler=train_sampler, num_workers=num_workers,
                                                 **kwargs)
         return dataset
 
-    def val_dataloader(self, batch_size=None, **kwargs):
+    def val_dataloader(self, batch_size=None, num_workers=10, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.validation_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
@@ -442,12 +443,12 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         dataset = self.dataset.valid_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
                                                 batch_size=batch_size if batch_size else self.hparams.batch_size,
-                                                batch_sampler=train_sampler,
+                                                batch_sampler=train_sampler, num_workers=num_workers,
                                                 **kwargs)
 
         return dataset
 
-    def test_dataloader(self, batch_size=None, **kwargs):
+    def test_dataloader(self, batch_size=None, num_workers=10, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.testing_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
@@ -456,7 +457,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         dataset = self.dataset.test_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
                                                batch_size=batch_size if batch_size else self.hparams.batch_size,
-                                               batch_sampler=train_sampler,
+                                               batch_sampler=train_sampler, num_workers=num_workers,
                                                **kwargs)
         return dataset
 
@@ -505,9 +506,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
         no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embeddings",
-                    "attn_kernels",
-                    'LayerNorm.bias', 'LayerNorm.weight',
-                    'BatchNorm.bias', 'BatchNorm.weight']
+                    "attn_kernels", 'LayerNorm.bias', 'LayerNorm.weight', 'BatchNorm.bias', 'BatchNorm.weight']
         lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
         weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
 

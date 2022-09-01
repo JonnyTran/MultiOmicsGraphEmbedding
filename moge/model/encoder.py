@@ -63,30 +63,26 @@ class HeteroNodeFeatureEncoder(nn.Module):
         if subset_ntypes:
             non_attr_node_types = set(ntype for ntype in non_attr_node_types if ntype in subset_ntypes)
 
-        if non_attr_node_types:
-            module_dict = {}
+        embeddings = {}
+        for ntype in non_attr_node_types:
+            if pretrain_embeddings is None or ntype not in pretrain_embeddings:
+                print("Initialized trainable embeddings: ", ntype)
+                embeddings[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
+                                                 embedding_dim=embedding_dim,
+                                                 scale_grad_by_freq=True,
+                                                 sparse=False)
 
-            for ntype in non_attr_node_types:
-                if pretrain_embeddings is None or ntype not in pretrain_embeddings:
-                    print("Initialized trainable embeddings: ", ntype)
-                    module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
-                                                      embedding_dim=embedding_dim,
-                                                      scale_grad_by_freq=True,
-                                                      sparse=False)
+                nn.init.xavier_uniform_(embeddings[ntype].weight)
 
-                    nn.init.xavier_uniform_(module_dict[ntype].weight)
+            else:
+                print(f"Pretrained embeddings freeze={freeze}", ntype)
+                max_norm = pretrain_embeddings[ntype].norm(dim=1).mean()
+                embeddings[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
+                                                                 freeze=freeze,
+                                                                 scale_grad_by_freq=True,
+                                                                 max_norm=max_norm)
 
-                else:
-                    print(f"Pretrained embeddings freeze={freeze}", ntype)
-                    max_norm = pretrain_embeddings[ntype].norm(dim=1).mean()
-                    module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
-                                                                      freeze=freeze,
-                                                                      scale_grad_by_freq=True,
-                                                                      max_norm=max_norm)
-
-            embeddings = nn.ModuleDict(module_dict)
-        else:
-            embeddings = {}
+        embeddings = nn.ModuleDict(embeddings)
 
         return embeddings
 
