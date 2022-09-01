@@ -1,15 +1,15 @@
 import logging
 from argparse import Namespace
+from collections import OrderedDict
 from typing import Dict, Union, List
 
 import torch
-from torch import nn, Tensor
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from transformers import BertConfig, BertForSequenceClassification
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.utils import tensor_sizes
+from torch import nn, Tensor
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from transformers import BertConfig, BertForSequenceClassification
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -34,8 +34,12 @@ class HeteroNodeFeatureEncoder(nn.Module):
             elif ntype in self.embeddings and self.embeddings[ntype].weight.size(1) != hparams.embedding_dim:
                 proj_node_types.append(ntype)
 
-        self.linear_proj: Dict[str, nn.Linear] = nn.ModuleDict({
-            ntype: nn.Linear(in_features=dataset.node_attr_shape[ntype], out_features=hparams.embedding_dim) \
+        self.linear_proj = nn.ModuleDict({
+            ntype: nn.Sequential(OrderedDict([
+                ('linear', nn.Linear(in_features=dataset.node_attr_shape[ntype], out_features=hparams.embedding_dim)),
+                ('relu', nn.ReLU()),
+                ('dropout', nn.Dropout(hparams.dropout if hasattr(hparams, 'dropout') else 0.0))
+            ])) \
             for ntype in proj_node_types})
         print("model.encoder.feature_projection: ", self.linear_proj)
 

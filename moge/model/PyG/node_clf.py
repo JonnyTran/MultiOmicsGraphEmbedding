@@ -61,10 +61,6 @@ class LATTENodeClf(NodeClfTrainer):
                               attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout,
                               layer_pooling=hparams.layer_pooling if 'layer_pooling' in hparams else 'last',
-                              use_proximity=hparams.use_proximity \
-                                  if hasattr(hparams, "use_proximity") else False,
-                              neg_sampling_ratio=hparams.neg_sampling_ratio \
-                                  if hasattr(hparams, "neg_sampling_ratio") else None,
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
                               hparams=hparams)
 
@@ -280,7 +276,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.embedder = LATTE_Flat(n_layers=hparams.n_layers,
-                                   t_order=min(hparams.t_order, hparams.n_layers),
+                                   t_order=hparams.t_order,
                                    embedding_dim=hparams.embedding_dim,
                                    num_nodes_dict=dataset.num_nodes_dict,
                                    metapaths=dataset.get_metapaths(khop=None),
@@ -289,9 +285,6 @@ class LATTEFlatNodeClf(LATTENodeClf):
                                    attn_heads=hparams.attn_heads,
                                    attn_activation=hparams.attn_activation,
                                    attn_dropout=hparams.attn_dropout,
-                                   use_proximity=hparams.use_proximity if hasattr(hparams, "use_proximity") else False,
-                                   neg_sampling_ratio=hparams.neg_sampling_ratio \
-                                       if hasattr(hparams, "neg_sampling_ratio") else None,
                                    edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
                                    hparams=hparams)
 

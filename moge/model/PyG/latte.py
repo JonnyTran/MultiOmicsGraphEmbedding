@@ -5,13 +5,13 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from moge.model.PyG.relations import RelationAttention, MetapathGATConv
+from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.PyG.relations import RelationAttention, MetapathGATConv
-from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
@@ -446,7 +446,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 class LATTE(nn.Module):
     def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
-                 layer_pooling=False, use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
+                 layer_pooling=False, edge_sampling=True,
                  hparams=None):
         super().__init__()
         self.metapaths = metapaths
@@ -459,13 +459,10 @@ class LATTE(nn.Module):
 
         self.edge_sampling = edge_sampling
         self.edge_threshold = hparams.edge_threshold if "edge_threshold" in hparams else 0.0
-        self.use_proximity = use_proximity
-        self.neg_sampling_ratio = neg_sampling_ratio
         self.layer_pooling = layer_pooling
 
         layers = []
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
-
 
         for l in range(n_layers):
             is_last_layer = (l + 1 == n_layers)

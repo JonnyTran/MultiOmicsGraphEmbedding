@@ -222,6 +222,7 @@ class GcnNet(nn.Module):
     def forward(self, blocks: List[DGLBlock], h):
         for i, layer in enumerate(self.layers):
             blocks[i].srcdata['h'] = h
+
             if self.residual:
                 blocks[i].update_all(fn.u_mul_e('h', 'self', out='m_res'),
                                      fn.sum(msg='m_res', out='res'))
@@ -245,7 +246,7 @@ class DeepGraphGO(LightningModule):
         self.test_metrics = Metrics(prefix="test_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
                                     multilabel=True, metrics=metrics)
 
-        self.embedding = nn.EmbeddingBag(hparams.input_size, hparams.hidden_size, mode='sum', include_last_offset=True)
+        self.input = nn.EmbeddingBag(hparams.input_size, hparams.hidden_size, mode='sum', include_last_offset=True)
         self.input_bias = nn.Parameter(torch.zeros(hparams.hidden_size))
         self.dropout = nn.Dropout(hparams.dropout)
 
@@ -267,7 +268,7 @@ class DeepGraphGO(LightningModule):
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.xavier_uniform_(self.embedding.weight)
+        nn.init.xavier_uniform_(self.input.weight)
         nn.init.xavier_uniform_(self.classifier.weight)
 
     def forward(self, blocks: List[DGLBlock], return_embeddings=False):
@@ -278,7 +279,8 @@ class DeepGraphGO(LightningModule):
         offsets = torch.from_numpy(batch_x.indptr).to(self.device).long()
         per_sample_weights = torch.from_numpy(batch_x.data).to(self.device).float()
 
-        h = self.embedding.forward(input, offsets, per_sample_weights) + self.input_bias
+        h = self.input(input, offsets, per_sample_weights) + self.input_bias
+        h = self.dropout(F.relu(h))
 
         h = self.model.forward(blocks, h)
         logits = self.classifier(h)
@@ -518,6 +520,7 @@ def load_dgl_graph(data_cnf, model_cnf, model_id=None, subset_pid: List[str] = N
         dgl_graph = dgl.node_subgraph(dgl_graph, nodes=node_ids)
         node_feats = node_feats[node_ids.numpy()]
         net_pid_map = {pid: i for i, pid in enumerate(subset_pid)}
+        net_pid_list = subset_pid
 
     logger.info(F'{dgl_graph}')
 
@@ -598,12 +601,12 @@ def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFra
         valid_pid_list, valid_seqs, valid_go_labels = get_data(**data_cnf['valid'], subset_pid=None)
         test_pid_list, test_seqs, test_go_labels = get_data(**data_cnf['test'], subset_pid=None)
 
-        uniprot_go_id.loc[train_pid_list, "go_id"] = uniprot_go_id.loc[train_pid_list, "go_id"] + pd.Series(
-            train_go_labels, index=train_pid_list)
-        uniprot_go_id.loc[valid_pid_list, "go_id"] = uniprot_go_id.loc[valid_pid_list, "go_id"] + pd.Series(
-            valid_go_labels, index=valid_pid_list)
-        uniprot_go_id.loc[test_pid_list, "go_id"] = uniprot_go_id.loc[test_pid_list, "go_id"] + pd.Series(
-            test_go_labels, index=test_pid_list)
+        uniprot_go_id.loc[train_pid_list, "go_id"] = uniprot_go_id.loc[train_pid_list, "go_id"] + \
+                                                     pd.Series(train_go_labels, index=train_pid_list)
+        uniprot_go_id.loc[valid_pid_list, "go_id"] = uniprot_go_id.loc[valid_pid_list, "go_id"] + \
+                                                     pd.Series(valid_go_labels, index=valid_pid_list)
+        uniprot_go_id.loc[test_pid_list, "go_id"] = uniprot_go_id.loc[test_pid_list, "go_id"] + \
+                                                    pd.Series(test_go_labels, index=test_pid_list)
 
         uniprot_go_id.loc[train_pid_list, "train_mask"] = True
         uniprot_go_id.loc[valid_pid_list, "valid_mask"] = True

@@ -8,18 +8,17 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology, GeneOntology
-from pandas import Series, Index, DataFrame
-from torch import Tensor
-from torch_geometric.data import HeteroData
-
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
+from openomics import MultiOmics
+from openomics.database.ontology import Ontology, GeneOntology
+from pandas import Series, Index, DataFrame
+from torch import Tensor
+from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -144,7 +143,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if len(edgelist) < 10: continue
             self.add_edges(edgelist, etype=metapath, database=ontology.name(), directed=True)
 
-    def add_edges_from_annotations(self, ontology: GeneOntology, nodes: Optional[List[str]],
+    def add_edges_from_annotations(self, ontology: GeneOntology, filter_dst_nodes: Optional[List[str]],
                                    src_ntype: str, dst_ntype: str,
                                    train_date: str, valid_date: str, test_date: str, split_etype: str = None,
                                    d_etype="associated", src_node_col="gene_name",
@@ -153,7 +152,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         Args:
             ontology (): an openomics.Ontology object that contains annotations data.
-            nodes (): A dict of all nodes in the Hetero network.
+            filter_dst_nodes (): A dict of all nodes in the Hetero network.
             src_ntype (): The ntype name of annotation source nodes.
             dst_ntype (): The ntype name of annotation destination nodes.
             train_date (): A date format "YYYY-MM-DD" to separate all annotations before this date.
@@ -163,18 +162,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             d_etype (): Default etype name for annotation edges when `split_etype` is None.
             src_node_col (): The column name in the annotation dataframe that contain the src_ntype node names.
         """
-        # if add_annotation_as_edges and hasattr(self, "network"):
-        #     for ntype in self.network.annotations.index.drop(["MessengerRNA", "Protein"], errors="ignore"):
-        #         annotations = self.network.annotations[ntype]["go_id"].dropna()
-        #         source_ntype = annotations.index.name
-        #         nx_graph = nx.from_pandas_edgelist(annotations.explode().to_frame().reset_index().dropna(),
-        #                                            source=source_ntype, target="go_id", create_using=nx.Graph)
-        #         metapath = (ntype, "associated", go_ntype)
-        #         self.metapaths.append(metapath)
-        #
-        #         edge_index = get_edge_index_values(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
-        #         self.G[metapath].edge_index = edge_index
-        #         print(metapath, nx_graph.number_of_edges())
         groupby = [src_node_col, split_etype] if split_etype else [src_node_col]
         assert src_ntype in self.node_types
         self._name = f"{src_ntype}-{dst_ntype}_{train_date}-{test_date}"
@@ -183,7 +170,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         train_ann, valid_ann, test_ann = ontology.split_annotations(src_node_col=src_node_col, dst_node_col="go_id",
                                                                     train_date=train_date, valid_date=valid_date,
                                                                     test_date=test_date,
-                                                                    groupby=groupby, filter_go_id=nodes)
+                                                                    groupby=groupby,
+                                                                    filter_dst_nodes=filter_dst_nodes)
 
         if split_etype:
             nx_options = dict(edge_key=split_etype, create_using=nx.MultiGraph, edge_attr=True)

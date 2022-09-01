@@ -6,13 +6,12 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from torch import nn as nn, Tensor, ModuleDict
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-
 from moge.model.PyG.relations import RelationAttention, MetapathGATConv
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
+from torch import nn as nn, Tensor, ModuleDict
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -20,7 +19,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                  layer: int = 0, t_order: int = 1,
                  activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
                  layernorm=False, batchnorm=False, dropout=0.2,
-                 edge_threshold=0.0, use_proximity=False, neg_sampling_ratio=1.0, verbose=False) -> None:
+                 edge_threshold=0.0, verbose=False) -> None:
         super().__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.t_order = t_order
@@ -31,8 +30,6 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = output_dim
-        self.use_proximity = use_proximity
-        self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
         self.edge_threshold = edge_threshold
@@ -56,16 +53,15 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         self.out_channels = self.embedding_dim // attn_heads
         self.attn = nn.Parameter(torch.rand((len(self.metapaths), attn_heads, self.out_channels * 2)))
 
-        self.rel_attn_l = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
-            for ntype in self.node_types})
-        self.rel_attn_r = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
-            for ntype in self.node_types})
-
-        self.rel_attn_bias = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
-            for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
+        # self.rel_attn_l = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
+        #     for ntype in self.node_types})
+        # self.rel_attn_r = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
+        #     for ntype in self.node_types})
+        # self.rel_attn_bias = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
+        #     for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
 
         self.relation_conv: Dict[str, MetapathGATConv] = nn.ModuleDict({
             ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=1,
@@ -186,11 +182,11 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             if verbose:
                 rel_embedding = h_out[ntype].detach().clone()
 
-            # h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim)
-            # h_out[ntype], betas[ntype] = self.relation_conv[ntype].forward(h_out[ntype])
+            h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim)
+            h_out[ntype], betas[ntype] = self.relation_conv[ntype].forward(h_out[ntype])
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
+            # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
 
             if verbose:
                 print("  >", ntype, h_out[ntype].shape, betas[ntype].shape)
@@ -213,8 +209,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(rel_embedding[:, i], dim=0).mean().item() :.2f}")
 
-            h_out[ntype] = h_out[ntype] * betas[ntype].unsqueeze(-1)
-            h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
+            # h_out[ntype] = h_out[ntype] * betas[ntype].unsqueeze(-1)
+            # h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])
@@ -368,7 +364,7 @@ class LATTE(nn.Module):
                  metapaths: List[Tuple[str, str, str]], layer_pooling: str = None,
                  activation: str = "relu",
                  attn_heads: int = 1, attn_activation="sharpening", attn_dropout: float = 0.5,
-                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
+                 edge_sampling=True,
                  hparams: Namespace = None):
         super().__init__()
         self.metapaths = metapaths
@@ -379,19 +375,8 @@ class LATTE(nn.Module):
         self.t_order = t_order
         self.n_layers = n_layers
 
-        self.neg_sampling_ratio = neg_sampling_ratio
         self.edge_sampling = edge_sampling
-        self.use_proximity = use_proximity
         self.layer_pooling = layer_pooling
-
-        layer_t_orders = {
-            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
-                if (t_order - (n_layers - (l + 1))) > 0 \
-                else [1] \
-            for l in reversed(range(n_layers))}
-        # layer_t_orders = {
-        #     l: list(range(1, t_order + 1)) \
-        #     for l in range(n_layers)}
 
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of meapaths
 
@@ -401,31 +386,28 @@ class LATTE(nn.Module):
 
             l_layer_metapaths = filter_metapaths(
                 metapaths=metapaths + higher_order_metapaths,
-                order=layer_t_orders[l],  # Select only up to t-order
+                order=list(range(1, min(l + 1, t_order) + 1)),  # Select only up to t-order
                 # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
                 tail_type=[self.head_node_type, "GO_term"] if is_last_layer else None)
 
-            layer = LATTEConv(input_dim=embedding_dim,
-                              output_dim=embedding_dim,
-                              num_nodes_dict=num_nodes_dict,
-                              metapaths=l_layer_metapaths,
-                              layer=l,
-                              t_order=self.t_order,
-                              activation=activation,
-                              layernorm=hparams.layernorm,
-                              batchnorm=hparams.batchnorm,
-                              dropout=hparams.dropout if "dropout" in hparams else 0.0,
-                              attn_heads=attn_heads,
-                              attn_activation=attn_activation,
-                              attn_dropout=attn_dropout,
-                              edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
-                              use_proximity=use_proximity,
-                              neg_sampling_ratio=neg_sampling_ratio,
-                              verbose=hparams.verbose if "verbose" in hparams else False)
-            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
-                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths, skip_undirected=False)
+            layers.append(LATTEConv(input_dim=embedding_dim,
+                                    output_dim=embedding_dim,
+                                    num_nodes_dict=num_nodes_dict,
+                                    metapaths=l_layer_metapaths,
+                                    layer=l,
+                                    t_order=self.t_order,
+                                    activation=activation,
+                                    layernorm=hparams.layernorm,
+                                    batchnorm=hparams.batchnorm,
+                                    dropout=hparams.dropout if "dropout" in hparams else 0.0,
+                                    attn_heads=attn_heads,
+                                    attn_activation=attn_activation,
+                                    attn_dropout=attn_dropout,
+                                    edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
+                                    verbose=hparams.verbose if "verbose" in hparams else False))
 
-            layers.append(layer)
+            if l + 1 < t_order:
+                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths, skip_undirected=False)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
         self.reset_parameters()
@@ -472,7 +454,7 @@ class LATTE(nn.Module):
             h_dict = h_dict
 
         elif self.layer_pooling == "concat":
-            h_dict = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+            h_dict = {ntype: torch.cat(h_list, dim=1) for ntype, h_list in h_layers.items() \
                       if len(h_list)}
         else:
             raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
