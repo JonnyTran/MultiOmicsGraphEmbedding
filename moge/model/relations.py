@@ -24,6 +24,8 @@ class MetapathGATConv(nn.Module):
         self.n_relations = len(metapaths) + 1
         self.self_index = self.n_relations - 1
 
+        self.edge_indexes = {i: self.generate_fc_edge_index(i) for i in range(1, self.n_relations + 1)}
+
         self.n_layers = n_layers
         self.attn_heads = attn_heads
         self.out_channels = embedding_dim // attn_heads
@@ -35,21 +37,18 @@ class MetapathGATConv(nn.Module):
         ])
         # self.norm = GraphNorm(embedding_dim)
 
-    def generate_fc_edge_index(self, src_num_nodes: int, dst_num_nodes: int = None, device=None):
-        if dst_num_nodes is None:
-            dst_num_nodes = src_num_nodes
+    def generate_fc_edge_index(self, num_src_nodes: int, num_dst_nodes: int = None, device=None):
+        if num_dst_nodes is None:
+            num_dst_nodes = num_src_nodes
 
-        edge_index = torch.tensor(list(itertools.product(range(src_num_nodes), range(dst_num_nodes))),
-                                  device=device,
-                                  dtype=torch.long).T
+        edge_index = torch.tensor(list(itertools.product(range(num_src_nodes), range(num_dst_nodes))),
+                                  device=device, dtype=torch.long).T
         return edge_index
 
     def construct_multigraph(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]) \
             -> Data:
         num_nodes = relation_embs.size(0)
         nid = torch.arange(self.n_relations, device=relation_embs.device)
-        edge_indexes = {i: self.generate_fc_edge_index(i, device=relation_embs.device) \
-                        for i in range(1, self.n_relations + 1)}
 
         data_list = []
         for i in torch.arange(num_nodes):
@@ -58,7 +57,7 @@ class MetapathGATConv(nn.Module):
             num_nz_relations = node_mask.sum().item()
 
             g = Data(x=x[node_mask], nid=nid[node_mask],
-                     edge_index=edge_indexes[num_nz_relations])
+                     edge_index=self.edge_indexes[num_nz_relations].to(relation_embs.device))
             data_list.append(g)
 
         loader = DataLoader(data_list, batch_size=len(data_list), shuffle=False)

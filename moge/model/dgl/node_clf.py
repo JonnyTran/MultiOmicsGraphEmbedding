@@ -61,11 +61,6 @@ class LATTENodeClf(NodeClfTrainer):
                               attn_heads=hparams.attn_heads,
                               attn_dropout=hparams.attn_dropout)
 
-        if "batchnorm" in hparams and hparams.batchnorm:
-            self.batchnorm = torch.nn.ModuleDict(
-                {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) \
-                 for node_type in self.dataset.node_types})
-
         self.classifier = DenseClassification(hparams)
 
         self.criterion = ClassificationLoss(
@@ -86,15 +81,17 @@ class LATTENodeClf(NodeClfTrainer):
             embs = self.encoder.forward(feat, global_node_index=blocks[0].srcdata["_ID"])
             h_dict.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_dict})
 
-        embeddings = self.embedder.forward(blocks, h_dict, **kwargs)
+        h_dict = self.embedder.forward(blocks, h_dict, **kwargs)
 
-        y_pred = self.classifier(embeddings[self.head_node_type]) \
-            if hasattr(self, "classifier") else embeddings[self.head_node_type]
+        if hasattr(self, "classifier"):
+            logits = self.classifier(h_dict[self.head_node_type])
+        else:
+            logits = h_dict[self.head_node_type]
 
         if return_embeddings:
-            return embeddings, y_pred
+            return h_dict, logits
 
-        return y_pred
+        return logits
 
     def process_blocks(self, blocks: List[DGLBlock]) -> Tuple[Dict[str, Tensor], Tensor]:
         batch_inputs = blocks[0].srcdata['feat']
@@ -161,24 +158,6 @@ class LATTENodeClf(NodeClfTrainer):
         self.update_node_clf_metrics(self.test_metrics, logits, y_true, weights=None)
         self.log("test_loss", test_loss, logger=True)
         return test_loss
-
-    def configure_optimizers(self):
-        param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation']
-
-        optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
-             'weight_decay': self.hparams.weight_decay},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
-             'weight_decay': 0.0}
-        ]
-        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.hparams.lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
-                                                               eta_min=self.hparams.lr / 100)
-
-        return {"optimizer": optimizer,
-                "lr_scheduler": scheduler,
-                "monitor": "val_loss"}
 
 
 class HGConv(NodeClfTrainer):
@@ -301,24 +280,6 @@ class HGConv(NodeClfTrainer):
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=None, batch_size=self.hparams.batch_size, num_workers=0)
 
-    def configure_optimizers(self):
-        if self.hparams['optimizer'] == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['learning_rate'],
-                                         weight_decay=self.hparams['weight_decay'])
-        elif self.hparams['optimizer'] == 'sgd':
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['learning_rate'],
-                                        weight_decay=self.hparams['weight_decay'])
-        else:
-            raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
-
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                               T_max=len(self.train_dataloader()) * self.hparams[
-                                                                   "epochs"],
-                                                               eta_min=self.hparams['learning_rate'] / 100)
-
-        return {"optimizer": optimizer,
-                "scheduler": scheduler}
-
 
 class R_HGNN(NodeClfTrainer):
     def __init__(self, hparams: Dict, dataset: DGLNodeGenerator, metrics: List[str]):
@@ -435,39 +396,6 @@ class R_HGNN(NodeClfTrainer):
         self.test_metrics.update_metrics(y_pred, y_true, weights=None)
         self.log("test_loss", test_loss, logger=True)
         return test_loss
-
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
-
-    def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
-
-    def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=None,
-                                            batch_size=self.hparams.batch_size,
-                                            num_workers=0)
-
-    def configure_optimizers(self):
-        if self.hparams['optimizer'] == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['learning_rate'],
-                                         weight_decay=self.hparams['weight_decay'])
-        elif self.hparams['optimizer'] == 'sgd':
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['learning_rate'],
-                                        weight_decay=self.hparams['weight_decay'])
-        else:
-            raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
-
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                               T_max=len(self.train_dataloader()) * self.hparams[
-                                                                   "epochs"],
-                                                               eta_min=self.hparams['learning_rate'] / 100)
-
-        return {"optimizer": optimizer,
-                "scheduler": scheduler}
 
 
 class NARSNodeCLf(NodeClfTrainer):
@@ -623,14 +551,6 @@ class NARSNodeCLf(NodeClfTrainer):
             dataset=self.dataset.testing_idx,
             batch_size=self.hparams.batch_size, collate_fn=self.collate, shuffle=False, )
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self.hparams['lr'],
-                                     weight_decay=self.hparams[
-                                         'weight_decay'] if "weight_decay" in self.hparams else 0.0)
-
-        return optimizer
-
 
 class HANNodeClf(NodeClfTrainer):
     def __init__(self, hparams: Dict, dataset: DGLNodeGenerator, metrics: List[str]):
@@ -753,12 +673,6 @@ class HANNodeClf(NodeClfTrainer):
             dataset=self.dataset.testing_idx,
             batch_size=self.hparams['batch_size'], collate_fn=self.han_sampler.sample_blocks, shuffle=False,
         )
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['lr'],
-                                     weight_decay=self.hparams['weight_decay'])
-
-        return optimizer
 
 
 class HGTNodeClf(NodeClfTrainer):
