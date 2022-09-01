@@ -2,16 +2,11 @@ from abc import abstractmethod
 from typing import Union, List, Tuple, Dict, Optional
 
 import dgl
-import moge.model.PyG.utils
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
-from moge.dataset.utils import get_reverse_metapaths
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
-from moge.network.sequence import BertSequenceTokenizer
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -20,6 +15,12 @@ from torch import Tensor
 from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
+
+import moge.model.PyG.utils
+from moge.dataset.utils import get_reverse_metapaths
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 
 
 class Graph:
@@ -191,12 +192,15 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
             self.process_inmemorydataset(dataset, train_ratio=0.5)
         elif dataset.__class__.__name__ in ["HANDataset", "GTNDataset"]:
             print(f"{dataset.__class__.__name__}")
-            self.process_COGDLdataset(dataset, metapaths, node_types, reshuffle_train)
+            self.process_COGDLdataset(dataset, metapaths, node_types)
 
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
-        self.update_classes()
+        try:
+            self.update_classes()
+        except Exception as e:
+            print(e)
 
         if not hasattr(self, "x_dict") or self.x_dict is None or len(self.x_dict) == 0:
             self.x_dict = {}
@@ -205,11 +209,11 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         print("train_ratio", self.train_ratio)
 
     def update_classes(self):
-        print("update_classes", tensor_sizes(y_dict=self.y_dict))
-
         # Node classifications
         num_samples = 1  # Used for computing class_weight
-        if hasattr(self, "y_dict") and self.y_dict:
+        if hasattr(self, "y_dict") and self.y_dict and self.head_node_type is not None:
+            print("update_classes", tensor_sizes(y_dict=self.y_dict))
+
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.multilabel = True
                 if not hasattr(self, 'classes') or self.classes is None:

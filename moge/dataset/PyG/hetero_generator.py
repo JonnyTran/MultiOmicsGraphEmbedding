@@ -8,6 +8,12 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -16,11 +22,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -32,11 +33,17 @@ def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str
 class HeteroNodeClfDataset(HeteroGraphDataset):
     nodes_namespace: Dict[str, Series]
 
-    def __init__(self, dataset: HeteroData, seq_tokenizer: SequenceTokenizers = None,
+    def __init__(self, dataset: HeteroData,
+                 seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
-                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
-                 metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None, edge_dir: str = "in",
-                 add_reverse_metapaths: bool = False, inductive: bool = False, **kwargs):
+                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
+                 node_types: List[str] = None,
+                 metapaths: List[Tuple[str, str, str]] = None,
+                 head_node_type: str = None,
+                 edge_dir: str = "in",
+                 add_reverse_metapaths: bool = False,
+                 inductive: bool = False,
+                 **kwargs):
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
                          edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         if seq_tokenizer:
@@ -44,6 +51,24 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         self.neighbor_loader = neighbor_loader
         self.neighbor_sizes = neighbor_sizes
+
+    def process_pyg_heterodata(self, hetero: HeteroData):
+        self.x_dict = hetero.x_dict
+        self.node_types = hetero.node_types
+        self.num_nodes_dict = {ntype: hetero[ntype].num_nodes for ntype in hetero.node_types}
+        self.global_node_index = {ntype: torch.arange(num_nodes) for ntype, num_nodes in self.num_nodes_dict.items()}
+
+        self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
+
+        # Add reverse metapaths to allow reverse message passing for directed edges
+        if self.use_reverse:
+            transform = T.ToUndirected(merge=True)
+            hetero: HeteroData = transform(hetero)
+
+        self.metapaths = hetero.edge_types
+        self.edge_index_dict = hetero.edge_index_dict
+
+        self.G = hetero
 
     @classmethod
     def from_heteronetwork(cls, network: HeteroNetwork, node_attr_cols: List[str] = None,
@@ -64,9 +89,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                       exclude_metapaths=exclude_metapaths, sequence=sequence, expression=expression,
                                       train_test_split=train_test_split)
 
-        self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
+        self = cls(hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
                    edge_dir="in", **kwargs)
         self.classes = classes
+        self.head_node_type = head_node_type
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
         self.network = network
@@ -87,25 +113,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                         {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 
         return self
-
-    def process_pyg_heterodata(self, hetero: HeteroData):
-        self.x_dict = hetero.x_dict
-        self.node_types = hetero.node_types
-        self.num_nodes_dict = {ntype: hetero[ntype].num_nodes for ntype in hetero.node_types}
-        self.global_node_index = {ntype: torch.arange(num_nodes) for ntype, num_nodes in self.num_nodes_dict.items()}
-
-        self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
-
-        # Add reverse metapaths to allow reverse message passing for directed edges
-        if self.use_reverse:
-            transform = T.ToUndirected(merge=True)
-            hetero: HeteroData = transform(hetero)
-
-        self.metapaths = hetero.edge_types
-        self.edge_index_dict = {etype: etype_dict["edge_index"] \
-                                for etype, etype_dict in zip(hetero.edge_types, hetero.edge_stores)}
-
-        self.G = hetero
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
                              node_type: str, node_mask: Tensor,

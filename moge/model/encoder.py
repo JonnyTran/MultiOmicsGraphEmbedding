@@ -3,13 +3,13 @@ from argparse import Namespace
 from typing import Dict, Union, List
 
 import torch
-import torch.nn.functional as F
-from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
+
+from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -35,20 +35,9 @@ class HeteroNodeFeatureEncoder(nn.Module):
                 proj_node_types.append(ntype)
 
         self.linear_proj: Dict[str, nn.Linear] = nn.ModuleDict({
-            ntype: nn.Linear(in_features=dataset.node_attr_shape[ntype],
-                             out_features=hparams.embedding_dim) \
+            ntype: nn.Linear(in_features=dataset.node_attr_shape[ntype], out_features=hparams.embedding_dim) \
             for ntype in proj_node_types})
         print("model.encoder.feature_projection: ", self.linear_proj)
-
-        # if "batchnorm" in hparams and hparams.batchnorm:
-        #     self.batchnorm: Dict[str, nn.BatchNorm1d] = nn.ModuleDict({
-        #         ntype: nn.BatchNorm1d(input_size) \
-        #         for ntype, input_size in dataset.node_attr_shape.items()})
-
-        # if hasattr(hparams, "dropout") and hparams.dropout:
-        #     self.dropout = hparams.dropout
-        # else:
-        #     self.dropout = None
 
         self.reset_parameters()
 
@@ -110,15 +99,12 @@ class HeteroNodeFeatureEncoder(nn.Module):
             if ntype not in h_dict and ntype in self.embeddings:
                 h_dict[ntype] = self.embeddings[ntype](global_node_index[ntype]).to(global_node_index[ntype].device)
 
-            # project to embedding_dim if node features are not same same dimension
+            # project to embedding_dim if node features are of not the same dimension
             if ntype in self.linear_proj:
                 if hasattr(self, "batchnorm"):
                     h_dict[ntype] = self.batchnorm[ntype].forward(h_dict[ntype])
 
                 h_dict[ntype] = self.linear_proj[ntype].forward(h_dict[ntype])
-                h_dict[ntype] = F.relu(h_dict[ntype])
-                if hasattr(self, "dropout") and self.dropout:
-                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
         return h_dict
 

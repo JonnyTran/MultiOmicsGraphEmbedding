@@ -8,18 +8,18 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
+from openomics import MultiOmics
+from openomics.database.ontology import Ontology, GeneOntology
+from pandas import Series, Index, DataFrame
+from torch import Tensor
+from torch_geometric.data import HeteroData
+
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
-from pandas import Series, Index, DataFrame
-from torch import Tensor
-from torch_geometric.data import HeteroData
-
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology, GeneOntology
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -557,7 +557,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             # Transform labels matrix
             labels = {}
-            for ntype in tqdm.tqdm(hetero.node_types):
+            for ntype in hetero.node_types:
                 if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
                 y_label = parse_labels(self.annotations[ntype].loc[self.nodes[ntype], target],
                                        min_count=None, labels_subset=None,

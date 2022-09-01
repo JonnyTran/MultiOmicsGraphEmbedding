@@ -9,7 +9,7 @@ from moge.model.networkx.encoder import ConvLSTM, AlbertEncoder, NodeIDEmbedding
 from transformers import AlbertConfig
 
 from moge.model.classifier import DenseClassification, HierarchicalAWX
-from moge.model.losses import ClassificationLoss, get_hierar_relations
+from moge.model.losses import ClassificationLoss, get_hierarchical_relations
 from moge.model.utils import filter_samples
 
 
@@ -99,8 +99,8 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
 
         if hparams.use_hierar:
             label_map = pd.Series(range(len(hparams.classes)), index=hparams.classes).to_dict()
-            hierar_relations = get_hierar_relations(hparams.hierar_taxonomy_file,
-                                                    label_map=label_map)
+            hierar_relations = get_hierarchical_relations(hparams.hierar_taxonomy_file,
+                                                          label_map=label_map)
 
         self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=hparams.n_classes,
                                             class_weight=None if not hasattr(hparams, "class_weight") else torch.tensor(
@@ -231,8 +231,8 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
 
         if hparams.use_hierar:
             label_map = pd.Series(range(len(hparams.classes)), index=hparams.classes).to_dict()
-            hierar_relations = get_hierar_relations(hparams.hierar_taxonomy_file,
-                                                    label_map=label_map)
+            hierar_relations = get_hierarchical_relations(hparams.hierar_taxonomy_file,
+                                                          label_map=label_map)
 
         self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=hparams.n_classes,
                                             class_weight=None if not hasattr(hparams, "class_weight") else torch.tensor(

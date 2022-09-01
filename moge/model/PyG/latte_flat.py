@@ -6,12 +6,13 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
-from moge.model.relations import RelationAttention, MetapathGATConv
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.relations import RelationAttention, MetapathGATConv
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):

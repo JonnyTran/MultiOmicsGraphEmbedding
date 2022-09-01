@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import torch
 from colorhash import ColorHash
-from moge.model.PyG.utils import filter_metapaths
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
@@ -14,6 +13,8 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
 from torchtyping import TensorType
+
+from moge.model.PyG.utils import filter_metapaths
 
 
 class MetapathGATConv(nn.Module):
@@ -24,7 +25,7 @@ class MetapathGATConv(nn.Module):
         self.n_relations = len(metapaths) + 1
         self.self_index = self.n_relations - 1
 
-        self.edge_indexes = {i: self.generate_fc_edge_index(i) for i in range(1, self.n_relations + 1)}
+        self.edge_indexes = {n: self.generate_fc_edge_index(num_src_nodes=n) for n in range(1, self.n_relations + 1)}
 
         self.n_layers = n_layers
         self.attn_heads = attn_heads
@@ -42,7 +43,7 @@ class MetapathGATConv(nn.Module):
             num_dst_nodes = num_src_nodes
 
         edge_index = torch.tensor(list(itertools.product(range(num_src_nodes), range(num_dst_nodes))),
-                                  device=device, dtype=torch.long).T
+                                  device=device, dtype=torch.long, requires_grad=False).T
         return edge_index
 
     def construct_multigraph(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]) \

@@ -5,14 +5,14 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
+from moge.model.PyG.relations import RelationAttention, MetapathGATConv
+from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
-from ..relations import RelationAttention, MetapathGATConv
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
 

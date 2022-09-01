@@ -213,12 +213,12 @@ class FocalLoss(nn.Module):
         return loss.mean()
 
 
-def get_hierar_relations(hierar_taxonomy_file, label_map):
+def get_hierarchical_relations(hierarchy_file, label_map):
     """ get parent-children relationships from given hierar_taxonomy
         hierar_taxonomy: parent_label \t child_label_0 \t child_label_1 \n
     """
     hierar_relations = {}
-    with cs.open(hierar_taxonomy_file, "r", "utf8") as f:
+    with cs.open(hierarchy_file, "r", "utf8") as f:
         for line in f:
             line_split = line.strip("\n").split("\t")
             parent_label, children_label = line_split[0], line_split[1:]
