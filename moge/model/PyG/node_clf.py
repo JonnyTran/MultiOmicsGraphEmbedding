@@ -21,7 +21,7 @@ from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
+from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, tensor_sizes
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
@@ -289,6 +289,8 @@ class LATTEFlatNodeClf(LATTENodeClf):
                                    hparams=hparams)
 
         # Output layer
+        if self.embedder.layer_pooling == 'concat':
+            hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
         if "cls_graph" in hparams and hparams.cls_graph is not None:
             self.classifier = LabelGraphNodeClassifier(hparams)
         else:
@@ -384,7 +386,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X, save_betas=False)
+        y_pred = self.forward(X, save_betas=True)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
@@ -412,9 +414,9 @@ class LATTEFlatNodeClf(LATTENodeClf):
         try:
             if self.wandb_experiment is not None:
                 X, y_true, weights = self.dataset.full_batch()
-                embs, logits = self.cpu().forward(X, return_embeddings=True, return_score=True, save_betas=True)
-
-                self.plot_embeddings_tsne(X, embs, targets=y_true[self.head_node_type],
+                embs, logits = self.cpu().forward(X, return_embeddings=True, save_betas=True)
+                print(tensor_sizes(X['global_node_index']))
+                self.plot_embeddings_tsne(X['global_node_index'], embs, targets=y_true[self.head_node_type],
                                           y_pred=activation(logits, loss_type=self.hparams.loss_type), weights=weights)
                 self.plot_sankey_flow(layer=-1)
                 self.cleanup_artifacts()

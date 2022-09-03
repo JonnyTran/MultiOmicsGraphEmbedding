@@ -10,14 +10,6 @@ import torch
 import torch.nn.functional as F
 import wandb
 from logzero import logger
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
-from torch.utils.data.distributed import DistributedSampler
-
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -26,6 +18,13 @@ from moge.dataset.utils import edge_index_to_adjs
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
+from torch.utils.data.distributed import DistributedSampler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -421,7 +420,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         return losses
 
-    def train_dataloader(self, batch_size=None, num_workers=10, **kwargs):
+    def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.training_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
@@ -434,7 +433,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
                                                 **kwargs)
         return dataset
 
-    def val_dataloader(self, batch_size=None, num_workers=10, **kwargs):
+    def val_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.validation_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
@@ -448,7 +447,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         return dataset
 
-    def test_dataloader(self, batch_size=None, num_workers=10, **kwargs):
+    def test_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.testing_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
