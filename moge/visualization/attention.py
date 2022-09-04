@@ -20,18 +20,21 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
             pad=5,
             thickness=15,
             line=dict(color="black", width=0.5),
-            hoverinfo="skip",
             label=nodes['label'],
             color=nodes['color'],
+            customdata=nodes['count'],
+            hovertemplate='num_nodes: %{customdata}',
         ),
         # Add links
         link=dict(
             source=links['source'],
             target=links['target'],
-            value=links['value'],
             label=links['label'],
+            value=links['mean'],
+            customdata=links['std'],
             color=rgba_colors,
-            # hoverinfo=links['value'],
+            hovertemplate='attn weight: %{value} ± %{customdata:.3f}',
+
         ),
 
     )], )

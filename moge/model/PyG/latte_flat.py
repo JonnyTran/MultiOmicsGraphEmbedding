@@ -1,4 +1,5 @@
 import copy
+import traceback
 from argparse import Namespace
 from typing import List, Dict, Tuple, Union
 
@@ -6,12 +7,13 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.relations import RelationAttention
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.relations import RelationAttention
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -230,8 +232,14 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                       f"{torch.norm(h_out[ntype], dim=1).mean().item():.2f}")
 
         if save_betas:
-            self.save_relation_weights(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
-                                       global_node_index=global_node_index)
+            try:
+                self.save_edge_counts(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
+                                      batch_sizes=sizes)
+                self.save_relation_attn_weights(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
+                                                global_node_index=global_node_index,
+                                                batch_size=sizes)
+            except Exception as e:
+                traceback.print_exc()
 
         return h_out, edge_pred_dicts
 

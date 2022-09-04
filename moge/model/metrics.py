@@ -62,7 +62,7 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = F1Score(num_classes=n_classes, average="micro",
                                                top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "fmax" in metric:
-                self.metrics[metric] = FMax_()
+                self.metrics[metric] = FMax()
 
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()

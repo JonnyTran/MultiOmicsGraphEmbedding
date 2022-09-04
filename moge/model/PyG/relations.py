@@ -14,7 +14,7 @@ from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
 from torchtyping import TensorType
 
-from moge.model.PyG.utils import filter_metapaths
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -114,17 +114,25 @@ class MetapathGATConv(nn.Module):
 
 class RelationAttention(ABC):
     metapaths: List[Tuple[str, str, str]]
+    _betas: Dict[str, DataFrame]
+    _counts: Dict[str, DataFrame]
 
     def __init__(self):
+        self.reset_betas()
+
+    def reset_betas(self):
+        self._counts = {}
         self._betas = {}
-        self._beta_std = {}
-        self._beta_avg = {}
 
-    def get_src_ntypes(self):
-        return {metapath[0] for metapath in self.metapaths}
+    def get_src_ntypes(self, metapaths=None):
+        if metapaths is None:
+            metapaths = self.metapaths
+        return {metapath[0] for metapath in metapaths}
 
-    def get_dst_ntypes(self):
-        return {metapath[-1] for metapath in self.metapaths}
+    def get_dst_ntypes(self, metapaths=None):
+        if metapaths is None:
+            metapaths = self.metapaths
+        return {metapath[-1] for metapath in metapaths}
 
     def get_head_relations(self, src_node_type, order=None, str_form=False) -> List[Tuple[str, str, str]]:
         relations = filter_metapaths(self.metapaths, order=order, head_type=src_node_type)
@@ -154,100 +162,148 @@ class RelationAttention(ABC):
         relations = self.get_tail_relations(ntype)
         return len(relations) + 1
 
-    def save_relation_weights(self, betas: Dict[str, Tensor], global_node_index: Dict[str, Tensor]):
+    def save_edge_counts(self, edge_index_dict: Dict[Tuple, Tensor],
+                         global_node_index: Dict[str, Tensor],
+                         batch_sizes: Dict[str, int] = None):
+        if not hasattr(self, "_counts"):
+            self._counts = {}
+
+        for ntype, nids in global_node_index.items():
+            if batch_sizes and ntype not in batch_sizes: continue
+            batch_nids = nids[:batch_sizes[ntype]].cpu().numpy()
+            counts_df = []
+
+            for metapath in self.get_tail_relations(ntype):
+                if metapath not in edge_index_dict: continue
+                metapath_name = ".".join(metapath)
+                edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], )
+
+                dst_nids, dst_edge_counts = edge_index[1].unique(return_counts=True)
+                dst_nids = nids[dst_nids].cpu().numpy()
+
+                dst_counts = pd.concat([
+                    pd.Series(dst_edge_counts.cpu().numpy(), index=dst_nids, name=metapath_name, dtype=int),
+                    pd.Series(0, index=set(batch_nids).difference(dst_nids), name=metapath_name, dtype=int)])
+                dst_counts = dst_counts.loc[batch_nids]
+
+                counts_df.append(dst_counts)
+
+            if counts_df:
+                counts_df = pd.concat(counts_df, axis=1, join="outer", copy=False) \
+                    .fillna(0).astype(int, copy=False)
+                counts_df.index.name = f"{ntype}_nid"
+
+                if len(self._counts) == 0 or ntype not in self._counts:
+                    self._counts[ntype] = counts_df
+                else:
+                    self._counts[ntype].update(counts_df, overwrite=True)
+
+        return self._counts
+
+    def save_relation_attn_weights(self, betas: Dict[str, Tensor],
+                                   global_node_index: Dict[str, Tensor],
+                                   batch_size: Dict[str, int]):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
         if len(betas) < len({metapath[-1] for metapath in self.metapaths}):
             return
 
         if not hasattr(self, "_betas"):
-            self._betas, self._beta_std, self._beta_avg = {}, {}, {}
+            self._betas = {}
 
         for ntype in betas:
             if ntype not in global_node_index or global_node_index[ntype].numel() == 0: continue
+            if batch_size and ntype not in batch_size: continue
 
             relations = self.get_tail_relations(ntype, str_form=True) + [ntype, ]
             if len(relations) <= 1: continue
 
             with torch.no_grad():
+                nids = global_node_index[ntype].cpu().numpy()
+                batch_nids = nids[:batch_size[ntype]]
+
                 df = pd.DataFrame(betas[ntype].squeeze(-1).cpu().numpy(),
-                                  columns=relations,
-                                  index=global_node_index[ntype].cpu().numpy(), dtype=np.float16)
+                                  columns=relations, index=nids, dtype=np.float16)
+                df = df.loc[batch_nids]
+                df.index.name = f"{ntype}_nid"
 
                 if len(self._betas) == 0 or ntype not in self._betas:
                     self._betas[ntype] = df
                 else:
                     self._betas[ntype].update(df, overwrite=True)
 
-                # Compute mean and std of beta scores across all nodes
-                _beta_avg = np.around(betas[ntype].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
-                _beta_std = np.around(betas[ntype].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
-                self._beta_avg[ntype] = {metapath: _beta_avg[i] for i, metapath in enumerate(relations)}
-                self._beta_std[ntype] = {metapath: _beta_std[i] for i, metapath in enumerate(relations)}
+    @property
+    def _beta_std(self):
+        if hasattr(self, "_betas"):
+            return {ntype: betas.std(0).to_dict() for ntype, betas in self._betas.items()}
 
-    def get_relation_weights(self, std=True):
+    @property
+    def _beta_avg(self):
+        if hasattr(self, "_betas"):
+            return {ntype: betas.mean(0).to_dict() for ntype, betas in self._betas.items()}
+
+    def get_relation_weights(self, std=True) -> Dict[str, Tuple[float, float]]:
         """
         Get the mean and std of relation attention weights for all nodes
-        :return:
         """
-        _beta_avg = {}
-        _beta_std = {}
-        for ntype in self._betas:
-            relations = self.get_tail_relations(ntype, str_form=True) + [ntype, ]
-            _beta_avg = np.around(self._betas[ntype].mean(), decimals=3)
-            _beta_std = np.around(self._betas[ntype].std(), decimals=2)
-            self._beta_avg[ntype] = {metapath: _beta_avg[i] for i, metapath in
-                                     enumerate(relations)}
-            self._beta_std[ntype] = {metapath: _beta_std[i] for i, metapath in
-                                     enumerate(relations)}
-
-        print_output = {}
+        output = {}
         for node_type in self._beta_avg:
             for metapath, avg in self._beta_avg[node_type].items():
                 if std:
-                    print_output[metapath] = (avg, self._beta_std[node_type][metapath])
+                    output[metapath] = (avg, self._beta_std[node_type][metapath])
                 else:
-                    print_output[metapath] = avg
-        return print_output
+                    output[metapath] = avg
+        return output
 
-    def get_sankey_flow(self, node_type: str, self_loop: bool = False, agg="mean") \
+    def get_sankey_flow(self, node_type: str, self_loop: bool = False, agg="median") \
             -> Tuple[DataFrame, DataFrame]:
 
-        rel_attn: pd.DataFrame = self._betas[node_type]
+        rel_attn = self._betas[node_type]
 
         if agg == "sum":
-            rel_attn = rel_attn.sum(axis=0)
+            rel_attn_agg = rel_attn.sum(axis=0)
         elif agg == "median":
-            rel_attn = rel_attn.median(axis=0)
+            rel_attn_agg = rel_attn.median(axis=0)
         elif agg == "max":
-            rel_attn = rel_attn.max(axis=0)
+            rel_attn_agg = rel_attn.max(axis=0)
         elif agg == "min":
-            rel_attn = rel_attn.min(axis=0)
+            rel_attn_agg = rel_attn.min(axis=0)
         else:
-            rel_attn = rel_attn.mean(axis=0)
+            rel_attn_agg = rel_attn.mean(axis=0)
 
-        indexed_metapaths = rel_attn.index.str.split(".").map(lambda tup: [str(len(tup) - i) + name \
-                                                                           for i, name in enumerate(tup)])
-        all_nodes = {node for nodes in indexed_metapaths for node in nodes}
-        all_nodes = {node: i for i, node in enumerate(all_nodes)}
+        rel_attn_std = rel_attn.quantile(q=0.5, axis=0)
+
+        # Break down each metapath tuples into nodes
+        indexed_metapaths = rel_attn_agg.index.str.split(".").map(
+            lambda tup: [str(len(tup) - i) + name for i, name in enumerate(tup)])
+
+        indexed_nodes = {node for nodes in indexed_metapaths for node in nodes}
+        indexed_nodes = {node: i for i, node in enumerate(indexed_nodes)}
+        indexed_node2metapath = {node: ".".join([s[1:] for s in nodes_tup]) \
+                                 for nodes_tup in indexed_metapaths for node in nodes_tup}
 
         # Links
-        links = pd.DataFrame(columns=["source", "target", "value", "label", "color"])
-        for i, (metapath, value) in enumerate(rel_attn.to_dict().items()):
+        links = pd.DataFrame(columns=["source", "target", "mean", "std", "label", "color"])
+        for i, (metapath_name, attn_agg) in enumerate(rel_attn_agg.to_dict().items()):
             indexed_metapath = indexed_metapaths[i]
 
-            if len(metapath.split(".")) > 1:
-                sources = [all_nodes[indexed_metapath[j]] for j, _ in enumerate(indexed_metapath[:-1])]
-                targets = [all_nodes[indexed_metapath[j + 1]] for j, _ in enumerate(indexed_metapath[:-1])]
+            if len(metapath_name.split(".")) >= 2:
+                sources = [indexed_nodes[indexed_metapath[j]] for j, _ in enumerate(indexed_metapath[:-1])]
+                targets = [indexed_nodes[indexed_metapath[j + 1]] for j, _ in enumerate(indexed_metapath[:-1])]
 
-                path_links = pd.DataFrame({"source": sources, "target": targets,
-                                           "value": [value, ] * len(targets), "label": [metapath, ] * len(targets)})
+                path_links = pd.DataFrame({"source": sources,
+                                           "target": targets,
+                                           "label": [metapath_name, ] * len(targets),
+                                           "mean": [attn_agg, ] * len(targets),
+                                           'std': [rel_attn_std.loc[metapath_name], ] * len(targets),
+                                           })
+
                 links = links.append(path_links, ignore_index=True)
 
 
             elif self_loop:
-                source = all_nodes[indexed_metapath[0]]
-                links = links.append({"source": source, "target": source,
-                                      "value": value, "label": metapath}, ignore_index=True)
+                source = indexed_nodes[indexed_metapath[0]]
+                links = links.append({"source": source, "target": source, "label": metapath_name,
+                                      "mean": attn_agg, "std": rel_attn_std.loc[node_type], }, ignore_index=True)
 
         links["color"] = links["label"].apply(lambda label: ColorHash(label).hex)
         links = links.iloc[::-1]
@@ -256,13 +312,20 @@ class RelationAttention(ABC):
         # node_group = [int(node[0]) for node, nid in all_nodes.items()]
         # groups = [[nid for nid, node in enumerate(node_group) if node == group] for group in np.unique(node_group)]
 
-        nodes = pd.DataFrame(columns=["label", "level", "color"])
-        nodes["label"] = [node[1:] for node in all_nodes.keys()]
-        nodes["level"] = [int(node[0]) for node in all_nodes.keys()]
+        nodes = pd.DataFrame(columns=["label", "metapath", "level", "color", "count"])
+        nodes["label"] = [node[1:] for node in indexed_nodes.keys()]
+        nodes["level"] = [int(node[0]) for node in indexed_nodes.keys()]
+        nodes["metapath"] = [indexed_node2metapath[node] for node in indexed_nodes.keys()]
+
+        # Get number of edge_index counts for each metapath
+        if node_type in self._counts:
+            nodes["count"] = nodes["metapath"].map(lambda m: self._counts[node_type].sum().get(m, None))
+        nodes.loc[0, 'count'] = rel_attn.index.size  # Number of nodes averaged
 
         nodes["color"] = nodes[["label", "level"]].apply(
             lambda x: ColorHash(x["label"].strip("rev_")).hex \
                 if x["level"] % 2 == 0 \
-                else ColorHash(x["label"]).hex, axis=1)
+                else ColorHash(x["label"]).hex,
+            axis=1)
 
         return nodes, links

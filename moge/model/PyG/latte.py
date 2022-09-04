@@ -5,13 +5,13 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from moge.model.PyG.relations import RelationAttention, MetapathGATConv
-from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
+from moge.model.PyG.relations import RelationAttention, MetapathGATConv
+from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
@@ -246,7 +246,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             global_node_idx_out = {ntype: nid[:sizes[self.layer][ntype][1]] \
                                    for ntype, nid in global_node_index[self.layer].items() \
                                    if ntype in beta_mean and sizes[self.layer][ntype][1]}
-            self.save_relation_weights(beta_mean, global_node_idx_out)
+            self.save_relation_attn_weights(beta_mean, global_node_idx_out)
 
         return (l_dict, h_out), edge_pred_dict
 
