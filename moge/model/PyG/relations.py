@@ -213,6 +213,8 @@ class RelationAttention(ABC):
         for ntype in betas:
             if ntype not in global_node_index or global_node_index[ntype].numel() == 0: continue
             if batch_size and ntype not in batch_size: continue
+            elif batch_size[ntype] == 0:
+                continue
 
             relations = self.get_tail_relations(ntype, str_form=True) + [ntype, ]
             if len(relations) <= 1: continue
