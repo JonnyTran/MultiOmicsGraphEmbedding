@@ -497,6 +497,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Add node attributes
         for ntype in node_types:
+            hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
             annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
 
             for col in annotations.columns \
@@ -525,8 +526,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     #                                              size=expressions.shape)
                 elif not expressions.empty:
                     hetero[ntype]['x'] = torch.tensor(expressions.values, dtype=torch.float)
-
-            hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
 
             # DNA/RNA sequence
             if sequence and SEQUENCE_COL in annotations:

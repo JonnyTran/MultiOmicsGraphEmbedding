@@ -7,13 +7,12 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from torch import nn as nn, Tensor, ModuleDict
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-
 from moge.model.PyG.relations import RelationAttention
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
+from torch import nn as nn, Tensor, ModuleDict
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -149,8 +148,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
     def forward(self, feats: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                 global_node_index: Dict[str, Tensor],
-                sizes: Dict[str, int],
                 edge_pred_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
+                batch_sizes: Dict[str, int],
                 save_betas=False, empty_gpu_device=None, verbose=False) -> \
             Tuple[Dict[str, Tensor], Dict[Tuple[str, str, str], Tensor]]:
         """
@@ -176,7 +175,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             if global_node_index[ntype].size(0) == 0 or self.num_tail_relations(ntype) <= 1: continue
             h_out[ntype], edge_pred_dict = self.aggregate_relations(
                 ntype=ntype, l_dict=l_dict, r_dict=r_dict,
-                edge_index_dict=edge_index_dict, edge_pred_dict=edge_pred_dict, sizes=sizes, verbose=verbose)
+                edge_index_dict=edge_index_dict, edge_pred_dict=edge_pred_dict, global_node_index=global_node_index,
+                verbose=verbose)
             edge_pred_dicts.update(edge_pred_dict)
 
             h_out[ntype][:, -1] = l_dict[ntype]
@@ -233,11 +233,11 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
         if save_betas:
             try:
-                self.save_edge_counts(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
-                                      batch_sizes=sizes)
-                self.save_relation_attn_weights(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
-                                                global_node_index=global_node_index,
-                                                batch_size=sizes)
+                self.update_edge_attn(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
+                                      batch_sizes=batch_sizes)
+                self.update_relation_attn(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
+                                          global_node_index=global_node_index,
+                                          batch_size=batch_sizes)
             except Exception as e:
                 traceback.print_exc()
 
@@ -257,7 +257,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                             r_dict: Dict[str, Tensor],
                             edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                             edge_pred_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
-                            sizes: Dict[str, int], verbose=False):
+                            global_node_index: Dict[str, Tensor], verbose=False):
+        sizes = {ntype: nids.numel() for ntype, nids in global_node_index.items()}
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(size=(sizes[ntype],
                                           self.num_tail_relations(ntype),
@@ -300,6 +301,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                                                         edge_index_dict_B=edge_index_dict,
                                                         sizes=sizes,
                                                         filter_metapaths=higher_relations,
+                                                        use_edge_values=False,
                                                         # edge_threshold=0.5,
                                                         # device="cpu",
                                                         )
@@ -435,7 +437,7 @@ class LATTE(nn.Module):
     def forward(self, h_dict: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                 global_node_index: Dict[str, Tensor],
-                sizes: Dict[str, int],
+                batch_sizes: Dict[str, int],
                 **kwargs):
         """
         Args:
@@ -451,8 +453,8 @@ class LATTE(nn.Module):
         for l in range(self.n_layers):
             h_dict, edge_pred_dict = self.layers[l].forward(feats=h_dict, edge_index_dict=edge_index_dict,
                                                             global_node_index=global_node_index,
-                                                            sizes=sizes,
                                                             edge_pred_dict=edge_pred_dict,
+                                                            batch_sizes=batch_sizes,
                                                             **kwargs)
 
             for ntype in h_dict:

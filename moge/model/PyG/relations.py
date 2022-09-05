@@ -4,8 +4,10 @@ from typing import Tuple, List, Dict
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as ssp
 import torch
 from colorhash import ColorHash
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
@@ -13,8 +15,6 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
 from torchtyping import TensorType
-
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -115,6 +115,7 @@ class MetapathGATConv(nn.Module):
 class RelationAttention(ABC):
     metapaths: List[Tuple[str, str, str]]
     _betas: Dict[str, DataFrame]
+    _alphas: Dict[str, DataFrame]
     _counts: Dict[str, DataFrame]
 
     def __init__(self):
@@ -123,6 +124,7 @@ class RelationAttention(ABC):
     def reset_betas(self):
         self._counts = {}
         self._betas = {}
+        self._alphas = {}
 
     def get_src_ntypes(self, metapaths=None):
         if metapaths is None:
@@ -162,31 +164,62 @@ class RelationAttention(ABC):
         relations = self.get_tail_relations(ntype)
         return len(relations) + 1
 
-    def save_edge_counts(self, edge_index_dict: Dict[Tuple, Tensor],
+    @torch.no_grad()
+    def update_edge_attn(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                          global_node_index: Dict[str, Tensor],
-                         batch_sizes: Dict[str, int] = None):
+                         batch_sizes: Dict[str, int] = None, save_count_only=False):
         if not hasattr(self, "_counts"):
             self._counts = {}
+        if not hasattr(self, "_alphas"):
+            self._alphas = {}
 
         for ntype, nids in global_node_index.items():
             if batch_sizes and ntype not in batch_sizes: continue
             batch_nids = nids[:batch_sizes[ntype]].cpu().numpy()
             counts_df = []
 
-            for metapath in self.get_tail_relations(ntype):
-                if metapath not in edge_index_dict: continue
+            for metapath in filter_metapaths(edge_index_dict, tail_type=ntype):
                 metapath_name = ".".join(metapath)
+                head_type, tail_type = metapath[0], metapath[-1]
                 edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], )
 
                 dst_nids, dst_edge_counts = edge_index[1].unique(return_counts=True)
                 dst_nids = nids[dst_nids].cpu().numpy()
 
+                # Edge counts
                 dst_counts = pd.concat([
                     pd.Series(dst_edge_counts.cpu().numpy(), index=dst_nids, name=metapath_name, dtype=int),
                     pd.Series(0, index=set(batch_nids).difference(dst_nids), name=metapath_name, dtype=int)])
                 dst_counts = dst_counts.loc[batch_nids]
-
                 counts_df.append(dst_counts)
+
+                # Edge attn
+                if edge_values is None or save_count_only or tail_type not in batch_sizes: continue
+                value, row, col = edge_values.max(1).values.detach().numpy(), \
+                                  edge_index[0].numpy(), edge_index[1].numpy()
+                csc_matrix = ssp.coo_matrix((value, (row, col)),
+                                            shape=(global_node_index[head_type].shape[0],
+                                                   global_node_index[tail_type].shape[0])).transpose().tocsc()
+                edge_attn = pd.DataFrame.sparse.from_spmatrix(csc_matrix)
+                edge_attn.index = pd.Index(global_node_index[tail_type].numpy(), name=f"{tail_type}_nid")
+                edge_attn.columns = pd.Index(global_node_index[head_type].numpy(), name=f"{head_type}_nid")
+                edge_attn = edge_attn.loc[batch_nids]
+
+                if len(self._alphas) == 0 or metapath_name not in self._alphas:
+                    self._alphas[metapath_name] = edge_attn
+                else:
+                    existing_cols = edge_attn.columns.intersection(self._alphas[metapath_name].columns)
+                    new_cols = edge_attn.columns.difference(self._alphas[metapath_name].columns)
+
+                    if len(new_cols):
+                        self._alphas[metapath_name] = self._alphas[metapath_name].join(
+                            edge_attn.filter(new_cols, axis="columns"), how="left")
+                    # Fillna seq features
+                    if len(existing_cols):
+                        self._alphas[metapath_name].update(
+                            edge_attn.filter(existing_cols, axis='columns'), overwrite=True)
+
+                    self._alphas[metapath_name].update(edge_attn, overwrite=True)
 
             if counts_df:
                 counts_df = pd.concat(counts_df, axis=1, join="outer", copy=False) \
@@ -198,11 +231,10 @@ class RelationAttention(ABC):
                 else:
                     self._counts[ntype].update(counts_df, overwrite=True)
 
-        return self._counts
-
-    def save_relation_attn_weights(self, betas: Dict[str, Tensor],
-                                   global_node_index: Dict[str, Tensor],
-                                   batch_size: Dict[str, int]):
+    @torch.no_grad()
+    def update_relation_attn(self, betas: Dict[str, Tensor],
+                             global_node_index: Dict[str, Tensor],
+                             batch_size: Dict[str, int]):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
         if len(betas) < len({metapath[-1] for metapath in self.metapaths}):
             return
@@ -212,26 +244,26 @@ class RelationAttention(ABC):
 
         for ntype in betas:
             if ntype not in global_node_index or global_node_index[ntype].numel() == 0: continue
-            if batch_size and ntype not in batch_size: continue
+            if batch_size and ntype not in batch_size:
+                continue
             elif batch_size[ntype] == 0:
                 continue
 
             relations = self.get_tail_relations(ntype, str_form=True) + [ntype, ]
             if len(relations) <= 1: continue
 
-            with torch.no_grad():
-                nids = global_node_index[ntype].cpu().numpy()
-                batch_nids = nids[:batch_size[ntype]]
+            nids = global_node_index[ntype].cpu().numpy()
+            batch_nids = nids[:batch_size[ntype]]
 
-                df = pd.DataFrame(betas[ntype].squeeze(-1).cpu().numpy(),
-                                  columns=relations, index=nids, dtype=np.float16)
-                df = df.loc[batch_nids]
-                df.index.name = f"{ntype}_nid"
+            df = pd.DataFrame(betas[ntype].squeeze(-1).cpu().numpy(),
+                              columns=relations, index=nids, dtype=np.float16)
+            df = df.loc[batch_nids]
+            df.index.name = f"{ntype}_nid"
 
-                if len(self._betas) == 0 or ntype not in self._betas:
-                    self._betas[ntype] = df
-                else:
-                    self._betas[ntype].update(df, overwrite=True)
+            if len(self._betas) == 0 or ntype not in self._betas:
+                self._betas[ntype] = df
+            else:
+                self._betas[ntype].update(df, overwrite=True)
 
     @property
     def _beta_std(self):

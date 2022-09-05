@@ -201,6 +201,8 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
         else:
             raise Exception(f"Edge types `{metapaths}` are ill formed.")
 
+        if subgraph.number_of_edges() == 0: continue
+
         try:
             biadj = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
                                                     format="coo")

@@ -6,10 +6,9 @@ from typing import Union, Tuple, List, Dict, Optional, Set
 import pandas as pd
 import torch
 from logzero import logger
+from moge.dataset.utils import is_negative
 from torch import Tensor
 from torch_sparse import SparseTensor, spspmm
-
-from moge.dataset.utils import is_negative
 
 
 def num_edges(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]]):
@@ -103,7 +102,7 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, Li
 
 
 def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],
-                          filter_edge=False, threshold=0.3, use_edge_values=False):
+                          filter_edge=False, threshold=0.3, use_edge_values=True) -> Tuple[Tensor, Tensor]:
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
 

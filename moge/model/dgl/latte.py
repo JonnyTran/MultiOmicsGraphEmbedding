@@ -7,11 +7,10 @@ import torch.nn.functional as F
 from dgl.heterograph import DGLBlock
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
-from torch import nn as nn, Tensor
-
 from moge.model.PyG.relations import RelationAttention
 from moge.model.PyG.utils import filter_metapaths, max_num_hops, join_metapaths
 from moge.model.dgl.utils import ChainMetaPaths
+from torch import nn as nn, Tensor
 
 
 class LATTEConv(nn.Module, RelationAttention):
@@ -242,8 +241,8 @@ class LATTEConv(nn.Module, RelationAttention):
             beta_mean = {ntype: betas[ntype].mean(2) for ntype in betas}
             global_node_index = {ntype: nid[:beta_mean[ntype].size(0)] \
                                  for ntype, nid in g.ndata["_ID"].items() if ntype in beta_mean}
-            self.save_relation_attn_weights(beta_mean, global_node_index,
-                                            batch_size={ntype: emb.size(0) for ntype, emb in feat_dst.items()})
+            self.update_relation_attn(beta_mean, global_node_index,
+                                      batch_size={ntype: emb.size(0) for ntype, emb in feat_dst.items()})
 
         return h_out
 

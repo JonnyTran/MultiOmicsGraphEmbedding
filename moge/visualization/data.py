@@ -8,12 +8,11 @@ import plotly.graph_objects as go
 import xarray as xr
 from datashader import reductions as rd
 from holoviews.operation.datashader import rasterize
+from moge.visualization.utils import configure_layout
 from plotly.subplots import make_subplots
 from scipy.sparse import coo_matrix
 from scipy.sparse import issparse
 from sklearn.metrics import classification_report
-
-from moge.visualization.utils import configure_layout
 
 hv.extension('plotly')
 
@@ -33,19 +32,40 @@ def rasterize_matrix(mtx: np.array, x_label="X", y_label="Y", size=1000):
     return go.Figure(fig)
 
 
-def heatmap_fast(mtx, x_label, y_label, size=1000):
-    pw_s = xr.DataArray(mtx,
-                        # coords=[(x_label, np.arange(mtx.shape[0])),
-                        #              (y_label, np.arange(mtx.shape[1]))]
-                        )
-    cvs = ds.Canvas(plot_width=int(size * mtx.shape[0] / sum(mtx.shape)),
-                    plot_height=int(size * mtx.shape[1] / sum(mtx.shape)),
-                    x_range=(0, mtx.shape[1]),
-                    y_range=(0, mtx.shape[0]))
+def heatmap_fast(arr: pd.DataFrame, row_label="row", col_label="col", size=1000, agg="mean", **kwargs):
+    if isinstance(arr, pd.DataFrame):
+        rows, row_label = arr.index, arr.index.name
+        cols, col_label = arr.columns, arr.columns.name
+    else:
+        rows = np.arange(arr.shape[0])
+        cols = np.arange(arr.shape[1])
 
-    agg = cvs.raster(pw_s, agg=rd.mean())
+    pw_s = xr.DataArray(arr, coords=[(row_label, rows), (col_label, cols)])
 
-    fig = px.imshow(agg, labels={"x": x_label, "y": y_label}).update_layout(autosize=False, )
+    plot_width = int(size * cols.size / sum(arr.shape))
+    plot_height = int(size * rows.size / sum(arr.shape))
+    cvs = ds.Canvas(plot_height=plot_height, plot_width=plot_width,
+                    # x_range=(0, arr.shape[1]),
+                    # y_range=(0, arr.shape[0])
+                    )
+
+    if agg == 'avg':
+        agg_fn = rd.mean()
+    elif agg == 'max':
+        agg_fn = rd.max()
+    elif agg == 'min':
+        agg_fn = rd.min()
+    else:
+        agg_fn = rd.mean()
+
+    agg = cvs.raster(pw_s, agg=agg_fn)
+
+    if 'height' not in kwargs or 'width' not in kwargs:
+        kwargs['height'] = plot_height
+        kwargs['width'] = plot_width
+
+    fig = px.imshow(agg, labels={"x": row_label, "y": col_label}) \
+        .update_layout(autosize=True, **kwargs)
     return fig
 
 
@@ -66,30 +86,6 @@ def clf_report_compare(y_train, y_train_pred, y_test, y_test_pred, classes, thre
     return pd.concat([train, test], axis=1)
 
 
-def heatmap(table: pd.DataFrame, file_output=None, title=None, autosize=True, width=800, height=1000):
-    if not hasattr(table, "columns"):
-        columns = None
-    elif type(table.columns) == pd.MultiIndex:
-        columns = table.columns.to_series().apply(lambda x: '{0}-{1}'.format(*x))
-    else:
-        columns = table.columns
-
-    fig = go.Figure(data=go.Heatmap(
-        z=table,
-        x=columns,
-        y=table.index if hasattr(table, "index") else None,
-        hoverongaps=False, ))
-
-    fig = configure_layout(
-        fig,
-        title=title,
-        width=width,
-        height=height, ).update_layout(autosize=autosize, )
-
-    if file_output:
-        fig.write_image(file_output)
-
-    return fig
 
 def heatmap_compare(y_true, y_pred, file_output=None, title=None, autosize=True, width=1400, height=700):
     if not hasattr(y_true, "columns"):
