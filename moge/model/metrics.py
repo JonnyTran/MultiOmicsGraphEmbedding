@@ -39,9 +39,9 @@ class Metrics(torch.nn.Module):
             metrics = []
 
         for metric in metrics:
-            if "precision" == metric:
+            if "precision" in metric:
                 self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)
-            elif "recall" == metric:
+            elif "recall" in metric:
                 self.metrics[metric] = Recall(average=True, is_multilabel=multilabel)
 
             elif "top_k" in metric:
@@ -61,17 +61,20 @@ class Metrics(torch.nn.Module):
             elif "micro_f1" in metric:
                 self.metrics[metric] = F1Score(num_classes=n_classes, average="micro",
                                                top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
+
+            elif "fmax_" in metric:
+                self.metrics[metric] = FMax_()
             elif "fmax" in metric:
                 self.metrics[metric] = FMax()
 
-            elif "mse" == metric:
+            elif "mse" in metric:
                 self.metrics[metric] = MeanSquaredError()
-            elif "auroc" == metric:
+            elif "auroc" in metric:
                 self.metrics[metric] = AUROC(num_classes=n_classes, average="micro")
             elif "aupr" in metric:
-                self.metrics[metric] = AveragePrecision(average="pairwise")
+                self.metrics[metric] = AveragePrecision(average="micro")
 
-            elif "accuracy" in metric:
+            elif "acc" in metric:
                 self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
                                                 subset_accuracy=multilabel)
 
@@ -85,7 +88,9 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = OGBNodeClfMetrics(
                     GraphEvaluator(metric[0] if isinstance(metric, (list, tuple)) else metric))
             else:
-                print(f"WARNING: metric {metric} doesn't exist")
+                logger.warn(f"metric name {metric} not supported. Must containing a substring in "
+                            f"['precision', 'recall', 'top_k', 'macro_f1', 'micro_f1', 'fmax', 'mse', "
+                            f"'auroc', 'aupr', 'acc', 'ogbn', 'ogbl', 'ogbg', ]")
                 continue
 
             # Needed to add the PytorchGeometric methods as Modules, so they'll be on the correct CUDA device during training
@@ -102,12 +107,15 @@ class Metrics(torch.nn.Module):
             return labels
 
     def update_metrics(self, y_pred: Tensor, y_true: Tensor,
-                       weights=Optional[Tensor], subset: List[str] = None):
+                       weights=Optional[Tensor], subset: Union[List[str], str] = None):
         """
         Args:
             y_pred:
             y_true:
             weights:
+            subset (str, list): Used to only update a subset of metrics. If `subset` is a string, then only update
+                metrics with names containing the substring. If `subset` is a list of string, then select the metrics
+                with names in the list.
         """
         y_pred = y_pred.detach().clone()
         y_true = y_true.detach().clone()
@@ -117,8 +125,10 @@ class Metrics(torch.nn.Module):
 
         if subset is None:
             metrics = self.metrics.keys()
-        else:
+        elif isinstance(subset, (list, set, tuple)):
             metrics = [name for name in subset if name in self.metrics]
+        elif isinstance(subset, str):
+            metrics = [name for name in self.metrics if subset in name]
 
         for name in metrics:
             # Torch ignite metrics
@@ -327,37 +337,15 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
 
 
 class FMax(torchmetrics.Metric):
-    def __init__(self):
-        """
-
-        Args:
-            average : {'micro', 'samples', 'weighted', 'macro', 'pairwise'} or None,             default='macro'
-                If ``None``, the scores for each class are returned. Otherwise,
-                this determines the type of averaging performed on the data:
-
-                ``'micro'``:
-                    Calculate metrics globally by considering each element of the label
-                    indicator matrix as a label.
-                ``'macro'``:
-                    Calculate metrics for each label, and find their unweighted
-                    mean.  This does not take label imbalance into account.
-                ``'weighted'``:
-                    Calculate metrics for each label, and find their average, weighted
-                    by support (the number of true instances for each label).
-                ``'samples'``:
-                    Calculate metrics for each instance, and find their average.
-                ``'pairwise'``:
-                    Calculate metrics for each sample and each class individually and
-                    average them.
-
-        """
+    def __init__(self, thresholds: Union[int, Tensor, List[float]] = 100):
         super().__init__()
+        self.thresholds = np.linspace(0, 1.0, thresholds)
 
     def reset(self):
         self._scores = []
         self._n_samples = []
 
-    def update(self, scores, targets):
+    def update(self, scores: Tensor, targets: Tensor):
         n_samples = scores.shape[0]
         if isinstance(scores, Tensor):
             scores = scores.detach().cpu().numpy()
@@ -365,19 +353,21 @@ class FMax(torchmetrics.Metric):
             targets = targets.detach().cpu().numpy()
 
         fmax_t = 0.0, 0.0
-        for thresh in (c / 100 for c in range(101)):
+        for thresh in self.thresholds:
             cut_sc = ssp.csr_matrix((scores >= thresh).astype(np.int32))
-            correct = cut_sc.multiply(targets).sum(axis=1)
+            TP = cut_sc.multiply(targets).sum(axis=1)
 
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
-                p, r = correct / cut_sc.sum(axis=1), correct / targets.sum(axis=1)
-                p, r = np.average(p[np.invert(np.isnan(p))]), np.average(r)
-            if np.isnan(p):
+                precision = TP / cut_sc.sum(axis=1)
+                recall = TP / targets.sum(axis=1)
+                precision, recall = np.average(precision[np.invert(np.isnan(precision))]), np.average(recall)
+            if np.isnan(precision):
                 continue
 
             try:
-                fmax_t = max(fmax_t, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
+                fmax = 2 * precision * recall / (precision + recall) if precision + recall > 0.0 else 0.0
+                fmax_t = max(fmax_t, (fmax, thresh))
             except ZeroDivisionError:
                 pass
 
@@ -506,11 +496,12 @@ class AveragePrecision(torchmetrics.Metric):
     def update(self, y_pred, y_true):
         y_true_ = y_true.detach().cpu().numpy()
         y_pred_ = y_pred.detach().cpu().numpy()
-        average = self.average
-        if self.average == "pairwise":
-            y_true_ = y_true_.flatten()
-            y_pred_ = y_pred_.flatten()
-            average = "micro"
+        # average = self.average
+        average = 'micro'
+        # if self.average == "pairwise":
+        #     y_true_ = y_true_.flatten()
+        #     y_pred_ = y_pred_.flatten()
+        #     average = "micro"
 
         score = average_precision_score(y_true_, y_pred_, average=average)
 

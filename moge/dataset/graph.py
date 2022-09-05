@@ -269,8 +269,10 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
 
             counts[counts == 0] = 1
             self.class_weight = torch.true_divide(num_samples, counts)  # per class: Num samples / num pos examples
-            self.pos_weight = torch.true_divide(num_samples - counts,
-                                                counts)  # per class: num neg examples / num pos examples
+
+            # per class: num neg examples / num pos examples
+            self.pos_weight = torch.true_divide(torch.mean(counts), counts)
+            self.pos_weight = torch.maximum(1.0, torch.minimum(10.0, self.pos_weight))
 
             assert self.class_weight.numel() == self.n_classes, \
                 f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
