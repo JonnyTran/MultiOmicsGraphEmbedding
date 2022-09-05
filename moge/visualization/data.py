@@ -17,14 +17,17 @@ from sklearn.metrics import classification_report
 hv.extension('plotly')
 
 
-def rasterize_matrix(mtx: np.array, x_label="X", y_label="Y", size=1000):
-    x_size = max(int(size * mtx.shape[1] / sum(mtx.shape)), 500)
-    y_size = max(int(size * mtx.shape[0] / sum(mtx.shape)), 500)
+def rasterize_matrix(mtx: pd.DataFrame, x_label="X", y_label="Y", size=1000):
+    if isinstance(mtx, pd.DataFrame):
+        x_label = mtx.columns.name
+        y_label = mtx.index.name
+    width = max(int(size * mtx.shape[1] / sum(mtx.shape)), 500)
+    height = max(int(size * mtx.shape[0] / sum(mtx.shape)), 500)
 
     img = hv.Image((np.arange(mtx.shape[1]), np.arange(mtx.shape[0]), mtx))
-    rasterized_img = rasterize(img, width=x_size, height=y_size)
+    rasterized_img = rasterize(img, width=width, height=height)
 
-    rasterized_img.opts(width=x_size, height=y_size, xlabel=x_label, ylabel=y_label)
+    rasterized_img.opts(width=width, height=height, xlabel=x_label, ylabel=y_label)
     rasterized_img.opts(invert_yaxis=True, cmap=px.colors.sequential.Plasma, logz=True,
                         show_legend=True)
 

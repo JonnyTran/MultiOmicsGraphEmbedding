@@ -174,7 +174,10 @@ class RelationAttention(ABC):
             self._alphas = {}
 
         for ntype, nids in global_node_index.items():
-            if batch_sizes and ntype not in batch_sizes: continue
+            if batch_sizes != None and ntype not in batch_sizes:
+                continue
+            elif batch_sizes[ntype] == 0:
+                continue
             batch_nids = nids[:batch_sizes[ntype]].cpu().numpy()
             counts_df = []
 
@@ -183,7 +186,7 @@ class RelationAttention(ABC):
                 head_type, tail_type = metapath[0], metapath[-1]
                 edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], )
 
-                dst_nids, dst_edge_counts = edge_index[1].unique(return_counts=True)
+                dst_nids, dst_edge_counts = edge_index[1].cpu().unique(return_counts=True)
                 dst_nids = nids[dst_nids].cpu().numpy()
 
                 # Edge counts
@@ -195,14 +198,14 @@ class RelationAttention(ABC):
 
                 # Edge attn
                 if edge_values is None or save_count_only or tail_type not in batch_sizes: continue
-                value, row, col = edge_values.max(1).values.detach().numpy(), \
-                                  edge_index[0].numpy(), edge_index[1].numpy()
+                value, row, col = edge_values.cpu().max(1).values.numpy(), \
+                                  edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
                 csc_matrix = ssp.coo_matrix((value, (row, col)),
                                             shape=(global_node_index[head_type].shape[0],
                                                    global_node_index[tail_type].shape[0])).transpose().tocsc()
                 edge_attn = pd.DataFrame.sparse.from_spmatrix(csc_matrix)
-                edge_attn.index = pd.Index(global_node_index[tail_type].numpy(), name=f"{tail_type}_nid")
-                edge_attn.columns = pd.Index(global_node_index[head_type].numpy(), name=f"{head_type}_nid")
+                edge_attn.index = pd.Index(global_node_index[tail_type].cpu().numpy(), name=f"{tail_type}_nid")
+                edge_attn.columns = pd.Index(global_node_index[head_type].cpu().numpy(), name=f"{head_type}_nid")
                 edge_attn = edge_attn.loc[batch_nids]
 
                 if len(self._alphas) == 0 or metapath_name not in self._alphas:
@@ -219,7 +222,6 @@ class RelationAttention(ABC):
                         self._alphas[metapath_name].update(
                             edge_attn.filter(existing_cols, axis='columns'), overwrite=True)
 
-                    self._alphas[metapath_name].update(edge_attn, overwrite=True)
 
             if counts_df:
                 counts_df = pd.concat(counts_df, axis=1, join="outer", copy=False) \
