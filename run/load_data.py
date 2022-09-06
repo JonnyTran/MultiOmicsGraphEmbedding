@@ -7,7 +7,6 @@ from typing import Union
 import dgl
 import numpy as np
 import pandas as pd
-from cogdl.datasets.gtn_data import GTNDataset
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
@@ -106,6 +105,7 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
         dataset._name = "ACM"
 
     elif name == "DBLP":
+        from cogdl.datasets.gtn_data import GTNDataset
         dataset = DGLNodeGenerator.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-dblp"),
                                                     neighbor_sizes=hparams.neighbor_sizes,
                                                     sampler="MultiLayerNeighborSampler",
@@ -118,6 +118,7 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
         dataset._name = "DBLP"
 
     elif name == "IMDB":
+        from cogdl.datasets.gtn_data import GTNDataset
         dataset = DGLNodeGenerator.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-imdb"),
                                                     neighbor_sizes=hparams.neighbor_sizes,
                                                     sampler="MultiLayerNeighborSampler",

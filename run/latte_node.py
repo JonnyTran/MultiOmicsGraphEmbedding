@@ -2,10 +2,6 @@ import random
 import sys
 from argparse import ArgumentParser, Namespace
 
-# logger = logging.getLogger("wandb")
-# logger.setLevel(logging.INFO)
-from run.utils import parse_yaml_config
-
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 from pytorch_lightning.utilities.seed import seed_everything
@@ -15,6 +11,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from moge.model.PyG.node_clf import LATTEFlatNodeClf
 from run.load_data import load_node_dataset
+from run.utils import parse_yaml_config, select_empty_gpu
 
 
 def train(hparams: Namespace):
@@ -50,9 +47,17 @@ def train(hparams: Namespace):
     callbacks.append(ModelCheckpoint(monitor='val_loss',
                                      filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'))
 
+    if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
+        GPUS = [hparams.gpu]
+    elif hparams.num_gpus == 1:
+        best_gpu = select_empty_gpu()
+        GPUS = [best_gpu]
+    else:
+        GPUS = random.sample([0, 1, 2], NUM_GPUS)
+
     trainer = Trainer(
-        accelerator='ddp' if NUM_GPUS > 1 else 'cuda',
-        devices=random.sample([0, 1, 2, 3], NUM_GPUS),
+        accelerator='cuda',
+        devices=GPUS,
         auto_lr_find=False,
         # auto_scale_batch_size=True if hparams.n_layers > 2 else False,
         log_every_n_steps=1,
