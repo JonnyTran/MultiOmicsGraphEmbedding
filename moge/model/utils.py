@@ -75,10 +75,10 @@ def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
 
 
 def filter_samples_weights(y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, return_index=False):
-    if weights is None or not isinstance(weights, (Tensor, np.ndarray) or weights.shape == None):
+    if weights is None or not isinstance(weights, (Tensor, np.ndarray)) or weights.shape == None:
         return y_pred, y_true, None
 
-    if isinstance(weights, Tensor):
+    if isinstance(weights, Tensor) and weights.numel():
         idx = torch.nonzero(weights).ravel()
     else:
         idx = torch.tensor(np.nonzero(weights)[0])

@@ -115,7 +115,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
                              node_type: str, node_mask: Tensor,
-                             transform_fn: Callable = None, num_workers=10, verbose=False, **kwargs):
+                             transform_fn: Callable = None, num_workers=10, verbose=False, shuffle=True, **kwargs):
         min_expansion_size = min(self.neighbor_sizes)
         # max_expansion_size = self.num_nodes_dict[self.go_ntype]
         max_expansion_size = 100
@@ -142,7 +142,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     # directed=True,
                     transform=transform_fn,
                     input_nodes=(node_type, node_mask),
-                    shuffle=True,
+                    shuffle=shuffle,
                     num_workers=num_workers,
                     **kwargs)
 
@@ -363,7 +363,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         node_mask = graph[self.head_node_type].train_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
 
         dataset = self.create_graph_sampler(graph, batch_size, node_type=self.head_node_type, node_mask=node_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers,
+                                            shuffle=True)
 
         return dataset
 
@@ -372,7 +373,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         node_mask = graph[self.head_node_type].valid_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
 
         dataset = self.create_graph_sampler(self.G, batch_size, node_type=self.head_node_type, node_mask=node_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers,
+                                            shuffle=False)
 
         return dataset
 
@@ -381,7 +383,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         node_mask = graph[self.head_node_type].test_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
 
         dataset = self.create_graph_sampler(self.G, batch_size, node_type=self.head_node_type, node_mask=node_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers,
+                                            shuffle=False)
 
         return dataset
 

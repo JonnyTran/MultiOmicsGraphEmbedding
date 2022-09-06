@@ -11,15 +11,15 @@ from dgl.dataloading import BlockSampler
 from dgl.sampling import RandomWalkNeighborSampler
 from dgl.utils import prepare_tensor_dict, prepare_tensor
 from logzero import logger
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
 from ogb.nodeproppred import DglNodePropPredDataset
 from pandas import Index, DataFrame
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
 
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
 from ..PyG.node_generator import HeteroNeighborGenerator
@@ -595,7 +595,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
         collator, collate_fn = self.get_node_collator(graph, seed_nodes, collate_fn, self.neighbor_sampler)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collate_fn,
-                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
 
         return dataloader
 
@@ -615,7 +615,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
         collator, collate_fn = self.get_node_collator(graph, seed_nodes, collate_fn, self.neighbor_sampler)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collate_fn,
-                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
 
         return dataloader
 

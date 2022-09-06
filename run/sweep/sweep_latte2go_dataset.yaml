@@ -1,5 +1,5 @@
 program: run/latte_node.py
-method: bayes
+method: grid
 
 metric:
   goal: maximize
@@ -7,12 +7,14 @@ metric:
 
 early_terminate:
   type: hyperband
-  max_iter: 27
-  s: 2
+  max_iter: 160
+  s: 8
 
 parameters:
   dataset:
     values: [ 'UniProtGOA_HUMAN', 'UniProtGOA_HUMAN_DeepGraphGO' ]
+  feature:
+    values: [ true, false ]
   namespaces:
     values: [ 'm' ]
   embedding_dim:
@@ -34,7 +36,7 @@ parameters:
   n_neighbors:
     values: [ 1024 ]
   cls_graph:
-    values: [ true ]
+    values: [ true, false ]
   attn_heads:
     values: [ 4 ]
   inductive:

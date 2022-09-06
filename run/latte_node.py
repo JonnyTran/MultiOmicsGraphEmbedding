@@ -100,6 +100,7 @@ if __name__ == "__main__":
     parser.add_argument('--inductive', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
     parser.add_argument('--freeze_embeddings', type=bool, default=True)
+    parser.add_argument('--feature', type=bool, default=True)
     parser.add_argument('--ntype_subset', type=str, default=None)
 
     parser.add_argument('--head_node_type', type=str, default='Protein')
