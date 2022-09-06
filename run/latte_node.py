@@ -90,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument('--inductive', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
     parser.add_argument('--freeze_embeddings', type=bool, default=True)
-    parser.add_argument('--ntype_subset', nargs='+', default=[])
+    parser.add_argument('--ntype_subset', nargs='+', default=None)
 
     parser.add_argument('--head_node_type', type=str, default='Protein')
     parser.add_argument('--namespaces', type=str, default='m')
@@ -102,6 +102,7 @@ if __name__ == "__main__":
     parser.add_argument('-g', '--num_gpus', type=int, default=1)
     parser.add_argument("-d", '--embedding_dim', type=int, default=256)
     parser.add_argument('-n', '--batch_size', type=int, default=1024)
+    parser.add_argument('--neighbor_loader', type=str, default="HGTLoader")
     parser.add_argument('--n_neighbors', type=int, default=20)
     parser.add_argument("-l", '--n_layers', type=int, default=2)
     parser.add_argument("-t", '--t_order', type=int, default=2)

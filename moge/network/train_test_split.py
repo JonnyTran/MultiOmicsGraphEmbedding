@@ -233,7 +233,7 @@ class TrainTestSplit():
                                 exclude_metapaths: List[Tuple[str, str, str]] = None):
         # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
         for metapath, nxgraph in self.networks.items():
-            if exclude_metapaths and metapath in exclude_metapaths:
+            if exclude_metapaths is not None and metapath in exclude_metapaths:
                 continue
             edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=train_nodes,
                                                  valid_nodes=valid_nodes, test_nodes=test_nodes)

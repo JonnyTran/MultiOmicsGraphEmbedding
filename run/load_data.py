@@ -197,7 +197,7 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                 max_length=hparams.max_length)
         else:
             sequence_tokenizers = None
-
+        print('hparams.ntype_subset', hparams.ntype_subset)
         dataset = HeteroNodeClfDataset.from_heteronetwork(
             network, target="go_id",
             labels_subset=geneontology.data.index.intersection(go_classes),
@@ -212,7 +212,8 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
             go_ntype="GO_term",
             seq_tokenizer=sequence_tokenizers,
             inductive=hparams.inductive,
-            ntype_subset=hparams.ntype_subset if hparams.ntype_subset else None,
+            ntype_subset=hparams.ntype_subset \
+                if hparams.ntype_subset else set(network.nodes.keys()).difference(['GO_term']),
             exclude_metapaths=[
                 (head_node_type, 'associated', 'GO_term'),
                 ('GO_term', 'rev_associated', head_node_type),
@@ -225,6 +226,8 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
             ])
         dataset._name = name
         hparams.classes = dataset.classes
+
+        print(dataset.G)
 
         if hasattr(hparams, 'cls_graph') and hparams.cls_graph:
             cls_network_nodes = dataset.classes.tolist() + go_classes.difference(dataset.classes).tolist()

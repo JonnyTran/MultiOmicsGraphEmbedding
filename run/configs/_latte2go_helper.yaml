@@ -1,7 +1,8 @@
-dataset: "rna_ppi_go"
-root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
-train_date: '2018-01-01'
-sequence: true
+dataset: "UniProtGOA"
+deepgraphgo_data: '../DeepGraphGO/data'
+root_path: "../Multiplex-Graph-Embedding/data/heteronetwork/HUMAN_gtex_uniprot_MirTarBase_LncBase_lncRNA2Target_STRING_mRNAprotein_network.pickle"
+
+sequence: false
 
 bert_config:
   MicroRNA: "models/bert_mlm_MicroRNA/"
@@ -18,18 +19,16 @@ max_length:
   Protein: 1200
   GO_term: 150
 
-head_node_type: "MessengerRNA"
-layer_pooling: "last"
-
+head_node_type: "Protein"
 attn_activation: "LeakyReLU"
 activation: "relu"
 
 input_dropout: false
-neg_sampling_ratio: 1000
-batch_size: 12000
+batch_size: 4096
 
-loss_type: "CONTRASTIVE_LOSS"
+loss_type: "BCE_WITH_LOGITS"
 max_epochs: 300
 sweep: true
 lr: 0.001
-hours: 1.5
+hours: 3
+early_stopping: 5
