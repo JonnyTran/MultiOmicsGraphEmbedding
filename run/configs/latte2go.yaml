@@ -1,5 +1,5 @@
-#dataset: "UniProt+DeepGraphGO"
-dataset: "UniProt"
+#dataset: "UniProtGOA+DeepGraphGO"
+dataset: "UniProtGOA"
 deepgraphgo_data: '../DeepGraphGO/data'
 root_path: "../Multiplex-Graph-Embedding/data/heteronetwork/HUMAN_gtex_uniprot_MirTarBase_LncBase_lncRNA2Target_STRING_mRNAprotein_network.pickle"
 
@@ -17,6 +17,7 @@ t_order: 1
 embedding_dim: 256
 layer_pooling: "concat"
 cls_graph: true
+inductive: false
 
 attn_heads: 4
 attn_activation: "LeakyReLU"

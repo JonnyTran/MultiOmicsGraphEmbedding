@@ -162,10 +162,10 @@ class LATTENodeClf(NodeClfTrainer):
 
         if batch_nb % 100 == 0 and isinstance(self.train_metrics, Metrics):
             logs = self.train_metrics.compute_metrics()
-            self.log("loss", loss, logger=True, on_step=True)
         else:
             logs = {}
 
+        self.log("loss", loss, logger=True, on_step=True)
         self.log_dict(logs, prog_bar=True, logger=True)
 
         return loss

@@ -1,52 +1,49 @@
 program: run/latte_link.py
 method: bayes
+
 metric:
   goal: maximize
-  name: "val_BPO_mrr"
+  name: "val_BPO_aupr"
+
 early_terminate:
   type: hyperband
   max_iter: 27
   s: 2
+
 parameters:
-  head_node_type:
-    values: [ "Protein", "MessengerRNA" ]
+  dataset:
+    values: [ 'UniProtGOA', 'UniProtGOA+DeepGraphGO' ]
+  namespaces:
+    values: [ 'b' ]
   embedding_dim:
-    values: [ 128, 256, 512, 768 ]
+    values: [ 256, 512 ]
   t_order:
     values: [ 1, 2 ]
   n_layers:
     values: [ 1,2,3 ]
   neighbor_loader:
-    values: [ "NeighborLoader", "HGTLoader" ]
+    values: [ "HGTLoader" ]
   n_neighbors:
-    values: [ 128, 256, 512 ]
+    values: [ 2048, 1024, 512 ]
+  cls_graph:
+    values: [ true, false ]
   attn_heads:
     values: [ 1, 2, 4, 8 ]
   attn_dropout:
     min: 0.0
-    max: 0.4
+    max: 0.5
     distribution: uniform
-  attn_activation:
-    values: [ "LeakyReLU" ]
-  batchnorm:
-    values: [ True, False ]
-  layernorm:
-    values: [ True, False ]
-  sequence:
-    values: [ True, False ]
-  scoring:
-    values: [ "DistMult", "TransE" ]
   dropout:
     min: 0.0
-    max: 0.4
+    max: 0.5
     distribution: uniform
   negative_sampling_size:
     min: 1
     max: 2000
     distribution: uniform
   loss_type:
-    values: [ "CONTRASTIVE_LOSS" ]
+    values: [ "BCE_WITH_LOGITS" ]
   weight_decay:
     values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
   config:
-    values: [ "run/configs/_latte2go_helper.yaml" ]
+    values: [ "run/configs/latte2go.yaml" ]

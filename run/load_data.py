@@ -171,12 +171,14 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
         network.train_nodes[head_node_type] = set(annot_df.query('train_mask == True').index)
         network.valid_nodes[head_node_type] = set(annot_df.query('valid_mask == True').index)
         network.test_nodes[head_node_type] = set(annot_df.query('test_mask == True').index)
-        network.set_edge_traintest_mask(network.train_nodes, network.valid_nodes, network.test_nodes)
+        network.set_edge_traintest_mask(network.train_nodes, network.valid_nodes, network.test_nodes,
+                                        exclude_metapaths=[] if not hparams.inductive else None)
 
         # Set classes
         namespaces = set(hparams.namespaces) if not isinstance(hparams.namespaces,
                                                                (list, set, tuple)) else hparams.namespaces
         go_classes = geneontology.data.index[geneontology.data['namespace'].str.get(0).isin(namespaces)]
+        hparams.namespaces = geneontology.data.loc[go_classes, 'namespace'].unique().tolist()
 
         # Neighbor loader
         if hparams.neighbor_loader == "HGTLoader":

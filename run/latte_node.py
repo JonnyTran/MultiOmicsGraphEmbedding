@@ -21,7 +21,6 @@ def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = True  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 100
-
     seed_everything(seed=hparams.seed)
 
     hparams.neighbor_sizes = [hparams.n_neighbors, ] * hparams.n_layers
@@ -39,7 +38,10 @@ def train(hparams: Namespace):
     hparams.head_node_type = dataset.head_node_type
     model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
 
-    logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="LATTE2GO")
+    tags = [dataset.name()]
+    if hasattr(hparams, "namespaces"):
+        tags.extend(hparams.namespaces)
+    logger = WandbLogger(name=model.name(), tags=tags, project="LATTE2GO")
     logger.log_hyperparams(hparams)
 
     callbacks = []
@@ -53,6 +55,7 @@ def train(hparams: Namespace):
         devices=random.sample([0, 1, 2, 3], NUM_GPUS),
         auto_lr_find=False,
         # auto_scale_batch_size=True if hparams.n_layers > 2 else False,
+        log_every_n_steps=1,
         max_epochs=MAX_EPOCHS,
         callbacks=callbacks,
         logger=logger,
