@@ -23,7 +23,7 @@ from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import edge_index_to_adjs
-from moge.model.metrics import Metrics
+from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
 
@@ -154,6 +154,7 @@ class ClusteringEvaluator(LightningModule):
 
 class NodeEmbeddingEvaluator(LightningModule):
     dataset: HeteroGraphDataset
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.attn_plot_name = "sankey_flow"
@@ -161,7 +162,8 @@ class NodeEmbeddingEvaluator(LightningModule):
         self.score_avg_table_name = "score_avgs"
         self.beta_degree_corr_table_name = "beta_degree_correlation"
 
-    def plot_embeddings_tsne(self, global_node_index: Dict[str, Tensor], embeddings: Dict[str, Tensor],
+    def plot_embeddings_tsne(self, global_node_index: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
+                             embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
                              columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> DataFrame:
         node_losses = self.get_node_loss(targets, y_pred, global_node_index=global_node_index)
@@ -188,6 +190,20 @@ class NodeEmbeddingEvaluator(LightningModule):
             global_node_index ():
         """
         raise NotImplementedError
+
+    def plot_pr_curve(self, targets: Union[Tensor, pd.DataFrame], scores: Union[Tensor, pd.DataFrame],
+                      title="PR Curve"):
+        if self.wandb_experiment is None:
+            return
+        preds = (scores.values if isinstance(scores, pd.DataFrame) else scores).ravel()
+        target = (targets.values if isinstance(targets, pd.DataFrame) else targets).ravel()
+
+        recall_micro, precision_micro, _ = precision_recall_curve(target, preds, n_thresholds=100, average='micro')
+
+        data = [[x, y] for (x, y) in zip(recall_micro, precision_micro)]
+        table = wandb.Table(data=data, columns=["recall_micro", "precision_micro"])
+        wandb.log({title: wandb.plot.line(table, "recall_micro", "precision_micro",
+                                          stroke=None, title="Average Precision")})
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
         if self.wandb_experiment is None or not hasattr(self.embedder, "layers") or \
@@ -365,7 +381,6 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         metrics_dict = {}
         if isinstance(self.valid_metrics, Metrics):
             metrics_dict = self.valid_metrics.compute_metrics()
-
             self.valid_metrics.reset_metrics()
 
         elif isinstance(self.valid_metrics, dict):

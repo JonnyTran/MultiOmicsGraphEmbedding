@@ -8,6 +8,12 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -16,11 +22,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -211,11 +212,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if not hasattr(self, "node_metadata"):
             self.create_node_metadata(self.network, nodes=self.nodes)
 
-        global_node_index = {ntype: nids.numpy() for ntype, nids in global_node_index.items() \
+        global_node_index = {ntype: nids.numpy() if isinstance(nids, Tensor) else nids \
+                             for ntype, nids in global_node_index.items() \
                              if ntype in embeddings}
 
         # Concatenated list of node embeddings and other metadata
-        nodes_emb = {ntype: embeddings[ntype].detach().numpy() for ntype in embeddings}
+        nodes_emb = {ntype: embeddings[ntype].detach().numpy() \
+            if isinstance(embeddings[ntype], Tensor) else embeddings[ntype] \
+                     for ntype in embeddings}
         nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
 
         nodes_train_valid_test = np.vstack([
@@ -330,7 +334,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return H
 
-    def split_labels_by_nodes_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray]):
+    def split_labels_by_nodes_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray, DataFrame]):
         assert hasattr(self, "nodes_namespace")
         nodes_namespaces = self.nodes_namespace[self.go_ntype][self.classes]
 
@@ -338,11 +342,18 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         for namespace in np.unique(nodes_namespaces):
             mask = nodes_namespaces == namespace
 
-            if isinstance(labels, (Tensor, np.ndarray, DataFrame)):
+            if isinstance(labels, (Tensor, np.ndarray)):
                 y_dict[namespace] = labels[:, mask]
+
+            elif isinstance(labels, DataFrame):
+                y_dict[namespace] = labels.loc[:, mask]
+
             elif isinstance(labels, dict):
                 for ntype, labels in labels.items():
-                    y_dict.setdefault(ntype, {})[namespace] = labels[:, mask]
+                    if isinstance(labels, DataFrame):
+                        y_dict.setdefault(ntype, {})[namespace] = labels.loc[:, mask]
+                    else:
+                        y_dict.setdefault(ntype, {})[namespace] = labels[:, mask]
 
         return y_dict
 

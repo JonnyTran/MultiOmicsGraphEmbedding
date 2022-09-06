@@ -2,9 +2,9 @@ import logging
 import math
 import traceback
 from argparse import Namespace
-from pprint import pprint
 from typing import Dict, Iterable, Union, Tuple, Any, List
 
+import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
@@ -29,7 +29,7 @@ from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, tensor_sizes
+from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -139,10 +139,10 @@ class LATTENodeClf(NodeClfTrainer):
             self.embedder.layers[l].reset_betas()
         super().on_test_epoch_start()
 
-    def on_validation_epoch_end(self) -> None:
+    def on_validation_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
             self.embedder.layers[l].reset_betas()
-        super().on_validation_epoch_end()
+        super().on_validation_epoch_start()
 
     def on_predict_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
@@ -151,14 +151,14 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X)
+        scores = self.forward(X)
 
-        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
+        scores, y_true, weights = stack_tensor_dicts(scores, y_true, weights)
+        scores, y_true, weights = filter_samples_weights(y_pred=scores, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
-        loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights)
+        loss = self.criterion.forward(scores, y_true, weights=weights)
+        self.update_node_clf_metrics(self.train_metrics, scores, y_true, weights)
 
         if batch_nb % 100 == 0 and isinstance(self.train_metrics, Metrics):
             logs = self.train_metrics.compute_metrics()
@@ -215,39 +215,82 @@ class LATTENodeClf(NodeClfTrainer):
 
         return predict_loss
 
-    def predict(self, dataloader, node_names=None, filter_nan_labels=True, **kwargs):
-        y_true = []
-        y_pred = []
+    @torch.no_grad()
+    def predict(self, dataloader: DataLoader, node_names: pd.Index = None, **kwargs) \
+            -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, np.ndarray]]:
+        targets = []
+        scores = []
+        embeddings = []
+        nids = []
 
-        for X_test, y_test, w_test in tqdm.tqdm(dataloader):
-            y_test_pred, _, edge_index = self.forward(X_test, save_betas=True)
+        for batch in tqdm.tqdm(dataloader, desc='Predict dataloader'):
+            X, y_true, weights = batch
+            h_dict, logits = self.forward(X, save_betas=True, return_embeddings=True)
+            y_pred = activation(logits, loss_type=self.hparams.loss_type)
 
-            y_test_pred, y_test, w_test = stack_tensor_dicts(y_test_pred, y_test, w_test)
-            mask_idx = filter_samples_weights(y_pred=y_test_pred, y_true=y_test, weights=w_test, return_index=True)
+            y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+            y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
+            mask_idx = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
 
-            y_test = y_test[mask_idx]
-            y_test_pred = activation(y_test_pred, loss_type=self.hparams["loss_type"])[mask_idx]
-            w_test = w_test[mask_idx]
+            y_true = y_true[mask_idx]
+            y_pred = activation(y_pred[mask_idx], loss_type=self.hparams["loss_type"])
 
-            node_ids = X_test["global_node_index"][-1][self.head_node_type].numpy()[mask_idx]
+            global_node_index = X["global_node_index"][-1] if isinstance(X["global_node_index"], (list, tuple)) else X[
+                "global_node_index"]
+            node_ids = global_node_index[self.head_node_type].cpu().numpy()[mask_idx]
             if node_names is not None:
-                node_ids = node_names[node_ids]
+                index = node_names[node_ids]
+            else:
+                index = pd.Index(node_ids, name=f"{self.head_node_type}_nid")
 
-            y_test = pd.DataFrame(y_test.numpy(), index=node_ids, columns=self.dataset.classes)
-            y_test_pred = pd.DataFrame(y_test_pred.detach().cpu().numpy(), index=node_ids, columns=self.dataset.classes)
+            y_true = pd.DataFrame(y_true.cpu().numpy(), index=index, columns=self.dataset.classes)
+            y_pred = pd.DataFrame(y_pred.cpu().numpy(), index=index, columns=self.dataset.classes)
+            emb = pd.DataFrame(h_dict[self.head_node_type][mask_idx].cpu().numpy(), index=index)
 
-            y_true.append(y_test)
-            y_pred.append(y_test_pred)
+            targets.append(y_true)
+            scores.append(y_pred)
+            embeddings.append(emb)
+            nids.append(node_ids)
 
-        y_true = pd.concat(y_true, axis=0)
-        y_pred = pd.concat(y_pred, axis=0)
+        targets = pd.concat(targets, axis=0)
+        scores = pd.concat(scores, axis=0)
+        embeddings = pd.concat(embeddings, axis=0)
+        nids = {self.head_node_type: np.concatenate(nids, axis=0)}
 
-        if filter_nan_labels:
-            mask_labels = y_true.columns[y_true.sum(0) > 0]
-            y_true = y_true.filter(mask_labels, axis=1)
-            y_pred = y_pred.filter(mask_labels, axis=1)
+        return targets, scores, embeddings, nids
 
-        return y_true, y_pred
+    def on_validation_end(self) -> None:
+        super().on_validation_end()
+        if self.current_epoch % 50 == 1:
+            self.plot_sankey_flow(layer=-1)
+
+    def on_test_end(self):
+        try:
+            if self.wandb_experiment is not None:
+                y_true, scores, embs, nids = self.predict(self.test_dataloader())
+
+                if hasattr(self.dataset, "nodes_namespace"):
+                    y_true_dict = self.dataset.split_labels_by_nodes_namespace(y_true)
+                    y_pred_dict = self.dataset.split_labels_by_nodes_namespace(scores)
+
+                    for namespace in y_true_dict.keys():
+                        go_type = "BPO" if namespace == 'biological_process' else \
+                            "CCO" if namespace == 'cellular_component' else \
+                                "MFO" if namespace == 'molecular_function' else namespace
+                        self.plot_pr_curve(targets=y_true_dict[namespace],
+                                           scores=y_pred_dict[namespace],
+                                           title=f"{go_type} PR Curve")
+
+                self.plot_embeddings_tsne(global_node_index=nids, embeddings={self.head_node_type: embs},
+                                          targets=y_true, y_pred=scores)
+                self.plot_sankey_flow(layer=-1)
+                self.cleanup_artifacts()
+
+        except Exception as e:
+            traceback.print_exc()
+
+        finally:
+            super().on_test_end()
 
 
 class LATTEFlatNodeClf(LATTENodeClf):
@@ -375,7 +418,6 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
-        pprint(self.valid_metrics.compute_metrics())
 
         self.log("val_loss", val_loss, )
 
@@ -400,30 +442,6 @@ class LATTEFlatNodeClf(LATTENodeClf):
         self.log("test_loss", test_loss)
 
         return test_loss
-
-
-    def on_validation_end(self) -> None:
-        super().on_validation_end()
-        if self.current_epoch % 50 == 1:
-            self.plot_sankey_flow(layer=-1)
-
-    def on_test_end(self):
-        try:
-            if self.wandb_experiment is not None:
-                X, y_true, weights = self.dataset.full_batch()
-                embs, logits = self.cpu().forward(X, return_embeddings=True, save_betas=True)
-                print(tensor_sizes(X['global_node_index']))
-                self.plot_embeddings_tsne(X['global_node_index'], embs, targets=y_true[self.head_node_type],
-                                          y_pred=activation(logits, loss_type=self.hparams.loss_type), weights=weights)
-                self.plot_sankey_flow(layer=-1)
-                self.cleanup_artifacts()
-
-        except Exception as e:
-            traceback.print_exc()
-
-        finally:
-            super().on_test_end()
-
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):

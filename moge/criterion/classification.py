@@ -1,5 +1,7 @@
-import pandas as pd
+from typing import Dict, Tuple, List, Any, Union
 
+import numpy as np
+import pandas as pd
 from sklearn import svm
 from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
 from sklearn.model_selection import cross_validate
@@ -50,39 +52,43 @@ def evaluate_classification(embedding, network, cv=5, node_label="Family", multi
     return scores
 
 
-def compute_roc_auc_curve(y_test, y_score, class_indices, sample_weight=None):
-    if isinstance(y_score, pd.DataFrame):
-        y_score = y_score.values
-    if isinstance(y_test, pd.DataFrame):
-        y_score = y_test.values
+def compute_roc_auc_curve(targets, scores, class_indices, sample_weight=None):
+    if isinstance(scores, pd.DataFrame):
+        scores = scores.values
+    if isinstance(targets, pd.DataFrame):
+        scores = targets.values
 
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
     for i in class_indices:
-        fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
+        fpr[i], tpr[i], _ = roc_curve(targets[:, i], scores[:, i],
                                       sample_weight=sample_weight if sample_weight is not None else None)
         roc_auc[i] = auc(fpr[i], tpr[i])
     # Compute micro-average ROC curve and ROC area
-    fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
+    fpr["micro"], tpr["micro"], _ = roc_curve(targets.ravel(), scores.ravel())
     roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
     return fpr, roc_auc, tpr
 
 
-def compute_pr_curve(y_test, y_score, class_indices, sample_weight=None):
-    if isinstance(y_score, pd.DataFrame):
-        y_score = y_score.values
-    if isinstance(y_test, pd.DataFrame):
-        y_score = y_test.values
+def compute_pr_curve(targets: np.ndarray, scores, class_indices: List[Any], sample_weight=None) \
+        -> Tuple[Dict[str, Union[np.ndarray, float]], Dict[str, float], Dict[str, Union[np.ndarray, float]]]:
+    if isinstance(scores, pd.DataFrame):
+        scores = scores.values
+    if isinstance(targets, pd.DataFrame):
+        scores = targets.values
 
     precision = dict()
     recall = dict()
     avg_precision = dict()
     for i in class_indices:
-        precision[i], recall[i], _ = precision_recall_curve(y_test[:, i], y_score[:, i],
-                                                            sample_weight=sample_weight if sample_weight is not None else None)
-        avg_precision[i] = average_precision_score(precision[i], recall[i])
+        precision[i], recall[i], _ = precision_recall_curve(targets[:, i], scores[:, i],
+                                                            sample_weight=sample_weight)
+
+        avg_precision[i] = average_precision_score(targets[:, i], scores[:, i])
+
     # Compute micro-average ROC curve and ROC area
-    precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
-    avg_precision["micro"] = average_precision_score(precision["micro"], recall["micro"], average="micro")
+    precision["micro"], recall["micro"], _ = precision_recall_curve(targets.ravel(), scores.ravel())
+    avg_precision["micro"] = average_precision_score(targets.ravel(), scores.ravel(), average="micro")
+    avg_precision["macro"] = average_precision_score(targets, scores, average="macro")
     return precision, avg_precision, recall

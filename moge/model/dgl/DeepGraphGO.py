@@ -19,14 +19,15 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
-from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
-from sklearn.metrics import average_precision_score as aupr
+from sklearn.metrics import average_precision_score
 from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -172,7 +173,7 @@ def fmax(targets: np.ndarray, scores: np.ndarray) -> Tuple[float, float]:
 def pair_aupr(targets: ssp.csr_matrix, scores: np.ndarray, top=200):
     scores[np.arange(scores.shape[0])[:, None],
            scores.argpartition(scores.shape[1] - top)[:, :-top]] = -1e100
-    return aupr(targets.toarray().flatten(), scores.flatten())
+    return average_precision_score(targets.toarray().flatten(), scores.flatten())
 
 
 def output_res(res_path: Path, pid_list, go_list, sc_mat):
