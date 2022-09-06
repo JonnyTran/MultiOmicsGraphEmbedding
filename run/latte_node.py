@@ -1,3 +1,4 @@
+import datetime
 import random
 import sys
 from argparse import ArgumentParser, Namespace
@@ -11,7 +12,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from moge.model.PyG.node_clf import LATTEFlatNodeClf
 from run.load_data import load_node_dataset
-from run.utils import parse_yaml_config, select_empty_gpu
+from run.utils import parse_yaml_config, select_empty_gpus
 
 
 def train(hparams: Namespace):
@@ -27,8 +28,11 @@ def train(hparams: Namespace):
 
     if "GO" in hparams.dataset:
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
+        monitor = 'val_BPO_aupr'
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
+        monitor = 'val_loss'
+
 
     hparams.loss_type = hparams.loss_type
     hparams.n_classes = dataset.n_classes
@@ -43,27 +47,30 @@ def train(hparams: Namespace):
 
     callbacks = []
     if hparams.early_stopping:
-        callbacks.append(EarlyStopping(monitor='val_loss', patience=hparams.early_stopping, strict=False))
-    callbacks.append(ModelCheckpoint(monitor='val_loss',
-                                     filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'))
+        callbacks.append(EarlyStopping(monitor=monitor, patience=hparams.early_stopping, strict=False))
+    # callbacks.append(ModelCheckpoint(monitor='val_loss',
+    #                                  filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'))
 
     if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
         GPUS = [hparams.gpu]
     elif hparams.num_gpus == 1:
-        best_gpu = select_empty_gpu()
-        GPUS = [best_gpu]
+        GPUS = select_empty_gpus()
     else:
         GPUS = random.sample([0, 1, 2], NUM_GPUS)
 
+    print("GPUS", GPUS)
     trainer = Trainer(
         accelerator='cuda',
         devices=GPUS,
         auto_lr_find=False,
+        # enable_progress_bar=False,
         # auto_scale_batch_size=True if hparams.n_layers > 2 else False,
         log_every_n_steps=1,
         max_epochs=MAX_EPOCHS,
         callbacks=callbacks,
         logger=logger,
+        # max_time=datetime.timedelta(hours=hparams.hours) \
+        #     if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
         # plugins='deepspeed' if NUM_GPUS > 1 else None,
         # accelerator='ddp_spawn',
         # plugins='ddp_sharded'

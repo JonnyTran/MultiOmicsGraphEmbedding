@@ -103,11 +103,13 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
                       weights: Optional[Dict[str, Tensor]] = None) \
         -> Tuple[Tensor, Tensor, Tensor]:
     # Filter out node types which have no labels and ensure same order of ntypes
-    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items() \
-                              if ntype in y_true and y_true[ntype].numel()})
+    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items()})
 
     if isinstance(y_true, dict):
         y_true_concat = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+    elif isinstance(y_true, Tensor):
+        size = list(batch_size.values())[0]
+        y_true_concat = y_true[:size]
 
     if isinstance(y_pred, dict):
         y_pred_concat = torch.cat([y_pred[ntype][:size] for ntype, size in batch_size.items()], dim=0)
@@ -117,6 +119,9 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
 
     if isinstance(weights, dict):
         weights = torch.cat([weights[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+    elif isinstance(weights, (np.ndarray, pd.Series, pd.DataFrame, Tensor)):
+        size = list(batch_size.values())[0]
+        weights = y_pred[:size]
 
     return y_pred_concat, y_true_concat, weights
 

@@ -181,8 +181,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 k = sizes[middle]
                 n = sizes[tail]
 
-            device = orig_device if device is None else device
             orig_device = edge_index_a.device
+            device = orig_device if device is None else device
 
             if not isinstance(values_a, Tensor):
                 values_a = None  # torch.ones(edge_index_a.size(1), dtype=torch.float, device=device)

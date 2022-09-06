@@ -2,10 +2,11 @@ import logging
 import os
 from argparse import ArgumentParser, Namespace
 from pprint import pprint
-from typing import Union
+from typing import Union, List
 
 import dgl
 import dill
+import pynvml
 import torch
 import yaml
 
@@ -49,13 +50,19 @@ def adjust_batch_size(hparams):
     return int(batch_size)
 
 
-def select_empty_gpu():
-    gpu_mem_free = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
-    best_gpu = max(gpu_mem_free, key=gpu_mem_free.get)
+def select_empty_gpus() -> List[int]:
+    pynvml.nvmlInit()
+    deviceCount = pynvml.nvmlDeviceGetCount()
 
-    del gpu_mem_free
-    torch.cuda.empty_cache()
-    return best_gpu
+    available = []
+    for i in range(deviceCount):
+        device = pynvml.nvmlDeviceGetHandleByIndex(i)
+        info = pynvml.nvmlDeviceGetMemoryInfo(device)
+
+        available.append((info.free / info.total, i))
+
+    best_gpu = max(available)[1]
+    return [best_gpu]
 
 
 def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeGenerator], path: str, skip_ntype: str = None,

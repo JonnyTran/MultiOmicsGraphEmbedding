@@ -17,7 +17,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from moge.model.PyG.link_pred import LATTEFlatLinkPred
 from run.load_data import load_link_dataset
-from run.utils import parse_yaml_config, adjust_batch_size, select_empty_gpu
+from run.utils import parse_yaml_config, adjust_batch_size, select_empty_gpus
 
 
 def train(hparams: Namespace):
@@ -59,8 +59,7 @@ def train(hparams: Namespace):
     if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
         GPUS = [hparams.gpu]
     elif hparams.num_gpus == 1:
-        best_gpu = select_empty_gpu()
-        GPUS = [best_gpu]
+        GPUS = select_empty_gpus()
     else:
         GPUS = hparams.num_gpus
 
@@ -74,7 +73,6 @@ def train(hparams: Namespace):
         max_epochs=hparams.max_epochs,
         callbacks=callbacks,
         logger=logger,
-        weights_summary='top',
         max_time=datetime.timedelta(hours=hparams.hours) \
             if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
         precision=16

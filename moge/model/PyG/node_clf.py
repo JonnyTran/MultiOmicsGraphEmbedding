@@ -266,7 +266,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def on_validation_end(self) -> None:
         super().on_validation_end()
-        if self.current_epoch % 50 == 1:
+        if self.current_epoch % 50 == 1 and not hasattr(self.hparams, "sweep") or not self.hparams.sweep:
             self.plot_sankey_flow(layer=-1)
 
     def on_test_end(self):
