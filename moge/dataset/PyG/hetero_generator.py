@@ -276,7 +276,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # return only nodes that have > 0 weights (used for visualization of node clf models)
         if weights is not None:
             nodes_weight = {ntype: weights[ntype].detach().numpy() \
-                if isinstance(weights[ntype], Tensor) else weights[ntype] for ntype in weights}
+                if isinstance(weights[ntype], Tensor) else weights[ntype] \
+                            for ntype in weights}
             nodes_weight = np.concatenate([nodes_weight[ntype] for ntype in global_node_index]).astype(bool)
 
             return df.loc[nodes_weight]

@@ -29,7 +29,7 @@ from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
+from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -224,7 +224,7 @@ class LATTENodeClf(NodeClfTrainer):
         nids = []
 
         for batch in tqdm.tqdm(dataloader, desc='Predict dataloader'):
-            X, y_true, weights = batch
+            X, y_true, weights = to_device(batch, device=self.device)
             h_dict, logits = self.forward(X, save_betas=True, return_embeddings=True)
             y_pred = activation(logits, loss_type=self.hparams.loss_type)
 
@@ -279,7 +279,7 @@ class LATTENodeClf(NodeClfTrainer):
                                 "MFO" if namespace == 'molecular_function' else namespace
                         self.plot_pr_curve(targets=y_true_dict[namespace],
                                            scores=y_pred_dict[namespace],
-                                           title=f"{go_type} PR Curve")
+                                           title=f"{go_type}_PR_Curve")
 
                 self.plot_embeddings_tsne(global_node_index=nids, embeddings={self.head_node_type: embs},
                                           targets=y_true, y_pred=scores)

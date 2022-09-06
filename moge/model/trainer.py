@@ -192,7 +192,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         raise NotImplementedError
 
     def plot_pr_curve(self, targets: Union[Tensor, pd.DataFrame], scores: Union[Tensor, pd.DataFrame],
-                      title="PR Curve"):
+                      title="PR_Curve"):
         if self.wandb_experiment is None:
             return
         preds = (scores.values if isinstance(scores, pd.DataFrame) else scores).ravel()
@@ -202,8 +202,8 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         data = [[x, y] for (x, y) in zip(recall_micro, precision_micro)]
         table = wandb.Table(data=data, columns=["recall_micro", "precision_micro"])
-        wandb.log({title: wandb.plot.line(table, "recall_micro", "precision_micro",
-                                          stroke=None, title="Average Precision")})
+        wandb.log({title: wandb.plot.line(table, x="recall_micro", y="precision_micro",
+                                          stroke=None, title=title.replace("_", " "))})
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
         if self.wandb_experiment is None or not hasattr(self.embedder, "layers") or \
@@ -427,9 +427,14 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         else:
             metrics.update_metrics(y_pred, y_true, weights=weights, subset=subset)
 
+    @torch.no_grad()
     def get_node_loss(self, targets: Tensor, y_pred: Tensor, global_node_index: Dict[str, Tensor] = None):
-        losses = F.binary_cross_entropy(y_pred.detach(),
-                                        target=targets.float(),
+        y_pred = torch.from_numpy(y_pred.values if isinstance(y_pred, pd.DataFrame) else y_pred) \
+            if not isinstance(y_pred, Tensor) else y_pred
+        target = torch.from_numpy(targets.values if isinstance(targets, pd.DataFrame) else targets) \
+            if not isinstance(targets, Tensor) else targets
+
+        losses = F.binary_cross_entropy(y_pred, target=target.float(),
                                         reduce=False).mean(dim=1).numpy()
 
         losses = {self.head_node_type: losses}

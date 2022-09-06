@@ -6,7 +6,6 @@ import numpy as np
 import scipy.sparse as ssp
 import torch
 import torchmetrics
-import tqdm
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
 from logzero import logger
@@ -15,8 +14,8 @@ from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from sklearn.metrics import average_precision_score
 from torch import Tensor
-from torchmetrics import Metric, F1Score, AUROC, MeanSquaredError, Accuracy, AveragePrecision
-from torchmetrics.functional import precision, recall
+from torchmetrics import Metric, F1Score, AUROC, MeanSquaredError, Accuracy, AveragePrecision, \
+    BinnedPrecisionRecallCurve
 from torchmetrics.utilities.data import METRIC_EPS, to_onehot
 
 from .utils import filter_samples, tensor_sizes, activation
@@ -582,11 +581,6 @@ def precision_recall_curve(y_true: Tensor, y_pred: Tensor, n_thresholds=100, ave
     else:
         scores = y_pred
 
-    PR, RC, Threshs = [], [], []
-    for thresh in tqdm.tqdm(np.linspace(0, 1.0, n_thresholds)):
-        pred = scores >= thresh
-        PR.append(precision(target=targets, preds=pred, average=average))
-        RC.append(recall(target=targets, preds=pred, average=average))
-        Threshs.append(thresh)
-
-    return np.array(PR), np.array(RC), np.array(Threshs)
+    pr_curve = BinnedPrecisionRecallCurve(num_classes=1, thresholds=n_thresholds)
+    precision, recall, thresholds = pr_curve(preds=scores, target=targets)
+    return precision, recall, thresholds

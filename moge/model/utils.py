@@ -4,6 +4,7 @@ from typing import Dict, Tuple, Optional, Union, List
 
 import dgl
 import numpy as np
+import pandas as pd
 import torch
 from dgl._deprecate.graph import DGLGraph
 from dgl.heterograph import DGLBlock, DGLHeteroGraph
@@ -38,13 +39,13 @@ def to_device(obj: Union[Dict, List, Tensor], device: str):
             res[k] = to_device(v, device)
         return res
 
-    elif isinstance(obj, list):
+    elif isinstance(obj, (list, tuple)):
         res = []
         for v in obj:
             res.append(to_device(v, device))
         return res
 
-    elif isinstance(obj, (int, float, str)) or obj is None:
+    elif obj is None or isinstance(obj, (int, float, str, np.ndarray, pd.DataFrame, type(None))):
         return obj
 
     else:
@@ -160,6 +161,15 @@ def stack_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
 
 
 def tensor_sizes(input=None, **kwargs) -> ...:
+    """
+    A very useful method to inspect the sizes of tensors in object containing Tensors
+    Args:
+        input ():
+        **kwargs ():
+
+    Returns:
+
+    """
     if kwargs:
         return tensor_sizes(kwargs)
 
