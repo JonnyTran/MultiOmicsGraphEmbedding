@@ -9,9 +9,10 @@ import pandas as pd
 import tqdm
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 from logzero import logger
-from moge.model.utils import tensor_sizes
 from networkx.classes.reportviews import EdgeView
 from sklearn.preprocessing import MultiLabelBinarizer
+
+from moge.model.utils import tensor_sizes
 
 
 def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):
@@ -228,10 +229,11 @@ class TrainTestSplit():
         return edge_attrs
 
     def set_edge_traintest_mask(self, train_nodes: Mapping[str, Set[str]], valid_nodes: Mapping[str, Set[str]],
-                                test_nodes: Mapping[str, Set[str]], exclude_metapaths: List[Tuple[str, str, str]]):
+                                test_nodes: Mapping[str, Set[str]],
+                                exclude_metapaths: List[Tuple[str, str, str]] = None):
         # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
         for metapath, nxgraph in self.networks.items():
-            if metapath in exclude_metapaths:
+            if exclude_metapaths and metapath in exclude_metapaths:
                 continue
             edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=train_nodes,
                                                  valid_nodes=valid_nodes, test_nodes=test_nodes)

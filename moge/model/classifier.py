@@ -7,17 +7,18 @@ import dgl
 import networkx as nx
 import numpy as np
 import torch
-from moge.model.dgl.HGT import HGT
 from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
 
+from moge.model.dgl.HGT import HGT
+
 
 class LabelGraphNodeClassifier(nn.Module):
-    def __init__(self, hparams: Namespace):
+    def __init__(self, dataset, hparams: Namespace):
         super().__init__()
         self.n_classes = hparams.n_classes
-        self.classes = hparams.classes
+        self.classes = dataset.classes
         self.n_heads = hparams.attn_heads
 
         if hparams.layer_pooling == "concat":
@@ -37,11 +38,10 @@ class LabelGraphNodeClassifier(nn.Module):
         else:
             go_encoder = None
 
-        # self.embedder = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
-        #                            out_size=hparams.embedding_dim, encoder=go_encoder)
         self.embeddings = nn.ParameterDict(
             {ntype: nn.Embedding(self.g.num_nodes(ntype), embedding_dim=hparams.embedding_dim) for ntype in
              self.g.ntypes})
+        print("model.classifier.embeddings", self.embeddings)
 
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(self.g.ntypes)},
                             edge_dict={etype: i for i, etype in enumerate(self.g.etypes)},
@@ -52,7 +52,6 @@ class LabelGraphNodeClassifier(nn.Module):
                             dropout=hparams.dropout,
                             use_norm=True)
 
-        self.embedder.cls_graph_nodes = hparams.classes
 
     def forward(self, embeddings: Tensor, classes: Optional[List[str]] = None,
                 cls_emb: Dict[str, Tensor] = None) -> Tensor:
@@ -68,7 +67,7 @@ class LabelGraphNodeClassifier(nn.Module):
         if classes is None:
             cls_emb = cls_emb[:self.n_classes]
         else:
-            mask = np.isin(self.embedder.cls_graph_nodes, classes, )
+            mask = np.isin(self.classes, classes, )
             cls_emb = cls_emb[mask]
 
         logits = embeddings @ cls_emb.T

@@ -75,7 +75,7 @@ class LATTENodeClf(NodeClfTrainer):
             assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
         if "cls_graph" in hparams and hparams.cls_graph:
-            self.classifier = LabelGraphNodeClassifier(hparams)
+            self.classifier = LabelGraphNodeClassifier(dataset, hparams)
         else:
             self.classifier = DenseClassification(hparams)
 
@@ -336,7 +336,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         if self.embedder.layer_pooling == 'concat':
             hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
         if "cls_graph" in hparams and hparams.cls_graph is not None:
-            self.classifier = LabelGraphNodeClassifier(hparams)
+            self.classifier = LabelGraphNodeClassifier(dataset, hparams)
         else:
             self.classifier = DenseClassification(hparams)
 
@@ -819,7 +819,7 @@ class HGTNodeClf(LATTEFlatNodeClf):
 
         # Output layer
         if "cls_graph" in hparams and hparams.cls_graph is not None:
-            self.classifier = LabelGraphNodeClassifier(hparams)
+            self.classifier = LabelGraphNodeClassifier(dataset, hparams)
 
         elif hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":

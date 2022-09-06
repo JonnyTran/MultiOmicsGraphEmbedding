@@ -1,8 +1,37 @@
-dataset: "rna_ppi_go"
-root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
+#dataset: "UniProt+DeepGraphGO"
+dataset: "UniProt"
+deepgraphgo_data: '../DeepGraphGO/data'
+root_path: "../Multiplex-Graph-Embedding/data/heteronetwork/HUMAN_gtex_uniprot_MirTarBase_LncBase_lncRNA2Target_STRING_mRNAprotein_network.pickle"
 
 #load_path: "models/latte2go.ckpt"
-save_path: "models/latte2go_2nd_e256.ckpt"
+save_path: "models/latte2go_deepgraphgo.ckpt"
+
+namespaces: 'm'
+
+head_node_type: "Protein"
+use_reverse: true
+neighbor_loader: "HGTLoader"
+n_neighbors: 1024
+n_layers: 2
+t_order: 1
+embedding_dim: 256
+layer_pooling: "concat"
+cls_graph: true
+
+attn_heads: 4
+attn_activation: "LeakyReLU"
+attn_dropout: 0.2
+
+batchnorm: false
+layernorm: false
+activation: "relu"
+dropout: 0.5
+
+loss_type: "BCE_WITH_LOGITS"
+batch_size: 4096
+lr: 0.001
+weight_decay: 0.001
+early_stopping: 2
 
 bert_config:
   MicroRNA: "models/bert_mlm_MicroRNA/"
@@ -19,28 +48,3 @@ max_length:
   MessengerRNA: 1500
   Protein: 1200
   GO_term: 150
-
-head_node_type: "MessengerRNA"
-use_reverse: true
-neighbor_loader: "NeighborLoader"
-n_neighbors: 128
-n_layers: 2
-t_order: 2
-embedding_dim: 128
-layer_pooling: "last"
-
-scoring: "DistMult"
-attn_heads: 2
-attn_activation: "LeakyReLU"
-attn_dropout: 0.10
-
-batchnorm: false
-layernorm: true
-activation: "relu"
-dropout: 0.2
-neg_sampling_ratio: 600
-
-loss_type: "CONTRASTIVE_LOSS"
-batch_size: 2048
-lr: 0.001
-weight_decay: 0.001

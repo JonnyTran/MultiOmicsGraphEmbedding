@@ -37,7 +37,7 @@ def train(hparams):
     else:
         hparams.neighbor_sizes = [10, 10]
 
-    dataset = load_node_dataset(hparams.dataset, hparams.method, args=hparams, train_ratio=hparams.train_ratio,
+    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
 
     METRICS = ["micro_f1", "macro_f1",
