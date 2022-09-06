@@ -1,0 +1,57 @@
+program: run/latte_node.py
+method: bayes
+
+metric:
+  goal: maximize
+  name: "val_BPO_aupr"
+
+early_terminate:
+  type: hyperband
+  max_iter: 27
+  s: 2
+
+parameters:
+  dataset:
+    values: [ 'UniProtGOA', 'UniProtGOA+DeepGraphGO' ]
+  namespaces:
+    values: [ 'm' ]
+  embedding_dim:
+    values: [ 256, 512 ]
+  layer_pooling:
+    values: [ 'concat', 'last' ]
+  t_order:
+    values: [ 1, 2 ]
+  n_layers:
+    values: [ 1,2,3 ]
+  neighbor_loader:
+    values: [ "HGTLoader" ]
+  ntype_subset:
+    values:
+      - 'Protein MessengerRNA MicroRNA LncRNA'
+      - 'Protein MessengerRNA MicroRNA'
+      - 'Protein MessengerRNA'
+      - 'Protein'
+  n_neighbors:
+    values: [ 2048, 1024, 512 ]
+  cls_graph:
+    values: [ true, false ]
+  attn_heads:
+    values: [ 1, 2, 4, 8 ]
+  inductive:
+    values: [ false ]
+  attn_dropout:
+    min: 0.0
+    max: 0.5
+    distribution: uniform
+  dropout:
+    min: 0.0
+    max: 0.5
+    distribution: uniform
+  loss_type:
+    values: [ "BCE_WITH_LOGITS" ]
+  use_pos_weights:
+    values: [ true, false ]
+  weight_decay:
+    values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
+  config:
+    values: [ "run/configs/_latte2go_helper.yaml" ]

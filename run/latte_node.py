@@ -1,4 +1,3 @@
-import datetime
 import random
 import sys
 from argparse import ArgumentParser, Namespace
@@ -8,7 +7,7 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.model.PyG.node_clf import LATTEFlatNodeClf
 from run.load_data import load_node_dataset
@@ -26,13 +25,13 @@ def train(hparams: Namespace):
     dataset = load_node_dataset(hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
                                 dataset_path=hparams.root_path)
 
+    callbacks = []
     if "GO" in hparams.dataset:
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
-        monitor = 'val_BPO_aupr'
+        early_stopping_args = dict(monitor='val_MFO_aupr', mode='max')
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
-        monitor = 'val_loss'
-
+        early_stopping_args = dict(monitor='val_loss', mode='min')
 
     hparams.loss_type = hparams.loss_type
     hparams.n_classes = dataset.n_classes
@@ -45,9 +44,8 @@ def train(hparams: Namespace):
     logger = WandbLogger(name=model.name(), tags=tags, project="LATTE2GO")
     logger.log_hyperparams(hparams)
 
-    callbacks = []
     if hparams.early_stopping:
-        callbacks.append(EarlyStopping(monitor=monitor, patience=hparams.early_stopping, strict=False))
+        callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
     # callbacks.append(ModelCheckpoint(monitor='val_loss',
     #                                  filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'))
 

@@ -79,7 +79,7 @@ def filter_samples_weights(y_pred: Tensor, y_true: Tensor, weights: Optional[Ten
         return y_pred, y_true, None
 
     if isinstance(weights, Tensor):
-        idx = torch.nonzero(weights).view(-1)
+        idx = torch.nonzero(weights).ravel()
     else:
         idx = torch.tensor(np.nonzero(weights)[0])
 
