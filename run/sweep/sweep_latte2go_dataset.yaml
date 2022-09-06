@@ -5,11 +5,6 @@ metric:
   goal: maximize
   name: "val_MFO_aupr"
 
-early_terminate:
-  type: hyperband
-  max_iter: 160
-  s: 8
-
 parameters:
   dataset:
     values: [ 'UniProtGOA_HUMAN', 'UniProtGOA_HUMAN_DeepGraphGO' ]

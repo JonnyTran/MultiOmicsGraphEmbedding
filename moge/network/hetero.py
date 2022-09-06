@@ -8,17 +8,18 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
+from openomics import MultiOmics
+from openomics.database.ontology import Ontology, GeneOntology
+from pandas import Series, Index, DataFrame
+from torch import Tensor
+from torch_geometric.data import HeteroData
+
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology, GeneOntology
-from pandas import Series, Index, DataFrame
-from torch import Tensor
-from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -167,11 +168,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self._name = f"{src_ntype}-{dst_ntype}_{train_date}-{test_date}"
 
         # Split annotations between genes and GO terms by dates
-        train_ann, valid_ann, test_ann = ontology.split_annotations(src_node_col=src_node_col, dst_node_col="go_id",
-                                                                    train_date=train_date, valid_date=valid_date,
-                                                                    test_date=test_date,
-                                                                    groupby=groupby,
-                                                                    filter_dst_nodes=filter_dst_nodes)
+        train_ann, valid_ann, test_ann = ontology.split_annotations(
+            src_node_col=src_node_col, dst_node_col="go_id", train_date=train_date,
+            valid_date=valid_date,
+            test_date=test_date,
+            groupby=groupby,
+            filter_dst_nodes=filter_dst_nodes)
 
         if split_etype:
             nx_options = dict(edge_key=split_etype, create_using=nx.MultiGraph, edge_attr=True)
@@ -329,7 +331,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                            labels_subset: Optional[Union[Index, np.ndarray]] = None,
                            head_node_type: Optional[str] = None,
                            ntype_subset: Optional[List[str]] = None,
-                           exclude_metapaths: List[Tuple[str, str, str]] = None, sequence=False, expression=False,
+                           exclude_metapaths: List[Tuple[str, str, str]] = None,
+                           sequence=False,
+                           expression=False,
                            train_test_split="edge_id") \
             -> Tuple[dgl.DGLHeteroGraph, Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
@@ -466,10 +470,15 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         return G, classes, dict(self.nodes), training, validation, testing
 
-    def to_pyg_heterodata(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,
-                          labels_subset: Optional[Union[Index, np.ndarray]] = None, head_node_type=None,
+    def to_pyg_heterodata(self, node_attr_cols: List[str] = [],
+                          target="go_id",
+                          min_count=10,
+                          labels_subset: Optional[Union[Index, np.ndarray]] = None,
+                          head_node_type=None,
                           ntype_subset: Optional[List[str]] = None,
-                          exclude_metapaths: List[Tuple[str, str, str]] = None, sequence=False, expression=False,
+                          exclude_metapaths: List[Tuple[str, str, str]] = None,
+                          sequence=False,
+                          expression=False,
                           train_test_split="node_mask") \
             -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
@@ -496,7 +505,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 hetero[metapath][edge_attr] = edge_value
 
         # Add node attributes
-        for ntype in node_types:
+        for ntype in tqdm.tqdm(node_types):
             hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
             annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
 
