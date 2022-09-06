@@ -197,6 +197,8 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                 max_length=hparams.max_length)
         else:
             sequence_tokenizers = None
+
+        hparams.ntype_subset = hparams.ntype_subset.split(" ")
         print('hparams.ntype_subset', hparams.ntype_subset)
         dataset = HeteroNodeClfDataset.from_heteronetwork(
             network, target="go_id",
@@ -225,8 +227,6 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                 ('CCO', 'rev_associated', head_node_type)
             ])
         dataset._name = name
-        hparams.classes = dataset.classes
-
         print(dataset.G)
 
         if hasattr(hparams, 'cls_graph') and hparams.cls_graph:

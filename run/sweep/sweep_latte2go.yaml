@@ -49,6 +49,8 @@ parameters:
     distribution: uniform
   loss_type:
     values: [ "BCE_WITH_LOGITS" ]
+  use_pos_weights:
+    values: [ true, false ]
   weight_decay:
     values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
   config:

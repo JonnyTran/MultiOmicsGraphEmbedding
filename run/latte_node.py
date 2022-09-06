@@ -90,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument('--inductive', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
     parser.add_argument('--freeze_embeddings', type=bool, default=True)
-    parser.add_argument('--ntype_subset', nargs='+', default=None)
+    parser.add_argument('--ntype_subset', type=str, default=None)
 
     parser.add_argument('--head_node_type', type=str, default='Protein')
     parser.add_argument('--namespaces', type=str, default='m')
@@ -128,6 +128,7 @@ if __name__ == "__main__":
 
     # parser.add_argument('--reduction', type=str, default="none")
     parser.add_argument('--use_class_weights', type=bool, default=False)
+    parser.add_argument('--use_pos_weights', type=bool, default=False)
 
     # Optimizer parameters
     parser.add_argument('--sparse', type=bool, default=False)
@@ -136,8 +137,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=0.03)
     parser.add_argument('--weight_decay', type=float, default=1e-3)
     parser.add_argument('--gradient_clip_val', type=float, default=0.0)
-    parser.add_argument('--stochastic_weight_avg', type=bool, default=False)
-    parser.add_argument('--early_stopping', type=int, default=2)
+    parser.add_argument('--early_stopping', type=int, default=5)
     parser.add_argument('--seed', type=int, default=42)
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
