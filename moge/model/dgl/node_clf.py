@@ -7,6 +7,9 @@ from typing import Dict, List, Iterable, Tuple
 import dgl
 import torch
 from dgl.heterograph import DGLBlock
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+
 from moge.dataset.dgl.node_generator import DGLNodeGenerator, HANSampler
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
@@ -14,9 +17,6 @@ from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subset
 from moge.model.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-
 from .HGConv.model.HGConv import HGConv as Hgconv
 from .HGT import HGT
 from .conv import HAN as Han
@@ -36,7 +36,7 @@ class LATTENodeClf(NodeClfTrainer):
         self.dataset: DGLNodeGenerator = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"DGL_LATTE-{hparams.n_layers}"
+        self._name = f"LATTE-{hparams.n_layers}"
         self.collate_fn = collate_fn
 
         if "fanouts" in hparams:

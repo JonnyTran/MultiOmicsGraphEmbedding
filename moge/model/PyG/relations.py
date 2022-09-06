@@ -7,7 +7,6 @@ import pandas as pd
 import scipy.sparse as ssp
 import torch
 from colorhash import ColorHash
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
@@ -15,6 +14,8 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
 from torchtyping import TensorType
+
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -332,7 +333,6 @@ class RelationAttention(ABC):
                                            "mean": [attn_agg, ] * len(targets),
                                            'std': [rel_attn_std.loc[metapath_name], ] * len(targets),
                                            })
-
                 links = links.append(path_links, ignore_index=True)
 
 
@@ -355,8 +355,9 @@ class RelationAttention(ABC):
 
         # Get number of edge_index counts for each metapath
         if node_type in self._counts:
-            nodes["count"] = nodes["metapath"].map(lambda m: self._counts[node_type].sum().get(m, None))
-        nodes.loc[0, 'count'] = rel_attn.index.size  # Number of nodes averaged
+            nodes["count"] = nodes["metapath"].map(lambda m: self._counts[node_type].sum(axis=0).get(m, None))
+        # Set count of target nodes
+        nodes.loc[nodes.query(f'label == "{node_type}" & metapath == "{node_type}"').index, 'count'] = rel_attn.shape[0]
 
         nodes["color"] = nodes[["label", "level"]].apply(
             lambda x: ColorHash(x["label"].strip("rev_")).hex \

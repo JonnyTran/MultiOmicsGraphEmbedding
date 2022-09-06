@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from typing import Dict, Tuple, Optional, Union, List
+from typing import Dict, Tuple, Optional, Union, List, Any
 
 import dgl
 import numpy as np
@@ -26,7 +26,7 @@ def activation(y_pred: Tensor, loss_type: str):
     return y_pred
 
 
-def to_device(obj: Union[Dict, List, Tensor], device: str):
+def to_device(obj: Union[Dict, List[Any], Tensor], device: str):
     if torch.is_tensor(obj):
         return obj.to(device)
 

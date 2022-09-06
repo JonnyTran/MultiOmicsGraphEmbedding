@@ -5,22 +5,25 @@ from argparse import Namespace
 from typing import Union
 
 import dgl
-import moge
-import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
 from cogdl.datasets.gtn_data import GTNDataset
-from moge.dataset import HeteroNeighborGenerator, DGLNodeGenerator, HeteroLinkPredDataset, HeteroNodeClfDataset
-from moge.dataset.dgl.graph_generator import DGLGraphSampler
-from moge.dataset.sequences import SequenceTokenizers
-from moge.model.dgl.NARS.data import load_acm, load_mag
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
-from run.utils import add_node_embeddings
+from openomics.database.ontology import GeneOntology, UniProtGOA
 from torch_geometric.datasets import AMiner
 
-from openomics.database.ontology import GeneOntology
+import moge
+import moge.dataset.PyG.triplet_generator
+from moge.dataset.PyG.hetero_generator import HeteroLinkPredDataset, HeteroNodeClfDataset
+from moge.dataset.dgl.graph_generator import DGLGraphSampler
+from moge.dataset.dgl.node_generator import HeteroNeighborGenerator, DGLNodeGenerator
+from moge.dataset.sequences import SequenceTokenizers
+from moge.dataset.utils import get_edge_index_dict
+from moge.model.dgl.DeepGraphGO import load_protein_dataset
+from moge.model.dgl.NARS.data import load_acm, load_mag
+from run.utils import add_node_embeddings
 
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
@@ -29,6 +32,8 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         use_reverse = False
     else:
         use_reverse = True
+
+    head_node_type = args.head_node_type
 
     if "ogbn" in name and method == "NARS":
         dataset = DGLNodeGenerator.from_heteronetwork(*load_mag(args=args),
@@ -59,13 +64,13 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         with open(os.path.join(dataset_path, 'gtex_rna_ppi_multiplex_network.pickle'), "rb") as file:
             network = pickle.load(file)
 
-        min_count = 0.01
+        min_count = 50
         label_col = 'go_id'
         dataset = DGLNodeGenerator.from_heteronetwork(
             *network.to_dgl_heterograph(target=label_col, min_count=min_count, sequence=False),
             sampler="MultiLayerNeighborSampler",
             neighbor_sizes=args.neighbor_sizes,
-            head_node_type="Protein",  # network.node_types if "LATTE" in method else "MessengerRNA",
+            head_node_type=head_node_type,  # network.node_types if "LATTE" in method else "MessengerRNA",
             edge_dir="in",
             add_reverse_metapaths=use_reverse,
             inductive=False,
@@ -137,9 +142,32 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
                                           head_node_type="user", resample_train=train_ratio,
                                           inductive=args.inductive)
 
-    elif ".pickle" in dataset_path:
+    elif name == 'DeepGraphGO+UniProtGOA' and ".pickle" in dataset_path:
         with open(dataset_path, "rb") as file:
             network = pickle.load(file)
+        geneontology = UniProtGOA()
+
+        annot_df = network.annotations[head_node_type]
+        annot_df['go_id'] = annot_df['go_id'].map(lambda d: d if isinstance(d, (list, np.ndarray)) else [])
+
+        # Add GO interactions
+        all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
+        go_nodes = np.array(list(all_go))
+        network.add_edges_from_ontology(geneontology, nodes=go_nodes, etypes=["is_a", "part_of"])
+
+        uniprot_go_id = load_protein_dataset("../DeepGraphGO/data", namespaces=['mf', 'bp', 'cc'])
+        uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(lambda d: d if isinstance(d, (list, np.ndarray)) else [])
+
+        annot_df = annot_df.join(uniprot_go_id[['train_mask', 'valid_mask', 'test_mask']], on='protein_id')
+
+        annot_df['go_id'] = annot_df['go_id'] + uniprot_go_id.loc[annot_df.index, 'go_id']
+        annot_df['go_id'] = annot_df['go_id'].map(np.unique).map(list)
+
+        network.train_nodes[head_node_type] = set(annot_df.query('train_mask == True').index)
+        network.valid_nodes[head_node_type] = set(annot_df.query('valid_mask == True').index)
+        network.test_nodes[head_node_type] = set(annot_df.query('test_mask == True').index)
+
+        network.set_edge_traintest_mask(network.train_nodes, network.valid_nodes, network.test_nodes)
 
         if hasattr(args, 'sequence') and args.sequence:
             sequence_tokenizers = SequenceTokenizers(
@@ -154,25 +182,41 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
             sequence_tokenizers = None
             use_sequence = False
 
-        hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, sequence=use_sequence,
-                                                           expression=False)
+        namespaces = set(args.namespaces) if not isinstance(args.namespaces, (list, set, tuple)) else args.namespaces
+        go_classes = geneontology.data.index[geneontology.data['namespace'].str.get(0).isin(namespaces)]
 
-        n_neighbors = args.n_neighbors if args.neighbor_loader == "HGTLoader" else args.n_neighbors // 8
+        if args.neighbor_loader == "HGTLoader":
+            neighbor_sizes = [args.n_neighbors // 8] * args.t_order
+        else:
+            neighbor_sizes = [args.n_neighbors] * args.t_order
 
-        dataset = HeteroNodeClfDataset.from_heteronetwork(hetero, classes, nodes,
-                                                          head_node_type=args.head_node_type,
-                                                          neighbor_loader=args.neighbor_loader,
-                                                          neighbor_sizes=[n_neighbors] * args.t_order,
-                                                          seq_tokenizer=sequence_tokenizers)
-
-        geneontology = GeneOntology(
-            file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"})
-        dataset.nodes_namespace = geneontology.data.loc[dataset.classes, "namespace"]
+        dataset = HeteroNodeClfDataset.from_heteronetwork(
+            network, target="go_id",
+            labels_subset=geneontology.data.index.intersection(go_classes),
+            min_count=50,
+            expression=True,
+            sequence=use_sequence, add_reverse_metapaths=use_reverse,
+            head_node_type=args.head_node_type,
+            neighbor_loader=args.neighbor_loader,
+            neighbor_sizes=neighbor_sizes,
+            split_namespace=True, go_ntype="GO_term",
+            seq_tokenizer=sequence_tokenizers,
+            exclude_metapaths=[
+                (head_node_type, 'associated', 'GO_term'),
+                ('GO_term', 'rev_associated', head_node_type),
+                (head_node_type, 'associated', 'BPO'),
+                ('BPO', 'rev_associated', head_node_type),
+                (head_node_type, 'associated', 'MFO'),
+                ('MFO', 'rev_associated', head_node_type),
+                (head_node_type, 'associated', 'CCO'),
+                ('CCO', 'rev_associated', head_node_type)
+            ])
         dataset._name = name
 
-        dataset.ntype_mapping = {'biological_process': "GO_term",
-                                 'cellular_component': "GO_term",
-                                 'molecular_function': "GO_term"}
+        if hasattr(args, 'cls_graph') and args.cls_graph:
+            cls_network = dgl.heterograph(
+                get_edge_index_dict(geneontology.network, nodes=dataset.classes, format="dgl"))
+            args.cls_graph = cls_network
 
     else:
         raise Exception(f"dataset {name} not found")

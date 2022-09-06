@@ -134,15 +134,15 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             return logits
 
-    def on_test_epoch_start(self) -> None:
-        for l in range(self.embedder.n_layers):
-            self.embedder.layers[l].reset_betas()
-        super().on_test_epoch_start()
-
     def on_validation_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
             self.embedder.layers[l].reset_betas()
         super().on_validation_epoch_start()
+
+    def on_test_epoch_start(self) -> None:
+        for l in range(self.embedder.n_layers):
+            self.embedder.layers[l].reset_betas()
+        super().on_test_epoch_start()
 
     def on_predict_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
@@ -199,7 +199,6 @@ class LATTENodeClf(NodeClfTrainer):
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
         self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
-
         self.log("test_loss", test_loss)
 
         return test_loss
@@ -235,17 +234,23 @@ class LATTENodeClf(NodeClfTrainer):
             y_true = y_true[mask_idx]
             y_pred = activation(y_pred[mask_idx], loss_type=self.hparams["loss_type"])
 
-            global_node_index = X["global_node_index"][-1] if isinstance(X["global_node_index"], (list, tuple)) else X[
-                "global_node_index"]
-            node_ids = global_node_index[self.head_node_type].cpu().numpy()[mask_idx]
+            global_node_index = X["global_node_index"][-1] \
+                if isinstance(X["global_node_index"], (list, tuple)) else X["global_node_index"]
+            emb = h_dict[self.head_node_type][mask_idx]
+
+            # Covert all to CPU device
+            y_true, y_pred, emb, mask_idx, global_node_index = to_device(
+                [y_true, y_pred, emb, mask_idx, global_node_index], device='cpu')
+
+            node_ids = global_node_index[self.head_node_type].numpy()[mask_idx]
             if node_names is not None:
                 index = node_names[node_ids]
             else:
                 index = pd.Index(node_ids, name=f"{self.head_node_type}_nid")
 
-            y_true = pd.DataFrame(y_true.cpu().numpy(), index=index, columns=self.dataset.classes)
-            y_pred = pd.DataFrame(y_pred.cpu().numpy(), index=index, columns=self.dataset.classes)
-            emb = pd.DataFrame(h_dict[self.head_node_type][mask_idx].cpu().numpy(), index=index)
+            y_true = pd.DataFrame(y_true.numpy(), index=index, columns=self.dataset.classes)
+            y_pred = pd.DataFrame(y_pred.numpy(), index=index, columns=self.dataset.classes)
+            emb = pd.DataFrame(emb.numpy(), index=index)
 
             targets.append(y_true)
             scores.append(y_pred)

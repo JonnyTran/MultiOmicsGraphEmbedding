@@ -308,11 +308,14 @@ class NodeEmbeddingEvaluator(LightningModule):
         api = wandb.Api(overrides={"project": experiment.project, "entity": experiment.entity})
 
         artifact_type, artifact_name = "run_table", f"run-{experiment.id}-{self.attn_plot_name}"
-        for version in api.artifact_versions(artifact_type, artifact_name):
-            # Clean up all versions that don't have an alias such as 'latest'.
-            # NOTE: You can put whatever deletion logic you want here.
-            if len(version.aliases) == 0:
-                version.delete()
+        try:
+            for version in api.artifact_versions(artifact_type, artifact_name):
+                # Clean up all versions that don't have an alias such as 'latest'.
+                # NOTE: You can put whatever deletion logic you want here.
+                if len(version.aliases) == 0:
+                    version.delete()
+        except Exception as e:
+            print(e.__repr__(), f"artifact_type: {artifact_type}, artifact_name: {artifact_name}")
 
         # artifact_type, artifact_name = "run_table", f"run-{experiment.id}-{self.embedding_plot_name}"
         # for version in api.artifact_versions(artifact_type, artifact_name):
