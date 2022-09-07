@@ -188,11 +188,11 @@ class TrainTestSplit():
                              for ntype, nodelist in self.nodes.items()}
         nonincident_nodes = defaultdict(set, {k: v for k, v in nonincident_nodes.items() if v})
 
-        train_nodes = {train_nodes[ntype].union(nonincident_nodes[ntype]) \
+        train_nodes = {ntype: train_nodes[ntype].union(nonincident_nodes[ntype]) \
                        for ntype in set(train_nodes.keys()).union(nonincident_nodes.keys())}
-        valid_nodes = {valid_nodes[ntype].union(nonincident_nodes[ntype]) \
+        valid_nodes = {ntype: valid_nodes[ntype].union(nonincident_nodes[ntype]) \
                        for ntype in set(valid_nodes.keys()).union(nonincident_nodes.keys())}
-        test_nodes = {test_nodes[ntype].union(nonincident_nodes[ntype]) \
+        test_nodes = {ntype: test_nodes[ntype].union(nonincident_nodes[ntype]) \
                       for ntype in set(test_nodes.keys()).union(nonincident_nodes.keys())}
 
         # Set train/valid/test_mask on node types
