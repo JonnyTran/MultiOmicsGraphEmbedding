@@ -307,7 +307,7 @@ class RelationAttention(ABC):
         else:
             rel_attn_agg = rel_attn.mean(axis=0)
 
-        rel_attn_std = rel_attn.quantile(q=0.5, axis=0)
+        rel_attn_std = rel_attn.std(axis=0)
 
         # Break down each metapath tuples into nodes
         indexed_metapaths = rel_attn_agg.index.str.split(".").map(

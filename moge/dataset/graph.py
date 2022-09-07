@@ -280,11 +280,11 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                 f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
         assert hasattr(self, "num_nodes_dict")
 
-    def name(self):
-        if not hasattr(self, "_name"):
-            return self.dataset.__class__.__name__
-        else:
+    def name(self) -> str:
+        if hasattr(self, "_name") and self._name:
             return self._name
+        else:
+            return self.dataset.__class__.__name__
 
     @abstractmethod
     def compute_node_degrees(self, *args, **kwargs):

@@ -424,7 +424,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 G.edges[metapath].data[key] = values
 
         # Add node attributes
-        for ntype in G.ntypes:
+        for ntype in tqdm.tqdm(G.ntypes, desc='Adding node attrs to node types'):
             annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
 
             for col in annotations.columns \
@@ -555,7 +555,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 hetero[metapath][edge_attr] = edge_value
 
         # Add node attributes
-        for ntype in tqdm.tqdm(node_types, desc=f"Adding node attrs to node types {node_types}"):
+        for ntype in tqdm.tqdm(node_types, desc="Adding node attrs to node types"):
             hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
             annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
 

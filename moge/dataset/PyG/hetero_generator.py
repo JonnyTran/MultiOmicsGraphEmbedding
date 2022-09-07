@@ -132,15 +132,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if self.neighbor_loader == "NeighborLoader":
             self.num_neighbors = {
                 metapath: self.neighbor_sizes \
-                # if hasattr(self, "go_ntype") and metapath[0] != self.go_ntype and metapath[-1] != self.go_ntype \
-                #     else [max_expansion_size, ] * len(self.neighbor_sizes)
                 for metapath in self.metapaths}
 
         elif self.neighbor_loader == "HGTLoader":
             self.num_neighbors = {
                 ntype: self.neighbor_sizes \
-                # if hasattr(self, "go_ntype") and ntype != self.go_ntype \
-                #     else [max_expansion_size, ] * len(self.neighbor_sizes)
                 for ntype in self.node_types}
 
         print(f"{self.neighbor_loader} neighbor_sizes:") if verbose else None
