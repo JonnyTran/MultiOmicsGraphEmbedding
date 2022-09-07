@@ -22,7 +22,7 @@ def train(hparams: Namespace):
 
     hparams.neighbor_sizes = [hparams.n_neighbors, ] * hparams.n_layers
 
-    dataset = load_node_dataset(hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
+    dataset = load_node_dataset(name=hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
                                 dataset_path=hparams.root_path)
 
     callbacks = []
@@ -38,9 +38,10 @@ def train(hparams: Namespace):
     hparams.head_node_type = dataset.head_node_type
     model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
 
-    tags = [dataset.name()]
+    tags = [dataset.name(), hparams.dataset.split(" ")]
     if hasattr(hparams, "namespaces"):
         tags.extend(hparams.namespaces)
+
     logger = WandbLogger(name=model.name(), tags=tags, project="LATTE2GO")
     logger.log_hyperparams(hparams)
 

@@ -345,6 +345,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def split_labels_by_nodes_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray, DataFrame]):
         assert hasattr(self, "nodes_namespace")
+        assert len(self.classes) == labels.shape[1]
         nodes_namespaces = pd.concat(self.nodes_namespace.values())[self.classes]
 
         y_dict = {}

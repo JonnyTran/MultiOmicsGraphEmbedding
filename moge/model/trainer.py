@@ -194,7 +194,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         raise NotImplementedError
 
     def plot_pr_curve(self, targets: Union[Tensor, pd.DataFrame], scores: Union[Tensor, pd.DataFrame],
-                      title="PR_Curve"):
+                      title="PR_Curve", n_thresholds=500):
         if self.wandb_experiment is None:
             return
         elif hasattr(self.hparams, "sweep") and self.hparams.sweep:
@@ -202,7 +202,8 @@ class NodeEmbeddingEvaluator(LightningModule):
         preds = (scores.values if isinstance(scores, pd.DataFrame) else scores).ravel()
         target = (targets.values if isinstance(targets, pd.DataFrame) else targets).ravel()
 
-        recall_micro, precision_micro, _ = precision_recall_curve(target, preds, n_thresholds=100, average='micro')
+        recall_micro, precision_micro, _ = precision_recall_curve(target, preds, n_thresholds=n_thresholds,
+                                                                  average='micro')
 
         data = [[x, y] for (x, y) in zip(recall_micro, precision_micro)]
         table = wandb.Table(data=data, columns=["recall_micro", "precision_micro"])

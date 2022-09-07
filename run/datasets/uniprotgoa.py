@@ -48,10 +48,9 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
                                     exclude_metapaths=[] if not hparams.inductive else None)
 
     # Set classes
-    namespaces = set(hparams.namespaces) if not isinstance(hparams.namespaces,
-                                                           (list, set, tuple)) else hparams.namespaces
-    go_classes = geneontology.data.index[geneontology.data['namespace'].str.get(0).isin(namespaces)]
-    hparams.namespaces = geneontology.data.loc[go_classes, 'namespace'].unique().tolist()
+    if isinstance(hparams.namespaces, str):
+        hparams.namespaces = hparams.namespaces.split(" ")
+    go_classes = geneontology.data.index[geneontology.data['namespace'].str.isin(hparams.namespaces)]
 
     # Neighbor loader
     if hparams.neighbor_loader == "HGTLoader":

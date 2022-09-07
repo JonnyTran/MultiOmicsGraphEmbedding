@@ -7,11 +7,11 @@ metric:
 
 parameters:
   dataset:
-    values: [ 'UniProtGOA_HUMAN', 'UniProtGOA_HUMAN_DeepGraphGO' ]
+    values: [ 'UniProtGOA_HUMAN', 'UniProtGOA_HUMAN DeepGraphGO' ]
   feature:
     values: [ true, false ]
   namespaces:
-    values: [ 'm' ]
+    values: [ 'molecular_function' ]
   embedding_dim:
     values: [ 512 ]
   layer_pooling:
