@@ -38,7 +38,7 @@ def train(hparams: Namespace):
     hparams.head_node_type = dataset.head_node_type
     model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
 
-    tags = [hparams.dataset.split(" ")]
+    tags = [] + hparams.dataset.split(" ")
     if hasattr(hparams, "namespaces"):
         tags.extend(hparams.namespaces)
 
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight_decay', type=float, default=1e-3)
     parser.add_argument('--gradient_clip_val', type=float, default=0.0)
     parser.add_argument('--early_stopping', type=int, default=5)
-    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--seed', type=int, default=random.randint(0, int(1e4)))
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
 
