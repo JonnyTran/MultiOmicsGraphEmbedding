@@ -105,7 +105,8 @@ if __name__ == "__main__":
     parser.add_argument('--ntype_subset', type=str, default=None)
 
     parser.add_argument('--head_node_type', type=str, default='Protein')
-    parser.add_argument('--namespaces', type=str, default='m')
+    parser.add_argument('--pred_ntypes', type=str, default='molecular_function')
+    parser.add_argument('--etype_subset', type=str, default='is_a part_of')
     parser.add_argument('--train_date', type=str, default='2018-01-01')
     parser.add_argument('--valid_date', type=str, default='2018-07-01')
     parser.add_argument('--test_date', type=str, default='2021-04-01')

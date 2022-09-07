@@ -26,10 +26,25 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     annot_df = network.annotations[head_node_type]
     annot_df['go_id'] = annot_df['go_id'].map(lambda d: d if isinstance(d, (list, np.ndarray)) else [])
 
-    # Add GO interactions
     all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
     go_nodes = np.array(list(all_go))
-    network.add_edges_from_ontology(geneontology, nodes=go_nodes, etypes=["is_a", "part_of"])
+
+    # Set ntypes to include
+    hparams.ntype_subset = hparams.ntype_subset.split(" ")
+
+    # Set etypes to include
+    if len(hparams.etype_subset) <= 1:
+        hparams.etype_subset = None
+    else:
+        hparams.etype_subset = hparams.etype_subset.split(" ")
+
+    if set(hparams.ntype_subset).intersection(['biological_process', 'cellular_component', 'molecular_function']):
+        split_ntype = 'namespace'
+    else:
+        split_ntype = None
+
+    # Add GO interactions
+    network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype=split_ntype, etypes=hparams.etype_subset)
 
     # Add GOA's from DeepGraphGO to UniProtGOA
     uniprot_go_id = load_protein_dataset(hparams.deepgraphgo_data, namespaces=['mf', 'bp', 'cc'])
@@ -48,15 +63,18 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
                                     exclude_metapaths=[] if not hparams.inductive else None)
 
     # Set classes
-    if isinstance(hparams.namespaces, str):
-        hparams.namespaces = hparams.namespaces.split(" ")
-    go_classes = geneontology.data.index[geneontology.data['namespace'].isin(hparams.namespaces)]
+    if isinstance(hparams.pred_ntypes, str):
+        hparams.pred_ntypes = hparams.pred_ntypes.split(" ")
+        go_classes = geneontology.data.index[geneontology.data['namespace'].isin(hparams.pred_ntypes)]
+    else:
+        raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
 
     # Neighbor loader
-    if hparams.neighbor_loader == "HGTLoader":
+    if hparams.neighbor_loader == "NeighborLoader":
         hparams.neighbor_sizes = [hparams.n_neighbors // 8] * hparams.n_layers
     else:
         hparams.neighbor_sizes = [hparams.n_neighbors] * hparams.n_layers
+
     # Sequences
     if hasattr(hparams, 'sequence') and hparams.sequence:
         sequence_tokenizers = SequenceTokenizers(
@@ -69,9 +87,7 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     else:
         sequence_tokenizers = None
 
-    hparams.ntype_subset = hparams.ntype_subset.split(" ")
-    print('hparams.ntype_subset', hparams.ntype_subset)
-
+    # Create dataset
     dataset = HeteroNodeClfDataset.from_heteronetwork(
         network, target="go_id",
         labels_subset=geneontology.data.index.intersection(go_classes),
@@ -86,27 +102,23 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
         go_ntype="GO_term",
         seq_tokenizer=sequence_tokenizers,
         inductive=hparams.inductive,
+        pred_ntypes=hparams.pred_ntypes,
         ntype_subset=hparams.ntype_subset \
-            if hparams.ntype_subset else set(network.nodes.keys()).difference(['GO_term']),
+            if hparams.ntype_subset else set(network.nodes.keys()).difference([hparams.pred_ntypes]),
         exclude_etypes=[
-            (head_node_type, 'associated', 'GO_term'),
-            ('GO_term', 'rev_associated', head_node_type),
-            (head_node_type, 'associated', 'BPO'),
-            ('BPO', 'rev_associated', head_node_type),
-            (head_node_type, 'associated', 'MFO'),
-            ('MFO', 'rev_associated', head_node_type),
-            (head_node_type, 'associated', 'CCO'),
-            ('CCO', 'rev_associated', head_node_type)
-        ])
+            (head_node_type, 'associated', go_ntype) for go_ntype in hparams.pred_ntypes], )
 
     dataset._name = name
     print(dataset.G)
 
-    if hasattr(hparams, 'cls_graph') and hparams.cls_graph:
+    # Create cls_graph at output layer
+    if set(dataset.nodes.keys()).isdisjoint(hparams.pred_ntypes) and 'cls_graph' in hparams and hparams.cls_graph:
         cls_network_nodes = dataset.classes.tolist() + go_classes.difference(dataset.classes).tolist()
         cls_network = dgl.heterograph(
             get_edge_index_dict(geneontology.network, nodes=cls_network_nodes, format="dgl"))
         hparams.cls_graph = cls_network
+    else:
+        hparams.cls_graph = None
 
     print(pd.DataFrame(tensor_sizes(dict(
         train={ntype: dataset.G[ntype].train_mask.sum() for ntype in dataset.G.node_types if

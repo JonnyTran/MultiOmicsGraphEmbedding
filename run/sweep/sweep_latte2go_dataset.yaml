@@ -1,5 +1,5 @@
 program: run/latte_node.py
-method: grid
+method: random
 
 metric:
   goal: maximize
@@ -10,10 +10,16 @@ parameters:
     values: [ 'UniProtGOA_HUMAN', 'UniProtGOA_HUMAN DeepGraphGO' ]
   feature:
     values: [ true, false ]
-  namespaces:
-    values: [ 'molecular_function' ]
+  pred_ntypes:
+    values:
+      - 'molecular_function'
+  etype_subset:
+    values:
+      - 'is_a part_of'
+      - 'is_a part_of has_part'
+      - ''
   embedding_dim:
-    values: [ 512 ]
+    values: [ 256 ]
   layer_pooling:
     values: [ 'concat' ]
   t_order:
@@ -21,17 +27,20 @@ parameters:
   n_layers:
     values: [ 2 ]
   neighbor_loader:
-    values: [ "HGTLoader" ]
+    values: [ 'HGTLoader', 'NeighborLoader' ]
   ntype_subset:
     values:
+      - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'
+      - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component'
+      - 'Protein MessengerRNA MicroRNA LncRNA biological_process'
       - 'Protein MessengerRNA MicroRNA LncRNA'
       - 'Protein MessengerRNA MicroRNA'
       - 'Protein MessengerRNA'
       - 'Protein'
-  n_neighbors:
-    values: [ 1024 ]
   cls_graph:
     values: [ true, false ]
+  n_neighbors:
+    values: [ 1024 ]
   attn_heads:
     values: [ 4 ]
   inductive:

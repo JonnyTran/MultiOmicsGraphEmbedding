@@ -139,8 +139,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     f"({len(src_nodes)}, {self.networks[etype].number_of_edges()}, {len(dst_nodes)}).")
 
     def add_edges_from_ontology(self, ontology: GeneOntology, nodes: Optional[List[str]] = None,
-                                split_ntype: str = None, etypes: Optional[List[str]] = None, reverse_edge_dir=False,
-                                d_ntype: str = "GO_term"):
+                                split_ntype: str = None, etypes: Optional[List[str]] = None,
+                                reverse_edge_dir=False, d_ntype: str = "GO_term"):
         """
         Add edges between nodes within the ontology.
 
@@ -172,7 +172,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         graph = ontology.network
         if reverse_edge_dir:
             graph = nx.reverse(graph, copy=True)
-        select_etypes = list({e for u, v, e in ontology.network.edges if etypes is None or e in etypes})
+        select_etypes = list({e for u, v, e in ontology.network.edges if not etypes or e in etypes})
+        assert len(select_etypes), f"`select_etypes` must not be is empty: {select_etypes}. See `etypes` args: {etypes}"
 
         # Separate edgelists
         if split_ntype:
