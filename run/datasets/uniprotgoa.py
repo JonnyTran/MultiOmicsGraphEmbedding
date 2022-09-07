@@ -75,8 +75,7 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     network.train_nodes[head_node_type] = set(annot_df.query('train_mask == True').index)
     network.valid_nodes[head_node_type] = set(annot_df.query('valid_mask == True').index)
     network.test_nodes[head_node_type] = set(annot_df.query('test_mask == True').index)
-    network.set_edge_traintest_mask(network.train_nodes, network.valid_nodes, network.test_nodes,
-                                    exclude_metapaths=[] if not hparams.inductive else None)
+    network.set_edge_traintest_mask(exclude_metapaths=[] if not hparams.inductive else None)
 
     # Set classes
     if isinstance(hparams.pred_ntypes, str):

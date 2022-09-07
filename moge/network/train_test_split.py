@@ -204,11 +204,11 @@ class TrainTestSplit():
                 for mask_name, node_mask in node_attr_dict.items():
                     nx.set_node_attributes(self.networks[metapath], values=node_mask, name=mask_name)
 
-        self.train_valid_test_counts = pd.DataFrame(
+        self.node_mask_counts = pd.DataFrame(
             tensor_sizes(train_nodes=train_nodes | self.nodes.drop(train_nodes).map(len).to_dict(),
                          valid_nodes=valid_nodes | self.nodes.drop(valid_nodes).map(len).to_dict(),
                          test_nodes=test_nodes | self.nodes.drop(test_nodes).map(len).to_dict()),
-            dtype='int').T
+            dtype='int')
 
     def get_node_mask(self, node_dict: Dict[str, Set[str]], train=False, valid=False, test=False) \
             -> Dict[str, Dict[str, Dict[str, Any]]]:

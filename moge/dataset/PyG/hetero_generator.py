@@ -20,7 +20,7 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
     get_relabled_edge_index, is_negative
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
-from moge.model.utils import to_device
+from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
 
 
@@ -58,6 +58,24 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             class_indices[pred_ntype] = torch.from_numpy(self.nodes[pred_ntype].get_indexer_for(self.classes))
             class_indices[pred_ntype] = class_indices[pred_ntype][class_indices[pred_ntype] >= 0]
         return class_indices
+
+    @property
+    def node_mask_counts(self) -> DataFrame:
+        ntypes = self.G.node_types
+        return pd.DataFrame(tensor_sizes(dict(
+            train={ntype: self.G[ntype].train_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'train_mask')},
+            valid={ntype: self.G[ntype].valid_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'valid_mask')},
+            test={ntype: self.G[ntype].test_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'test_mask')})))
+
+    @property
+    def edge_mask_counts(self) -> DataFrame:
+        etypes = self.G.edge_types
+        df = pd.DataFrame(tensor_sizes(dict(
+            train={etype: self.G[etype].train_mask.sum() for etype in etypes if hasattr(self.G[etype], 'train_mask')},
+            valid={etype: self.G[etype].valid_mask.sum() for etype in etypes if hasattr(self.G[etype], 'valid_mask')},
+            test={etype: self.G[etype].test_mask.sum() for etype in etypes if hasattr(self.G[etype], 'test_mask')})))
+        df.index.names = ['src_ntype', 'etype', 'dst_ntype']
+        return df.sort_index()
 
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.x_dict = hetero.x_dict
@@ -101,7 +119,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self = cls(hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
                    edge_dir="in", head_node_type=head_node_type, pred_ntypes=pred_ntypes, **kwargs)
         self.classes = classes
-        self.nodes = nodes
+        self.nodes = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
         self._name = network._name if hasattr(network, '_name') else ""
         self.network = network
 
@@ -151,7 +169,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     num_workers=num_workers,
                     **kwargs)
 
-        if self.class_indices is not None:
+        if self.class_indices is not None and set(self.class_indices.keys()).intersection(self.node_types):
             args['class_indices'] = self.class_indices
 
         if self.neighbor_loader == "NeighborLoader":

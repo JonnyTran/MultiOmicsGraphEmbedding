@@ -620,11 +620,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Train test split (from previously saved node train/test split)
         if hasattr(self, "train_nodes") and self.train_nodes:
             train_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.train_nodes[ntype])) \
-                         for ntype, nodelist in self.nodes.items() if ntype in self.train_nodes}
+                         for ntype, nodelist in self.nodes.items() if self.train_nodes[ntype]}
             valid_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.valid_nodes[ntype])) \
-                         for ntype, nodelist in self.nodes.items() if ntype in self.valid_nodes}
+                         for ntype, nodelist in self.nodes.items() if self.valid_nodes[ntype]}
             test_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.test_nodes[ntype])) \
-                        for ntype, nodelist in self.nodes.items() if ntype in self.test_nodes}
+                        for ntype, nodelist in self.nodes.items() if self.test_nodes[ntype]}
 
             for ntype in node_types:
                 hetero[ntype].num_nodes = len(self.nodes[ntype])
