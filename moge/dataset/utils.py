@@ -13,8 +13,6 @@ from torch import Tensor
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
 
-from moge.model.utils import tensor_sizes
-
 
 def is_sorted(arr: Tensor):
     return torch.all(arr[:-1] <= arr[1:])
@@ -191,13 +189,13 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph],
     assert isinstance(metapaths, list) and isinstance(list(metapaths)[0], (tuple, str)), \
         f"Ensure metapaths is a list of etypes or metapaths. \n`metapaths`= {metapaths}"
     if isinstance(metapaths[0], str):
-        assert isinstance(nodes, (list, pd.Index)), \
+        assert isinstance(nodes, (list, pd.Index, np.ndarray)), \
             f'NotImplementedError: etypes (e.g. `{metapaths[0]}`) given, so `nodes` must be a list of node names.' \
-            f'`nodes`: {tensor_sizes(nodes)}'
+            f'`nodes`: {type(nodes)}'
     elif isinstance(metapaths[0], tuple):
         assert isinstance(nodes, (dict, pd.Series)), \
             f'NotImplementedError: etypes (e.g. `{metapaths[0]}`), so `nodes` must be a dict of ntype.' \
-            f'`nodes`: {tensor_sizes(nodes)}'
+            f'`nodes`: {type(nodes)}'
 
     edge_index_dict = {}
     for etype in metapaths:

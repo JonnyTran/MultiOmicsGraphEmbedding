@@ -50,7 +50,7 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     # Set classes
     if isinstance(hparams.namespaces, str):
         hparams.namespaces = hparams.namespaces.split(" ")
-    go_classes = geneontology.data.index[geneontology.data['namespace'].str.isin(hparams.namespaces)]
+    go_classes = geneontology.data.index[geneontology.data['namespace'].isin(hparams.namespaces)]
 
     # Neighbor loader
     if hparams.neighbor_loader == "HGTLoader":

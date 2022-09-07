@@ -38,7 +38,7 @@ def train(hparams: Namespace):
     hparams.head_node_type = dataset.head_node_type
     model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
 
-    tags = [dataset.name(), hparams.dataset.split(" ")]
+    tags = [hparams.dataset.split(" ")]
     if hasattr(hparams, "namespaces"):
         tags.extend(hparams.namespaces)
 
