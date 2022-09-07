@@ -5,6 +5,7 @@ from typing import List, Union, Dict, Tuple, Set, Optional, Any
 import networkx as nx
 import numpy as np
 import pandas as pd
+import scipy.sparse as ssp
 import torch
 from logzero import logger
 from pandas import Series
@@ -164,7 +165,7 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph],
                         metapaths: Union[List[str], List[Tuple[str, str, str]]] = None,
                         format="coo",
                         d_ntype="_N",
-                        min_num_edges=100) -> Dict[Tuple[str, str, str], Tensor]:
+                        min_num_edges=100, weight=None) -> Dict[Tuple[str, str, str], Tensor]:
     """
     Convert a NetworkX graph into an edge_index_dict given hetero node types in `nodes` and hetero edge types `metapaths`.
     Args:
@@ -174,6 +175,7 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph],
         format ():
         d_ntype ():
         min_num_edges (int): minimum number of edges (of metapath type) to be added to `edge_index_dict` output.
+        weight (str): Edge attr name as edge weight. Default None.
     Returns:
         edge_index_dict (Dict[Tuple[str, str, str], Tensor]):
     """
@@ -229,8 +231,8 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph],
         if subgraph.number_of_edges() < min_num_edges: continue
 
         try:
-            biadj = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
-                                                    format="coo")
+            biadj: ssp.coo_matrix = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B,
+                                                                    weight=weight, format="coo")
         except ValueError as ve:
             # Unknown error caused by nx.bipartite.biadjacency_matrix when edge tuples are not size of 3
             continue
@@ -238,6 +240,8 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph],
             logger.warn(f"{metapath}: {e.__class__.__name__}:{e}")
             # traceback.print_exc()
             continue
+
+        if biadj.data.size < min_num_edges: continue
 
         if format == "coo":
             edge_index_dict[metapath] = (biadj.row, biadj.col)

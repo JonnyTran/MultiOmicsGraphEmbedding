@@ -62,8 +62,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.x_dict = hetero.x_dict
         self.node_types = hetero.node_types
-        self.num_nodes_dict = {ntype: hetero[ntype].num_nodes for ntype in hetero.node_types}
-        self.global_node_index = {ntype: torch.arange(num_nodes) for ntype, num_nodes in self.num_nodes_dict.items()}
+        self.num_nodes_dict = {ntype: hetero[ntype].num_nodes \
+                               for ntype in hetero.node_types}
+        self.global_node_index = {ntype: torch.arange(num_nodes) \
+                                  for ntype, num_nodes in self.num_nodes_dict.items()}
 
         self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
 
@@ -102,11 +104,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
         self.network = network
-        self.go_ntype = go_ntype
 
         self.pred_metapaths = network.pred_metapaths if hasattr(network, 'pred_metapaths') else []
         self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, 'neg_pred_metapaths') else []
 
+        self.go_ntype = go_ntype
         self.split_namespace = split_namespace
         if split_namespace:
             assert self.go_ntype is not None
@@ -347,7 +349,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def split_labels_by_nodes_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray, DataFrame]):
         assert hasattr(self, "nodes_namespace")
-        nodes_namespaces = self.nodes_namespace[self.go_ntype][self.classes]
+        nodes_namespaces = pd.concat(self.nodes_namespace.values())[self.classes]
 
         y_dict = {}
         for namespace in np.unique(nodes_namespaces):

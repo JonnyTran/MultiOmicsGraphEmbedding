@@ -166,6 +166,8 @@ class NodeEmbeddingEvaluator(LightningModule):
                              embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
                              columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> DataFrame:
+        if hasattr(self.hparams, "sweep") and self.hparams.sweep:
+            return
         node_losses = self.get_node_loss(targets, y_pred, global_node_index=global_node_index)
         df = self.dataset.get_node_metadata(global_node_index, embeddings, weights=weights, losses=node_losses)
 
@@ -195,6 +197,8 @@ class NodeEmbeddingEvaluator(LightningModule):
                       title="PR_Curve"):
         if self.wandb_experiment is None:
             return
+        elif hasattr(self.hparams, "sweep") and self.hparams.sweep:
+            return
         preds = (scores.values if isinstance(scores, pd.DataFrame) else scores).ravel()
         target = (targets.values if isinstance(targets, pd.DataFrame) else targets).ravel()
 
@@ -208,6 +212,8 @@ class NodeEmbeddingEvaluator(LightningModule):
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
         if self.wandb_experiment is None or not hasattr(self.embedder, "layers") or \
                 not hasattr(self.embedder.layers[layer], "_betas"):
+            return
+        elif hasattr(self.hparams, "sweep") and self.hparams.sweep:
             return
 
         run_id = self.wandb_experiment.id

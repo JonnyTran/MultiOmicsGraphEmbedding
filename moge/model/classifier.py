@@ -103,10 +103,15 @@ class LabelNodeClassifer(nn.Module):
         self.pred_ntype = dataset.pred_ntypes
         self.class_indices = dataset.class_indices
         self.class_sizes = {ntype: ids.numel() for ntype, ids in self.class_indices.items()}
-        self.embedding_dim = hparams.embedding_dim
 
         # if hparams.embedding_dim
-        self.dropout = nn.Dropout(p=hparams.nb_cls_dropout)
+        self.embedding_dim = hparams.embedding_dim
+        self.bias = nn.Parameter(torch.zeros(self.n_classes))
+
+        if hparams.loss_type == "BCE":
+            self.activation = nn.Sigmoid()
+        elif hparams.loss_type == "SOFTMAX_CROSS_ENTROPY":
+            self.activation = nn.Softmax()
 
     def forward(self, emb: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
         # TODO ensure cls_emb is same shape as self.n_classes
@@ -114,7 +119,10 @@ class LabelNodeClassifer(nn.Module):
             cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
 
         assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb}) != n_classes ({self.n_classes})"
-        logits = emb @ cls_emb.T
+        logits = emb @ cls_emb.T + self.bias
+
+        if hasattr(self, 'activation'):
+            logits = self.activation(logits)
         return logits
 
 

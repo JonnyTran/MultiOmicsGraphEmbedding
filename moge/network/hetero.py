@@ -103,11 +103,20 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             ntype (str): The node type.
             annotations (pd.DataFrame): Updates network's annotation dict for `ntype`.
         """
-        self.node_types.append(ntype)
-        self.nodes[ntype] = pd.Index(nodes) if not isinstance(nodes, pd.Index) else nodes
+        if ntype not in self.node_types:
+            self.node_types.append(ntype)
+
+        node_index = pd.Index(nodes) if not isinstance(nodes, pd.Index) else nodes
+        if ntype not in self.nodes:
+            self.nodes[ntype] = node_index
+        else:
+            self.nodes[ntype].append(node_index.difference(self.nodes[ntype]))
 
         if isinstance(annotations, pd.DataFrame) and not annotations.empty:
-            self.annotations[ntype] = annotations.loc[nodes]
+            if ntype not in self.annotations:
+                self.annotations[ntype] = annotations.loc[nodes]
+            else:
+                self.annotations[ntype] = self.annotations[ntype].append(annotations.loc[nodes])
 
         logger.info(f"Added {len(nodes)} {ntype} nodes")
 
@@ -126,8 +135,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         src_nodes = src_nodes.intersection(self.networks[etype].nodes)
         dst_nodes = dst_nodes.intersection(self.networks[etype].nodes)
 
-        logger.info(f"{database} {etype} unique counts: "
-                    f"(src={len(src_nodes)}, eid={self.networks[etype].number_of_edges()}, dst={len(dst_nodes)}).")
+        logger.info(f"{database} add edges {etype}: "
+                    f"({len(src_nodes)}, {self.networks[etype].number_of_edges()}, {len(dst_nodes)}).")
 
     def add_edges_from_ontology(self, ontology: GeneOntology, nodes: Optional[List[str]] = None,
                                 split_ntype: str = None, etypes: Optional[List[str]] = None, reverse_edge_dir=False,
@@ -163,7 +172,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         graph = ontology.network
         if reverse_edge_dir:
             graph = nx.reverse(graph, copy=True)
-        select_etypes = list({e for u, v, e in ontology.network.edges if etypes is not None or e in etypes})
+        select_etypes = list({e for u, v, e in ontology.network.edges if etypes is None or e in etypes})
 
         # Separate edgelists
         if split_ntype:
@@ -265,8 +274,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 else:
                     metapaths = set(pred_metapaths)
                 neg_edge_list_dict = get_edge_index_dict(neg_graph, nodes=self.nodes,
-                                                         metapaths=metapaths.intersection(pred_metapaths),
-                                                         format="nx")
+                                                         metapaths=metapaths.intersection(pred_metapaths), format="nx")
                 for etype, edges in neg_edge_list_dict.items():
                     if etype not in pred_metapaths or len(edges) == 0: continue
                     neg_etype = tag_negative_metapath(etype)
@@ -523,7 +531,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         if sequence:
             self.filter_sequence_nodes()
 
-        hetero = HeteroData()
         node_types = self.node_types
         if ntype_subset:
             node_types = [ntype for ntype in node_types if ntype in ntype_subset]
@@ -531,6 +538,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             node_types = [ntype for ntype in node_types if ntype not in exclude_ntypes]
 
         # Edge index
+        hetero = HeteroData()
         for metapath in tqdm.tqdm(self.networks, desc="Adding edge_index's to HeteroData"):
             head_type, etype, tail_type = metapath[0], metapath[1], metapath[-1]
             if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
@@ -547,7 +555,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 hetero[metapath][edge_attr] = edge_value
 
         # Add node attributes
-        for ntype in tqdm.tqdm(node_types, "Adding node attrs to node types:"):
+        for ntype in tqdm.tqdm(node_types, desc=f"Adding node attrs to node types {node_types}"):
             hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
             annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
 

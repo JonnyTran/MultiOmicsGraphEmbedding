@@ -266,7 +266,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def on_validation_end(self) -> None:
         super().on_validation_end()
-        if self.current_epoch % 50 == 1 and not hasattr(self.hparams, "sweep") or not self.hparams.sweep:
+        if self.current_epoch % 50 == 1:
             self.plot_sankey_flow(layer=-1)
 
     def on_test_end(self):
@@ -286,11 +286,10 @@ class LATTENodeClf(NodeClfTrainer):
                                            scores=y_pred_dict[namespace],
                                            title=f"{go_type}_PR_Curve")
 
-                if not hasattr(self.hparams, "sweep") or not self.hparams.sweep:
-                    self.plot_embeddings_tsne(global_node_index=nids, embeddings={self.head_node_type: embs},
-                                              targets=y_true, y_pred=scores)
-                    self.plot_sankey_flow(layer=-1)
-                    self.cleanup_artifacts()
+                self.plot_embeddings_tsne(global_node_index=nids, embeddings={self.head_node_type: embs},
+                                          targets=y_true, y_pred=scores)
+                self.plot_sankey_flow(layer=-1)
+                self.cleanup_artifacts()
 
         except Exception as e:
             traceback.print_exc()
