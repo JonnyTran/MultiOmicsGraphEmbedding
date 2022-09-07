@@ -198,7 +198,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
             raise Exception(f"Unsupported dataset {dataset}")
 
         try:
-            self.update_classes()
+            self.process_classes()
         except Exception as e:
             print(e)
 
@@ -208,7 +208,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         self.train_ratio = self.get_train_ratio()
         print("train_ratio", self.train_ratio)
 
-    def update_classes(self):
+    def process_classes(self):
         # Node classifications
         num_samples = 1  # Used for computing class_weight
         if hasattr(self, "y_dict") and self.y_dict and self.head_node_type is not None:
@@ -262,6 +262,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         else:
             self.multilabel = False
             self.n_classes = None
+
         # Compute class weights so less frequent classes have higher weight
         if hasattr(self, "class_counts"):
             # self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
@@ -272,7 +273,8 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
 
             # per class: num neg examples / num pos examples
             self.pos_weight = torch.true_divide(torch.mean(counts), counts)
-            self.pos_weight = torch.maximum(1.0, torch.minimum(10.0, self.pos_weight))
+            self.pos_weight = torch.maximum(torch.tensor(1.0),
+                                            torch.minimum(torch.tensor(10.0), self.pos_weight))
 
             assert self.class_weight.numel() == self.n_classes, \
                 f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"

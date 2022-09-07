@@ -199,8 +199,8 @@ def tensor_sizes(input=None, **kwargs) -> ...:
                {etype: input.num_edges(etype=etype) for etype in input.canonical_etypes if input.num_edges(etype=etype)}
 
     elif isinstance(input, HeteroData):
-        return {ntype: (input[ntype].num_nodes(),) for ntype in input.node_types} | \
-               {etype: input[etype].num_edges() for etype in input.edge_types if input[etype].num_edges()}
+        return {ntype: (input[ntype].num_nodes,) for ntype in input.node_types} | \
+               {etype: input[etype].num_edges for etype in input.edge_types if input[etype].num_edges}
 
     else:
         if input is not None and hasattr(input, "shape"):

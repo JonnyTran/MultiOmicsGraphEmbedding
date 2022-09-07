@@ -11,11 +11,12 @@ from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
 
+from moge.dataset.graph import HeteroGraphDataset
 from moge.model.dgl.HGT import HGT
 
 
 class LabelGraphNodeClassifier(nn.Module):
-    def __init__(self, dataset, hparams: Namespace):
+    def __init__(self, dataset: HeteroGraphDataset, hparams: Namespace):
         super().__init__()
         self.n_classes = hparams.n_classes
         self.classes = dataset.classes
@@ -29,7 +30,6 @@ class LabelGraphNodeClassifier(nn.Module):
         self.out_channels = hparams.embedding_dim // self.n_heads
 
         self.dropout = nn.Dropout(p=hparams.nb_cls_dropout)
-        self.attn_kernels = nn.Parameter(torch.rand((hparams.embedding_dim)), requires_grad=True)
 
         assert isinstance(hparams.cls_graph, dgl.DGLGraph)
         self.g: dgl.DGLHeteroGraph = hparams.cls_graph
@@ -91,6 +91,24 @@ class LabelGraphNodeClassifier(nn.Module):
             go_encoder = hparams.cls_encoder
 
         return go_encoder
+
+
+class LabelNodeClassifer(nn.Module):
+    def __init__(self, dataset: HeteroGraphDataset, hparams: Namespace):
+        super().__init__()
+        self.n_classes = hparams.n_classes
+        self.classes = dataset.classes
+        self.head_node_type = hparams.head_node_type
+
+        self.class_indices = dataset.class_indices
+
+        self.embedding_dim = hparams.embedding_dim
+
+        # if hparams.embedding_dim
+        self.dropout = nn.Dropout(p=hparams.nb_cls_dropout)
+
+    def forward(self, embeddings: Dict[str, Tensor]) -> Tensor:
+        pass
 
 
 class DenseClassification(nn.Module):

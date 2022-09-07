@@ -12,6 +12,8 @@ from torch import Tensor
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
 
+from moge.model.utils import tensor_sizes
+
 
 def is_sorted(arr: Tensor):
     return torch.all(arr[:-1] <= arr[1:])
@@ -157,30 +159,53 @@ def get_relabled_edge_index(triples: Dict[str, Tensor], global_node_index: Dict[
     return edges_pos, edges_neg
 
 
-def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
-                        metapaths: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
-                        format="coo", d_ntype="_N") -> Dict[Tuple[str, str, str], Tensor]:
+def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph],
+                        nodes: Union[Dict[str, List[str]], List[str], pd.Index],
+                        metapaths: Union[List[str], List[Tuple[str, str, str]]] = None,
+                        format="coo",
+                        d_ntype="_N",
+                        min_num_edges=100) -> Dict[Tuple[str, str, str], Tensor]:
+    """
+    Convert a NetworkX graph into an edge_index_dict given hetero node types in `nodes` and hetero edge types `metapaths`.
+    Args:
+        graph ():
+        nodes ():
+        metapaths ():
+        format ():
+        d_ntype ():
+        min_num_edges (int): minimum number of edges (of metapath type) to be added to `edge_index_dict` output.
+    Returns:
+        edge_index_dict (Dict[Tuple[str, str, str], Tensor]):
+    """
     if metapaths is None and isinstance(graph, nx.MultiGraph):
         metapaths = {e for u, v, e in graph.edges}
-    if isinstance(graph, nx.Graph):
-        if isinstance(metapaths, (tuple, str)):
-            metapaths = [metapaths]
-        elif metapaths is None:
-            metapaths = ["_E"]
+    if isinstance(metapaths, set):
+        metapaths = list(metapaths)
+    if isinstance(graph, nx.Graph) and isinstance(metapaths, (tuple, str)):
+        metapaths = [metapaths]
+    elif isinstance(graph, nx.Graph) and metapaths is None:
+        metapaths = ["_E"]
 
-    assert isinstance(metapaths, (list, set)) and isinstance(list(metapaths)[0], (tuple, str))
+    assert isinstance(metapaths, list) and isinstance(list(metapaths)[0], (tuple, str)), \
+        f"Ensure metapaths is a list of etypes or metapaths. \n`metapaths`= {metapaths}"
+    if isinstance(metapaths[0], str):
+        assert isinstance(nodes, (list, pd.Index)), \
+            f'NotImplementedError: etypes (e.g. `{metapaths[0]}`) given, so `nodes` must be a list of node names.' \
+            f'`nodes`: {tensor_sizes(nodes)}'
+    elif isinstance(metapaths[0], tuple):
+        assert isinstance(nodes, (dict, pd.Series)), \
+            f'NotImplementedError: etypes (e.g. `{metapaths[0]}`), so `nodes` must be a dict of ntype.' \
+            f'`nodes`: {tensor_sizes(nodes)}'
 
     edge_index_dict = {}
     for etype in metapaths:
         if isinstance(graph, nx.MultiGraph) and isinstance(etype, str):
-            assert not isinstance(nodes, (dict, pd.Series))
             subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
             nodes_A = nodes
             nodes_B = nodes
             metapath = (d_ntype, etype, d_ntype)
 
         elif isinstance(graph, nx.MultiGraph) and isinstance(etype, tuple):
-            assert isinstance(nodes, (dict, pd.Series))
             metapath: Tuple[str, str, str] = etype
             head, etype, tail = metapath
             subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
@@ -201,16 +226,13 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
         else:
             raise Exception(f"Edge types `{metapaths}` are ill formed.")
 
-        if subgraph.number_of_edges() == 0: continue
+        if subgraph.number_of_edges() < min_num_edges: continue
 
         try:
             biadj = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
                                                     format="coo")
         except Exception as e:
-            logger.error(f"{e.__class__.__name__}:{e} \n"
-                         f"{metapath}, {subgraph}")
-            # "\n", subgraph, list(subgraph.edges())[:2],
-            # '\n', f"nodes_A {len(nodes_A)} {nodes_A[:5]}", f"nodes_A {len(nodes_A)} {nodes_A[:5]}"
+            logger.warn(f"{metapath}: {e.__class__.__name__}:{e}")
             # traceback.print_exc()
             continue
 

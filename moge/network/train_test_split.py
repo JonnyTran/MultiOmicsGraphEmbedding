@@ -1,3 +1,4 @@
+import pprint
 import random
 from abc import abstractmethod
 from collections import defaultdict
@@ -125,7 +126,7 @@ class TrainTestSplit():
         return edges
 
     def get_all_nodes_split(self, train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
-                            test_nodes: Dict[str, Set[str]]) \
+                            test_nodes: Dict[str, Set[str]], verbose=False) \
             -> Tuple[Mapping[str, Set[str]], Mapping[str, Set[str]], Mapping[str, Set[str]]]:
         """
         Given a subset of nodes in train/valid/test, mark all nodes in the HeteroNetwork to be either train/valid/test.
@@ -178,7 +179,8 @@ class TrainTestSplit():
                 for mask_name, node_mask in node_attr_dict.items():
                     nx.set_node_attributes(self.networks[metapath], values=node_mask, name=mask_name)
 
-        logger.info(tensor_sizes(dict(train_nodes=train_nodes, valid_nodes=valid_nodes, test_nodes=test_nodes)))
+        logger.info(pprint.pformat(tensor_sizes(
+            dict(train_nodes=train_nodes, valid_nodes=valid_nodes, test_nodes=test_nodes)))) if verbose else None
 
         train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), \
                                                defaultdict(set, valid_nodes), defaultdict(set, test_nodes)
@@ -223,8 +225,7 @@ class TrainTestSplit():
             return {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
 
         edge_attrs = {edge_tup: get_edge_mask(edge_tup[0], edge_tup[1]) \
-                      for edge_tup, _ in tqdm.tqdm(edgelist.items(),
-                                                   desc=f"Set train/valid/test_mask on edges {metapath}")}
+                      for edge_tup, _ in edgelist.items()}
 
         return edge_attrs
 
@@ -232,7 +233,7 @@ class TrainTestSplit():
                                 test_nodes: Mapping[str, Set[str]],
                                 exclude_metapaths: List[Tuple[str, str, str]] = None):
         # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
-        for metapath, nxgraph in self.networks.items():
+        for metapath, nxgraph in tqdm.tqdm(self.networks.items(), desc=f"Set train/valid/test_mask on edge types"):
             if exclude_metapaths is not None and metapath in exclude_metapaths:
                 continue
             edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=train_nodes,

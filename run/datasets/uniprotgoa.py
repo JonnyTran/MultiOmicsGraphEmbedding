@@ -1,4 +1,5 @@
 import pickle
+from argparse import Namespace
 
 import dgl
 import numpy as np
@@ -12,11 +13,15 @@ from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.model.utils import tensor_sizes
 
 
-def load_uniprotgoa(dataset_path, head_node_type, hparams, name, use_reverse) -> HeteroNodeClfDataset:
+def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroNodeClfDataset:
+    use_reverse = hparams.use_reverse
+    head_node_type = hparams.head_node_type
+
     with open(dataset_path, "rb") as file:
         network = pickle.load(file)
         if not hasattr(network, 'train_nodes'):
             network.train_nodes, network.valid_nodes, network.test_nodes = {}, {}, {}
+
     geneontology = UniProtGOA(file_resources={"go.obo": "http://current.geneontology.org/ontology/go.obo", })
     annot_df = network.annotations[head_node_type]
     annot_df['go_id'] = annot_df['go_id'].map(lambda d: d if isinstance(d, (list, np.ndarray)) else [])
@@ -84,7 +89,7 @@ def load_uniprotgoa(dataset_path, head_node_type, hparams, name, use_reverse) ->
         inductive=hparams.inductive,
         ntype_subset=hparams.ntype_subset \
             if hparams.ntype_subset else set(network.nodes.keys()).difference(['GO_term']),
-        exclude_metapaths=[
+        exclude_etypes=[
             (head_node_type, 'associated', 'GO_term'),
             ('GO_term', 'rev_associated', head_node_type),
             (head_node_type, 'associated', 'BPO'),

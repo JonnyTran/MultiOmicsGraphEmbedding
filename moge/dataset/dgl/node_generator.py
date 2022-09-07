@@ -76,14 +76,13 @@ class DGLNodeGenerator(HeteroGraphDataset):
                            expression=False, sequence=False, add_reverse_metapaths=True,
                            labels_subset: Optional[Union[Index, np.ndarray]] = None,
                            ntype_subset: Optional[List[str]] = None,
-                           exclude_metapaths: Optional[List[Tuple[str, str, str]]] = None,
+                           exclude_etypes: Optional[List[Tuple[str, str, str]]] = None,
                            split_namespace=False, **kwargs):
         G, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                        labels_subset=labels_subset, head_node_type=head_node_type,
-                                       ntype_subset=ntype_subset, exclude_metapaths=exclude_metapaths,
-                                       sequence=sequence, expression=expression,
-                                       train_test_split="node_id")
+                                       ntype_subset=ntype_subset, exclude_etypes=exclude_etypes, sequence=sequence,
+                                       expression=expression, train_test_split="node_id")
 
         self = cls(dataset=G, metapaths=G.canonical_etypes, add_reverse_metapaths=add_reverse_metapaths,
                    head_node_type=head_node_type, sampler=sampler, neighbor_sizes=neighbor_sizes,
@@ -99,7 +98,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
                                   for label in self.y_dict.values())
         else:
             self.multilabel = (self.y_dict.sum(1) > 1).any() if self.y_dict.dim() == 2 else False
-        self.update_classes()
+        self.process_classes()
 
             # Whether to use split namespace
         self.split_namespace = split_namespace

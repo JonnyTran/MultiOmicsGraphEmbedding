@@ -31,26 +31,33 @@ def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
+    nodes: Dict[str, Index]
     nodes_namespace: Dict[str, Series]
 
-    def __init__(self, dataset: HeteroData,
-                 seq_tokenizer: SequenceTokenizers = None,
+    def __init__(self, dataset: HeteroData, seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
-                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
-                 node_types: List[str] = None,
-                 metapaths: List[Tuple[str, str, str]] = None,
-                 head_node_type: str = None,
-                 edge_dir: str = "in",
-                 add_reverse_metapaths: bool = False,
-                 inductive: bool = False,
-                 **kwargs):
+                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
+                 metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
+                 pred_ntypes: List[str] = None,
+                 edge_dir: str = "in", add_reverse_metapaths: bool = False, inductive: bool = False, **kwargs):
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
                          edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         if seq_tokenizer:
             self.seq_tokenizer = seq_tokenizer
 
+        self.pred_ntypes = pred_ntypes
         self.neighbor_loader = neighbor_loader
         self.neighbor_sizes = neighbor_sizes
+
+    @property
+    def class_indices(self) -> Optional[Dict[str, Tensor]]:
+        if self.pred_ntypes is None or self.classes is None:
+            return None
+        class_indices = {}
+        for pred_ntype in self.pred_ntypes:
+            class_indices[pred_ntype] = torch.from_numpy(self.nodes[pred_ntype].get_indexer_for(self.classes))
+            class_indices[pred_ntype] = class_indices[pred_ntype][class_indices[pred_ntype] >= 0]
+        return class_indices
 
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.x_dict = hetero.x_dict
@@ -80,17 +87,17 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            add_reverse_metapaths=True,
                            split_namespace=False,
                            go_ntype=None,
-                           exclude_metapaths=None,
+                           exclude_etypes: List[Union[str, Tuple]] = None,
+                           pred_ntypes: List[str] = None,
                            train_test_split="node_mask", **kwargs):
         hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_pyg_heterodata(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                       labels_subset=labels_subset, head_node_type=head_node_type,
-                                      ntype_subset=ntype_subset,
-                                      exclude_metapaths=exclude_metapaths, sequence=sequence, expression=expression,
-                                      train_test_split=train_test_split)
+                                      ntype_subset=ntype_subset, exclude_etypes=exclude_etypes, sequence=sequence,
+                                      expression=expression, train_test_split=train_test_split, **kwargs)
 
         self = cls(hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
-                   edge_dir="in", head_node_type=head_node_type, **kwargs)
+                   edge_dir="in", head_node_type=head_node_type, pred_ntypes=pred_ntypes, **kwargs)
         self.classes = classes
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
@@ -145,6 +152,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     shuffle=shuffle,
                     num_workers=num_workers,
                     **kwargs)
+
+        if self.class_indices is not None:
+            args['class_indices'] = self.class_indices
 
         if self.neighbor_loader == "NeighborLoader":
             dataset = NeighborLoader(**args)
@@ -432,7 +442,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                           target=target, min_count=min_count, expression=expression, sequence=sequence,
                                           label_subset=label_subset, head_node_type=head_node_type,
                                           ntype_subset=ntype_subset,
-                                          exclude_metapaths=network.pred_metapaths,
+                                          exclude_etypes=network.pred_metapaths,
                                           add_reverse_metapaths=add_reverse_metapaths, **kwargs)
 
         # Whether to use split_namespace of GO_term's

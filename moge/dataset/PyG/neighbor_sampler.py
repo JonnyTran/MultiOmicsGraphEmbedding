@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 import copy
-from abc import ABCMeta, abstractmethod
 from typing import Union, List, Optional, Callable, Any, Dict, Tuple
 
 import torch
@@ -15,32 +14,6 @@ from torch_geometric.loader.utils import filter_data, to_hetero_csc, filter_node
 from torch_geometric.typing import InputNodes, NodeType, OptTensor
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import SparseTensor
-
-
-class Sampler(metaclass=ABCMeta):
-    @abstractmethod
-    def sample(self, node_ids):
-        """
-        Args:
-            node_ids:
-        """
-        pass
-
-    @abstractmethod
-    def get_global_nidx(self, node_ids):
-        """
-        Args:
-            node_ids:
-        """
-        pass
-
-    @abstractmethod
-    def get_local_nodes(self, n_id):
-        """
-        Args:
-            n_id:
-        """
-        pass
 
 
 class HeteroNeighborSampler(torch.utils.data.DataLoader):
@@ -124,18 +97,13 @@ class HeteroNeighborSampler(torch.utils.data.DataLoader):
 
 
 class NeighborSampler:
-    def __init__(
-            self,
-            data: HeteroData,
-            num_neighbors: NumNeighbors,
-            replace: bool = False,
-            directed: bool = True,
-            input_node_type: Optional[str] = None,
-    ):
+    def __init__(self, data: HeteroData, num_neighbors: NumNeighbors, replace: bool = False, directed: bool = True,
+                 input_node_type: Optional[str] = None, class_indices: Dict[str, Tensor] = None):
         self.data_cls = data.__class__
         self.num_neighbors = num_neighbors
         self.replace = replace
         self.directed = directed
+        self.class_indices = class_indices
 
         if isinstance(data, Data):
             # Convert the graph data into a suitable format for sampling.
@@ -174,7 +142,11 @@ class NeighborSampler:
             query_nodes = {self.input_node_type: torch.LongTensor(nids) \
                 if not isinstance(nids, torch.LongTensor) else nids}
 
-        batch_size = sum([nids.numel() for ntype, nids in query_nodes.items()])
+        if self.class_indices is not None:
+            query_nodes.update(self.class_indices)
+            batch_size = sum([nids.numel() for ntype, nids in query_nodes.items() if ntype not in self.class_indices])
+        else:
+            batch_size = sum([nids.numel() for ntype, nids in query_nodes.items()])
 
         if issubclass(self.data_cls, Data):
             sample_fn = torch.ops.torch_sparse.neighbor_sample
@@ -214,7 +186,7 @@ class NeighborLoader(BaseDataLoader):
             directed: bool = True,
             transform: Callable = None,
             neighbor_sampler: Optional[NeighborSampler] = None,
-            **kwargs,
+            class_indices: Dict[str, Tensor] = None, **kwargs,
     ):
         if 'dataset' in kwargs:
             del kwargs['dataset']
@@ -232,10 +204,9 @@ class NeighborLoader(BaseDataLoader):
 
         if neighbor_sampler is None:
             input_node_type = get_input_node_type(input_nodes)
-            self.neighbor_sampler = NeighborSampler(data, num_neighbors,
-                                                    replace, directed,
-                                                    input_node_type)
-
+            self.neighbor_sampler = NeighborSampler(data, num_neighbors=num_neighbors, replace=replace,
+                                                    directed=directed, input_node_type=input_node_type,
+                                                    class_indices=class_indices)
         return super().__init__(get_input_node_indices(data, input_nodes),
                                 collate_fn=self.neighbor_sampler, **kwargs)
 
@@ -292,6 +263,7 @@ class NeighborLoader(BaseDataLoader):
         return f'{self.__class__.__name__}()'
 
     def sample(self, nids: Union[List[int], Tensor]):
+        print("sample", nids)
         pass
 
 
@@ -302,6 +274,7 @@ class HGTLoader(BaseDataLoader):
             num_neighbors: Union[List[int], Dict[NodeType, List[int]]],
             input_nodes: Union[NodeType, Tuple[NodeType, Optional[Tensor]]],
             transform: Callable = None,
+            class_indices: Dict[str, Tensor] = None,
             **kwargs,
     ):
         if 'collate_fn' in kwargs:
@@ -335,6 +308,8 @@ class HGTLoader(BaseDataLoader):
         self.colptr_dict, self.row_dict, self.perm_dict = to_hetero_csc(
             data, device='cpu')
 
+        self.class_indices = class_indices
+
         super().__init__(input_nodes[1].tolist(), collate_fn=self.sample,
                          **kwargs)
 
@@ -346,7 +321,11 @@ class HGTLoader(BaseDataLoader):
             query_nodes = {self.input_nodes[0]: torch.tensor(indices) \
                 if not isinstance(indices, Tensor) else indices}
 
-        batch_size = sum([nids.numel() for ntype, nids in query_nodes.items()])
+        if self.class_indices is not None:
+            query_nodes.update(self.class_indices)
+            batch_size = sum([nids.numel() for ntype, nids in query_nodes.items() if ntype not in self.class_indices])
+        else:
+            batch_size = sum([nids.numel() for ntype, nids in query_nodes.items()])
 
         # input_node_dict = {self.input_nodes[0]: torch.tensor(indices)}
         node_dict, row_dict, col_dict, edge_dict = self.sample_fn(

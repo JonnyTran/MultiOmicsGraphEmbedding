@@ -143,7 +143,7 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                           inductive=hparams.inductive)
 
     elif 'UniProt' in name and ".pickle" in dataset_path:
-        dataset = load_uniprotgoa(dataset_path, head_node_type, hparams, name, use_reverse)
+        dataset = load_uniprotgoa(name, dataset_path, hparams)
 
     else:
         raise Exception(f"dataset {name} not found")
@@ -213,8 +213,7 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
             file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"} \
                 if "mlm" in name else None)
 
-        dataset.add_edges_from_ontology(geneontology, etypes=["is_a", "part_of"], train_date=train_date,
-                                        valid_date=valid_date, test_date="2021-12-31")
+        dataset.add_edges_from_ontology(geneontology, etypes=["is_a", "part_of"])
         dataset._name = "_".join([name, train_date])
 
         dataset.pred_metapaths = [(hparams.head_node_type, 'associated', 'biological_process'),
