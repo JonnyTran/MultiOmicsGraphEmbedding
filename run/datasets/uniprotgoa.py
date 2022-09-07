@@ -1,5 +1,6 @@
 import pickle
 from argparse import Namespace
+from collections import defaultdict
 
 import dgl
 import numpy as np
@@ -11,6 +12,7 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index_dict
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
 
 
 def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroNodeClfDataset:
@@ -18,9 +20,11 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     head_node_type = hparams.head_node_type
 
     with open(dataset_path, "rb") as file:
-        network = pickle.load(file)
+        network: HeteroNetwork = pickle.load(file)
         if not hasattr(network, 'train_nodes'):
-            network.train_nodes, network.valid_nodes, network.test_nodes = {}, {}, {}
+            network.train_nodes = defaultdict(set)
+            network.valid_nodes = defaultdict(set)
+            network.test_nodes = defaultdict(set)
 
     geneontology = UniProtGOA(file_resources={"go.obo": "http://current.geneontology.org/ontology/go.obo", })
     annot_df = network.annotations[head_node_type]
@@ -38,13 +42,25 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     else:
         hparams.etype_subset = hparams.etype_subset.split(" ")
 
-    if set(hparams.ntype_subset).intersection(['biological_process', 'cellular_component', 'molecular_function']):
+    go_namespace_ntypes = set(hparams.ntype_subset).intersection(
+        ['biological_process', 'cellular_component', 'molecular_function'])
+    if go_namespace_ntypes:
         split_ntype = 'namespace'
     else:
         split_ntype = None
 
     # Add GO interactions
     network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype=split_ntype, etypes=hparams.etype_subset)
+
+    for namespace in go_namespace_ntypes:
+        train_date = '2018-01-01'
+        valid_date = (pd.to_datetime(train_date) + pd.to_timedelta(26, "W")).date().strftime("%Y-%m-%d")
+        test_date = '2021-04-01'
+        network.add_edges_from_annotations(geneontology, filter_dst_nodes=network.nodes[namespace],
+                                           src_ntype=head_node_type, dst_ntype=namespace,
+                                           src_node_col='protein_id',
+                                           train_date=train_date, valid_date=valid_date, test_date=test_date,
+                                           use_neg_annotations=False)
 
     # Add GOA's from DeepGraphGO to UniProtGOA
     uniprot_go_id = load_protein_dataset(hparams.deepgraphgo_data, namespaces=['mf', 'bp', 'cc'])
@@ -71,7 +87,7 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
 
     # Neighbor loader
     if hparams.neighbor_loader == "NeighborLoader":
-        hparams.neighbor_sizes = [hparams.n_neighbors // 8] * hparams.n_layers
+        hparams.neighbor_sizes = [8] * hparams.n_layers
     else:
         hparams.neighbor_sizes = [hparams.n_neighbors] * hparams.n_layers
 

@@ -1,4 +1,5 @@
 import pprint
+import warnings
 from collections import defaultdict
 from typing import Dict, Tuple, Union, List, Any, Optional
 
@@ -90,10 +91,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 dfs.append(df)
 
         all_annotations = pd.concat(dfs, join="inner")
-
-        self.feature_transformer = self.get_feature_transformers(all_annotations, labels_subset=labels_subset,
-                                                                 min_count=min_count, delimiter=delimiter,
-                                                                 verbose=verbose)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            self.feature_transformer = self.get_feature_transformers(all_annotations, labels_subset=labels_subset,
+                                                                     min_count=min_count, delimiter=delimiter,
+                                                                     verbose=verbose)
 
     def add_nodes(self, nodes: List[str], ntype: str, annotations: pd.DataFrame = None):
         """
@@ -287,8 +289,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             # Gather train/valid/test split of nodes
             node_lists.append({
-                src_ntype: set(pos_annotations[src_node_col].unique()).intersection(self.nodes[src_ntype]),
-                dst_ntype: set(pos_annotations[dst_node_col].unique()).intersection(self.nodes[dst_ntype]),
+                src_ntype: set(self.nodes[src_ntype].intersection(pos_annotations[src_node_col])),
+                dst_ntype: set(self.nodes[dst_ntype].intersection(pos_annotations[dst_node_col])),
             })
 
         # Save the list of positive prediction metapaths
@@ -304,8 +306,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Set train/valid/test mask of all nodes on hetero graph
         train_nodes, valid_nodes, test_nodes = node_lists
-        self.train_nodes, self.valid_nodes, self.test_nodes = self.get_all_nodes_split(train_nodes,
-                                                                                       valid_nodes, test_nodes)
+        self.update_traintest_nodes_set(train_nodes, valid_nodes, test_nodes)
 
     def get_triples(self, all_metapaths: List[Tuple[str, str, str]], positive: bool = False, negative: bool = False) \
             -> Tuple[Dict[str, Tensor], Tensor, Tensor, Tensor]:

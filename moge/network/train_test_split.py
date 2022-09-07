@@ -2,7 +2,7 @@ import pprint
 import random
 from abc import abstractmethod
 from collections import defaultdict
-from typing import List, Tuple, Dict, Any, Set, Mapping
+from typing import List, Tuple, Dict, Any, Set
 
 import networkx as nx
 import numpy as np
@@ -27,15 +27,19 @@ def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):
         test_nodes = list(y_label.index[test])
         yield train_nodes, test_nodes
 
+
 class TrainTestSplit():
+    nodes: pd.Series
+    networks: Dict[str, nx.Graph]
+
     def __init__(self) -> None:
         self.training = None
         self.testing = None
         self.validation = None
 
-        self.train_nodes = defaultdict(lambda x: {})
-        self.valid_nodes = defaultdict(lambda x: {})
-        self.test_nodes = defaultdict(lambda x: {})
+        self.train_nodes = defaultdict(set)
+        self.valid_nodes = defaultdict(set)
+        self.test_nodes = defaultdict(set)
 
     @abstractmethod
     def split_edges(self, node_list=None, test_frac=.05, val_frac=.01, seed=0, verbose=False):
@@ -125,9 +129,8 @@ class TrainTestSplit():
         edges = [(u, v, d) for (u, v), d in zip(edges, edge_attr)]
         return edges
 
-    def get_all_nodes_split(self, train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
-                            test_nodes: Dict[str, Set[str]], verbose=False) \
-            -> Tuple[Mapping[str, Set[str]], Mapping[str, Set[str]], Mapping[str, Set[str]]]:
+    def update_traintest_nodes_set(self, train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
+                                   test_nodes: Dict[str, Set[str]], verbose=False) -> None:
         """
         Given a subset of nodes in train/valid/test, mark all nodes in the HeteroNetwork to be either train/valid/test.
         Args:
@@ -138,62 +141,85 @@ class TrainTestSplit():
         Returns:
 
         """
-        def get_mask(node_dict: Dict[str, Set[str]], train=False, valid=False, test=False) \
-                -> Dict[str, Dict[str, Dict[str, Any]]]:
-            mask = {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
+        logger.info(pprint.pformat(tensor_sizes(
+            dict(train_nodes=train_nodes, valid_nodes=valid_nodes, test_nodes=test_nodes)))) if verbose else None
 
-            node_attrs = {key: {node: mask[key] \
-                                for ntype, node_list in node_dict.items() \
-                                for node in node_list} \
-                          for key in ["train_mask", "valid_mask", "test_mask"]}
+        train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), \
+                                               defaultdict(set, valid_nodes), \
+                                               defaultdict(set, test_nodes)
+        if hasattr(self, "train_nodes"):
+            train_nodes = {ntype: self.train_nodes[ntype].union(train_nodes[ntype]) \
+                           for ntype in set(self.train_nodes.keys()).union(train_nodes.keys())}
+        if hasattr(self, "valid_nodes"):
+            valid_nodes = {ntype: self.valid_nodes[ntype].union(valid_nodes[ntype]) \
+                           for ntype in set(self.valid_nodes.keys()).union(valid_nodes.keys())}
+        if hasattr(self, "test_nodes"):
+            test_nodes = {ntype: self.test_nodes[ntype].union(test_nodes[ntype]) \
+                          for ntype in set(self.test_nodes.keys()).union(test_nodes.keys())}
 
-            return node_attrs
+        self.train_nodes, self.valid_nodes, self.test_nodes = defaultdict(set, train_nodes), \
+                                                              defaultdict(set, valid_nodes), \
+                                                              defaultdict(set, test_nodes)
 
+    def set_edge_traintest_mask(self, train_nodes: Dict[str, Set[str]] = None, valid_nodes: Dict[str, Set[str]] = None,
+                                test_nodes: Dict[str, Set[str]] = None,
+                                exclude_metapaths: List[Tuple[str, str, str]] = None):
+        if train_nodes is None:
+            train_nodes = self.train_nodes
+        if valid_nodes is None:
+            valid_nodes = self.valid_nodes
+        if test_nodes is None:
+            test_nodes = self.test_nodes
+
+        # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
+        for metapath, nxgraph in tqdm.tqdm(self.networks.items(), desc=f"Set train/valid/test_mask on edge types"):
+            if exclude_metapaths is not None and metapath in exclude_metapaths:
+                continue
+            edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=train_nodes,
+                                                 valid_nodes=valid_nodes, test_nodes=test_nodes)
+            nx.set_edge_attributes(nxgraph, edge_attrs)
+
+        # Add non-incident nodes to the train nodes, since they do not belong in the valid_nodes or test_nodes
         incident_nodes = {ntype: set(train_nodes[ntype] if ntype in train_nodes else []) |
                                  set(valid_nodes[ntype] if ntype in valid_nodes else []) |
                                  set(test_nodes[ntype] if ntype in test_nodes else []) \
                           for ntype in self.nodes.keys()}
         nonincident_nodes = {ntype: set(nodelist).difference(incident_nodes[ntype]) \
                              for ntype, nodelist in self.nodes.items()}
+        nonincident_nodes = defaultdict(set, {k: v for k, v in nonincident_nodes.items() if v})
 
-        # Add non-incident nodes to the train nodes, since they do not belong in the valid_nodes or test_nodes
-        train_nodes = {ntype: train_nodes[ntype].difference(nonincident_nodes[ntype]) \
-                       for ntype in train_nodes}
-        train_nodes = train_nodes | {ntype: nodes for ntype, nodes in nonincident_nodes.items() \
-                                     if ntype not in train_nodes}
+        train_nodes = {train_nodes[ntype].union(nonincident_nodes[ntype]) \
+                       for ntype in set(train_nodes.keys()).union(nonincident_nodes.keys())}
+        valid_nodes = {valid_nodes[ntype].union(nonincident_nodes[ntype]) \
+                       for ntype in set(valid_nodes.keys()).union(nonincident_nodes.keys())}
+        test_nodes = {test_nodes[ntype].union(nonincident_nodes[ntype]) \
+                      for ntype in set(test_nodes.keys()).union(nonincident_nodes.keys())}
 
-        valid_nodes = {ntype: nids.difference(train_nodes[ntype]) \
-                       for ntype, nids in valid_nodes.items()}
-        valid_nodes = valid_nodes | {ntype: nodes for ntype, nodes in nonincident_nodes.items() \
-                                     if ntype not in valid_nodes}
-
-        test_nodes = {ntype: nids.difference(train_nodes[ntype]).difference(valid_nodes[ntype]) \
-                      for ntype, nids in test_nodes.items()}
-        test_nodes = test_nodes | {ntype: nodes for ntype, nodes in nonincident_nodes.items() \
-                                   if ntype not in test_nodes}
-
-        for metapath in self.networks.keys():
+        # Set train/valid/test_mask on node types
+        for metapath in tqdm.tqdm(self.networks.keys(), desc=f"Set train/valid/test_mask on node types"):
             for nodes_dict in [train_nodes, valid_nodes, test_nodes]:
-                node_attr_dict = get_mask(nodes_dict, train=nodes_dict is train_nodes,
-                                          valid=nodes_dict is valid_nodes, test=nodes_dict is test_nodes)
+                node_attr_dict = self.get_node_mask(nodes_dict,
+                                                    train=nodes_dict is train_nodes,
+                                                    valid=nodes_dict is valid_nodes, test=nodes_dict is test_nodes)
                 for mask_name, node_mask in node_attr_dict.items():
                     nx.set_node_attributes(self.networks[metapath], values=node_mask, name=mask_name)
 
-        logger.info(pprint.pformat(tensor_sizes(
-            dict(train_nodes=train_nodes, valid_nodes=valid_nodes, test_nodes=test_nodes)))) if verbose else None
+        self.train_valid_test_counts = pd.DataFrame(
+            tensor_sizes(train_nodes=train_nodes | self.nodes.drop(train_nodes).map(len).to_dict(),
+                         valid_nodes=valid_nodes | self.nodes.drop(valid_nodes).map(len).to_dict(),
+                         test_nodes=test_nodes | self.nodes.drop(test_nodes).map(len).to_dict()),
+            dtype='int').T
 
-        train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), \
-                                               defaultdict(set, valid_nodes), defaultdict(set, test_nodes)
-        if hasattr(self, "train_nodes"):
-            train_nodes = {ntype: nids.union(self.train_nodes[ntype]) if ntype in self.train_nodes else nids \
-                           for ntype, nids in train_nodes.items()}
-        if hasattr(self, "valid_nodes"):
-            train_nodes = {ntype: nids.union(self.valid_nodes[ntype]) if ntype in self.valid_nodes else nids \
-                           for ntype, nids in train_nodes.items()}
-        if hasattr(self, "test_nodes"):
-            train_nodes = {ntype: nids.union(self.test_nodes[ntype]) if ntype in self.test_nodes else nids \
-                           for ntype, nids in train_nodes.items()}
-        return train_nodes, valid_nodes, test_nodes
+    def get_node_mask(self, node_dict: Dict[str, Set[str]], train=False, valid=False, test=False) \
+            -> Dict[str, Dict[str, Dict[str, Any]]]:
+        mask = {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
+
+        node_attrs = {key: {node: mask[key] \
+                            for ntype, node_list in node_dict.items() \
+                            for node in node_list} \
+                      for key in ["train_mask", "valid_mask", "test_mask"]}
+
+        return node_attrs
 
     def get_all_edges_mask(self, edgelist: EdgeView, metapath: Tuple[str, str, str],
                            train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
@@ -211,11 +237,11 @@ class TrainTestSplit():
         Returns:
 
         """
-        train_nodes = defaultdict(set, {ntype: set(nodes) for ntype, nodes in train_nodes.items()})
-        valid_nodes = defaultdict(set, {ntype: set(nodes) for ntype, nodes in valid_nodes.items()})
-        test_nodes = defaultdict(set, {ntype: set(nodes) for ntype, nodes in test_nodes.items()})
+        train_nodes = defaultdict(set, train_nodes)
+        valid_nodes = defaultdict(set, valid_nodes)
+        test_nodes = defaultdict(set, test_nodes)
 
-        def get_edge_mask(u: str, v: str) -> Dict[str, Any]:
+        def _get_edge_mask(u: str, v: str) -> Dict[str, Any]:
             head_type, tail_type = metapath[0], metapath[-1]
             train = u in train_nodes[head_type] and v in train_nodes[tail_type]
             valid = u in valid_nodes[head_type] or v in valid_nodes[tail_type]
@@ -224,21 +250,10 @@ class TrainTestSplit():
                 train = valid = test = True
             return {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
 
-        edge_attrs = {edge_tup: get_edge_mask(edge_tup[0], edge_tup[1]) \
+        edge_attrs = {edge_tup: _get_edge_mask(edge_tup[0], edge_tup[1]) \
                       for edge_tup, _ in edgelist.items()}
 
         return edge_attrs
-
-    def set_edge_traintest_mask(self, train_nodes: Mapping[str, Set[str]], valid_nodes: Mapping[str, Set[str]],
-                                test_nodes: Mapping[str, Set[str]],
-                                exclude_metapaths: List[Tuple[str, str, str]] = None):
-        # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
-        for metapath, nxgraph in tqdm.tqdm(self.networks.items(), desc=f"Set train/valid/test_mask on edge types"):
-            if exclude_metapaths is not None and metapath in exclude_metapaths:
-                continue
-            edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=train_nodes,
-                                                 valid_nodes=valid_nodes, test_nodes=test_nodes)
-            nx.set_edge_attributes(nxgraph, edge_attrs)
 
 
 def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_frac=0.0,

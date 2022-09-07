@@ -31,4 +31,4 @@ max_epochs: 300
 sweep: true
 lr: 0.01
 #hours: 3
-early_stopping: 5
+early_stopping: 8
