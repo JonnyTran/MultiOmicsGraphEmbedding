@@ -7,12 +7,13 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.relations import RelationAttention
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.relations import RelationAttention
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -389,6 +390,10 @@ class LATTE(nn.Module):
         self.layer_pooling = layer_pooling
 
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of meapaths
+        if hasattr(hparams, 'pred_ntypes') and hparams.pred_ntypes:
+            output_ntypes = [self.head_node_type] + hparams.pred_ntypes
+        else:
+            output_ntypes = [self.head_node_type]
 
         layers = []
         for l in range(n_layers):
@@ -398,7 +403,7 @@ class LATTE(nn.Module):
                 metapaths=metapaths + higher_order_metapaths,
                 order=list(range(1, min(l + 1, t_order) + 1)),  # Select only up to t-order
                 # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
-                tail_type=[self.head_node_type, "GO_term"] if is_last_layer else None)
+                tail_type=output_ntypes if is_last_layer else None)
 
             layers.append(LATTEConv(input_dim=embedding_dim,
                                     output_dim=embedding_dim,

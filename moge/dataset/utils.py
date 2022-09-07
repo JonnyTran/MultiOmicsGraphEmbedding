@@ -231,6 +231,9 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph],
         try:
             biadj = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
                                                     format="coo")
+        except ValueError as ve:
+            # Unknown error caused by nx.bipartite.biadjacency_matrix when edge tuples are not size of 3
+            continue
         except Exception as e:
             logger.warn(f"{metapath}: {e.__class__.__name__}:{e}")
             # traceback.print_exc()
@@ -241,9 +244,8 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph],
 
         elif format == "pyg":
             import torch
-            edge_index_dict[metapath] = torch.stack(
-                [torch.tensor(biadj.row, dtype=torch.long),
-                 torch.tensor(biadj.col, dtype=torch.long)])
+            edge_index_dict[metapath] = torch.stack([torch.tensor(biadj.row, dtype=torch.long),
+                                                     torch.tensor(biadj.col, dtype=torch.long)])
 
         elif format == "dgl":
             import torch

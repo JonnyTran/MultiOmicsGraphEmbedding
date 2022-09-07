@@ -11,6 +11,7 @@ from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
 
+from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.dgl.HGT import HGT
 
@@ -52,9 +53,22 @@ class LabelGraphNodeClassifier(nn.Module):
                             dropout=hparams.dropout,
                             use_norm=True)
 
+    def create_encoder(self, hparams):
+        if isinstance(hparams.cls_encoder, str):
+            go_encoder = BertForSequenceClassification.from_pretrained("dmis-lab/biobert-base-cased-v1.2",
+                                                                       num_hidden_layers=1,
+                                                                       num_labels=hparams.embedding_dim)
+        elif isinstance(hparams.cls_encoder, BertConfig):
+            hparams.cls_encoder.num_labels = hparams.embedding_dim
+            go_encoder = BertForSequenceClassification(hparams.cls_encoder)
+
+        elif isinstance(hparams.cls_encoder, BertForSequenceClassification):
+            go_encoder = hparams.cls_encoder
+
+        return go_encoder
 
     def forward(self, embeddings: Tensor, classes: Optional[List[str]] = None,
-                cls_emb: Dict[str, Tensor] = None) -> Tensor:
+                cls_emb: Dict[str, Tensor] = None, **kwargs) -> Tensor:
         if self.g.device != embeddings.device:
             self.g = self.g.to(embeddings.device)
 
@@ -78,37 +92,30 @@ class LabelGraphNodeClassifier(nn.Module):
 
         return logits
 
-    def create_encoder(self, hparams):
-        if isinstance(hparams.cls_encoder, str):
-            go_encoder = BertForSequenceClassification.from_pretrained("dmis-lab/biobert-base-cased-v1.2",
-                                                                       num_hidden_layers=1,
-                                                                       num_labels=hparams.embedding_dim)
-        elif isinstance(hparams.cls_encoder, BertConfig):
-            hparams.cls_encoder.num_labels = hparams.embedding_dim
-            go_encoder = BertForSequenceClassification(hparams.cls_encoder)
-
-        elif isinstance(hparams.cls_encoder, BertForSequenceClassification):
-            go_encoder = hparams.cls_encoder
-
-        return go_encoder
-
 
 class LabelNodeClassifer(nn.Module):
-    def __init__(self, dataset: HeteroGraphDataset, hparams: Namespace):
+    def __init__(self, dataset: HeteroNodeClfDataset, hparams: Namespace):
         super().__init__()
         self.n_classes = hparams.n_classes
         self.classes = dataset.classes
         self.head_node_type = hparams.head_node_type
 
+        self.pred_ntype = dataset.pred_ntypes
         self.class_indices = dataset.class_indices
-
+        self.class_sizes = {ntype: ids.numel() for ntype, ids in self.class_indices.items()}
         self.embedding_dim = hparams.embedding_dim
 
         # if hparams.embedding_dim
         self.dropout = nn.Dropout(p=hparams.nb_cls_dropout)
 
-    def forward(self, embeddings: Dict[str, Tensor]) -> Tensor:
-        pass
+    def forward(self, emb: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
+        # TODO ensure cls_emb is same shape as self.n_classes
+        for ntype in self.pred_ntype:
+            cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
+
+        assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb}) != n_classes ({self.n_classes})"
+        logits = emb @ cls_emb.T
+        return logits
 
 
 class DenseClassification(nn.Module):
@@ -153,7 +160,7 @@ class DenseClassification(nn.Module):
             if hasattr(linear, "weight"):
                 nn.init.xavier_uniform_(linear.weight)
 
-    def forward(self, h):
+    def forward(self, h, **kwargs):
         h = self.linears(h)
 
         return h

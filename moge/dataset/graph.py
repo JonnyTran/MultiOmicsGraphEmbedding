@@ -323,7 +323,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         testing_idx = indices[int(num_indices * train_ratio):]
         return training_idx, validation_idx, testing_idx
 
-    def get_metapaths(self, khop=False):
+    def get_metapaths(self, k_hop=False):
         """
         Returns original metapaths including reverse metapaths if use_reverse
         :return:
@@ -332,7 +332,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         if self.use_reverse and not any("rev_" in metapath[1] for metapath in self.metapaths):
             metapaths = metapaths + get_reverse_metapaths(self.metapaths)
 
-        if khop:
+        if k_hop:
             t_order_metapaths = metapaths
             for k in range(len(self.neighbor_sizes) - 1):
                 t_order_metapaths = moge.module.PyG.utils.join_metapaths(t_order_metapaths, metapaths)

@@ -24,7 +24,7 @@ from moge.model.PyG.conv import HGT
 from moge.model.PyG.latte import LATTE
 from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
 from moge.model.PyG.link_pred import LATTEFlatLinkPred
-from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
+from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier, LabelNodeClassifer
 from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
@@ -57,7 +57,7 @@ class LATTENodeClf(NodeClfTrainer):
                               t_order=min(hparams.t_order, hparams.n_layers),
                               embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(khop=True if "khop" in collate_fn else None),
+                              metapaths=dataset.get_metapaths(k_hop=True if "khop" in collate_fn else None),
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
@@ -320,11 +320,14 @@ class LATTEFlatNodeClf(LATTENodeClf):
         if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.node_types):
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
+        if dataset.pred_ntypes is not None:
+            hparams.pred_ntypes = dataset.pred_ntypes
+
         self.embedder = LATTE_Flat(n_layers=hparams.n_layers,
                                    t_order=hparams.t_order,
                                    embedding_dim=hparams.embedding_dim,
                                    num_nodes_dict=dataset.num_nodes_dict,
-                                   metapaths=dataset.get_metapaths(khop=None),
+                                   metapaths=dataset.get_metapaths(),
                                    layer_pooling=hparams.layer_pooling,
                                    activation=hparams.activation,
                                    attn_heads=hparams.attn_heads,
@@ -338,6 +341,8 @@ class LATTEFlatNodeClf(LATTENodeClf):
             hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
         if "cls_graph" in hparams and hparams.cls_graph is not None:
             self.classifier = LabelGraphNodeClassifier(dataset, hparams)
+        elif dataset.pred_ntypes is not None and dataset.class_indices:
+            self.classifier = LabelNodeClassifer(dataset, hparams)
         else:
             self.classifier = DenseClassification(hparams)
 
@@ -387,7 +392,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
             if "batch_size" in inputs and self.head_node_type in inputs["batch_size"]:
                 head_ntype_embeddings = head_ntype_embeddings[:inputs["batch_size"][self.head_node_type]]
 
-            logits = self.classifier.forward(head_ntype_embeddings)
+            logits = self.classifier.forward(head_ntype_embeddings, h_dict=h_out)
         else:
             logits = h_out[self.head_node_type]
 
