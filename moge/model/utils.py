@@ -77,6 +77,8 @@ def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
 def filter_samples_weights(y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, return_index=False):
     if weights is None or not isinstance(weights, (Tensor, np.ndarray)) or weights.shape == None:
         return y_pred, y_true, None
+    else:
+        assert weights.dim() == 1
 
     if isinstance(weights, Tensor) and weights.numel():
         idx = torch.nonzero(weights).ravel()
@@ -121,7 +123,7 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
         weights = torch.cat([weights[ntype][:size] for ntype, size in batch_size.items()], dim=0)
     elif isinstance(weights, (np.ndarray, pd.Series, pd.DataFrame, Tensor)):
         size = list(batch_size.values())[0]
-        weights = y_pred[:size]
+        weights = weights[:size]
 
     return y_pred_concat, y_true_concat, weights
 
