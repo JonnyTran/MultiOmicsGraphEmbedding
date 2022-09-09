@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -15,12 +18,6 @@ from torch import Tensor
 from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
-
-import moge.model.PyG.utils
-from moge.dataset.utils import get_reverse_metapaths
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
-from moge.network.sequence import BertSequenceTokenizer
 
 
 class Graph:
@@ -326,17 +323,16 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
     def get_metapaths(self, k_hop=False):
         """
         Returns original metapaths including reverse metapaths if use_reverse
-        :return:
         """
         metapaths = self.metapaths
-        if self.use_reverse and not any("rev_" in metapath[1] for metapath in self.metapaths):
-            metapaths = metapaths + get_reverse_metapaths(self.metapaths)
-
-        if k_hop:
-            t_order_metapaths = metapaths
-            for k in range(len(self.neighbor_sizes) - 1):
-                t_order_metapaths = moge.module.PyG.utils.join_metapaths(t_order_metapaths, metapaths)
-                metapaths = metapaths + t_order_metapaths
+        # if self.use_reverse and not any("rev_" in metapath[1] for metapath in self.metapaths):
+        #     metapaths = metapaths + get_reverse_metapaths(self.metapaths)
+        #
+        # if k_hop:
+        #     t_order_metapaths = metapaths
+        #     for k in range(len(self.neighbor_sizes) - 1):
+        #         t_order_metapaths = moge.module.PyG.utils.join_metapaths(t_order_metapaths, metapaths)
+        #         metapaths = metapaths + t_order_metapaths
 
         return metapaths
 

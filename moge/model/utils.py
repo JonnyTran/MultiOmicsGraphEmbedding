@@ -12,20 +12,6 @@ from torch import Tensor
 from torch_geometric.data import HeteroData
 
 
-def activation(y_pred: Tensor, loss_type: str):
-    # Apply softmax/sigmoid activation if needed
-    if "LOGITS" in loss_type or "FOCAL" in loss_type:
-        if "SOFTMAX" in loss_type:
-            y_pred = torch.softmax(y_pred, dim=1)
-        else:
-            y_pred = torch.sigmoid(y_pred)
-
-    elif "NEGATIVE_LOG_LIKELIHOOD" == loss_type or "SOFTMAX_CROSS_ENTROPY" in loss_type:
-        y_pred = torch.softmax(y_pred, dim=1)
-
-    return y_pred
-
-
 def to_device(obj: Union[Dict, List[Any], Tensor], device: str):
     if torch.is_tensor(obj):
         return obj.to(device)
@@ -50,121 +36,6 @@ def to_device(obj: Union[Dict, List[Any], Tensor], device: str):
 
     else:
         raise TypeError("Invalid type for move_to", type(obj), "\n", obj)
-
-
-def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
-    if weights is None or not hasattr(weights, 'shape') or weights.shape == None or weights.numel() == 0:
-        return Y_hat, Y
-
-    if not isinstance(weights, Tensor):
-        weights = torch.tensor(weights)
-
-    idx = torch.nonzero(weights).view(-1)
-
-    if Y.dim() > 1:
-        Y = Y[idx, :]
-    else:
-        Y = Y[idx]
-
-    if Y_hat.dim() > 1:
-        Y_hat = Y_hat[idx, :]
-    else:
-        Y_hat = Y_hat[idx]
-
-    return Y_hat, Y
-
-
-def filter_samples_weights(y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, return_index=False):
-    if weights is None or not isinstance(weights, (Tensor, np.ndarray)) or weights.shape == None:
-        return y_pred, y_true, None
-    else:
-        assert weights.dim() == 1
-
-    if isinstance(weights, Tensor) and weights.numel():
-        idx = torch.nonzero(weights).ravel()
-    else:
-        idx = torch.tensor(np.nonzero(weights)[0])
-
-    if return_index:
-        return idx
-
-    if y_true.dim() > 1:
-        y_true_out = y_true[idx, :]
-    else:
-        y_true_out = y_true[idx]
-
-    if y_pred.dim() > 1:
-        y_pred_out = y_pred[idx, :]
-    else:
-        y_pred_out = y_pred[idx]
-
-    return y_pred_out, y_true_out, weights[idx]
-
-
-def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
-                      weights: Optional[Dict[str, Tensor]] = None) \
-        -> Tuple[Tensor, Tensor, Tensor]:
-    # Filter out node types which have no labels and ensure same order of ntypes
-    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items()})
-
-    if isinstance(y_true, dict):
-        y_true_concat = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
-    elif isinstance(y_true, Tensor):
-        size = list(batch_size.values())[0]
-        y_true_concat = y_true[:size]
-
-    if isinstance(y_pred, dict):
-        y_pred_concat = torch.cat([y_pred[ntype][:size] for ntype, size in batch_size.items()], dim=0)
-    elif isinstance(y_pred, Tensor):
-        size = list(batch_size.values())[0]
-        y_pred_concat = y_pred[:size]
-
-    if isinstance(weights, dict):
-        weights = torch.cat([weights[ntype][:size] for ntype, size in batch_size.items()], dim=0)
-    elif isinstance(weights, (np.ndarray, pd.Series, pd.DataFrame, Tensor)):
-        size = list(batch_size.values())[0]
-        weights = weights[:size]
-
-    return y_pred_concat, y_true_concat, weights
-
-
-def stack_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
-                       weights: Optional[Dict[str, Tensor]] = None) \
-        -> Tuple[Tensor, Tensor, Tensor]:
-    """
-    Returns y_pred, y_true, weights as Tensors and ensure they all have the same batch_size in dim 0.
-
-    Args:
-        y_pred ():
-        y_true ():
-        weights ():
-
-    Returns:
-
-    """
-    if isinstance(y_true, dict) and isinstance(y_pred, dict):
-        ntypes = list(y_pred.keys())
-        # Filter node types which have no data
-        ntypes = [ntype for ntype in ntypes if y_true[ntype].sum() > 0]
-
-        y_true = torch.cat([y_true[ntype] for ntype in ntypes], dim=0)
-        y_pred = torch.cat([y_pred[ntype] for ntype in ntypes], dim=0)
-        if isinstance(weights, dict):
-            weights = torch.cat([weights[ntype] for ntype in ntypes], dim=0)
-
-    elif isinstance(y_true, dict) and isinstance(y_pred, Tensor):
-        head_node_type = list({ntype for ntype, label in y_true.items() if label.numel() > 0}).pop()
-        y_true = y_true[head_node_type]
-        if isinstance(weights, dict):
-            weights = weights[head_node_type]
-
-    elif isinstance(y_true, Tensor) and isinstance(y_pred, dict):
-        head_node_type = list(y_pred.keys()).pop()
-        y_pred = y_pred[head_node_type]
-        if isinstance(weights, dict):
-            weights = weights[head_node_type]
-
-    return y_pred, y_true, weights
 
 
 def tensor_sizes(input=None, **kwargs) -> ...:
@@ -212,6 +83,141 @@ def tensor_sizes(input=None, **kwargs) -> ...:
             return list(input.shape)
         else:
             return input
+
+
+def activation(y_pred: Tensor, loss_type: str):
+    # Apply softmax/sigmoid activation if needed
+    if "LOGITS" in loss_type or "FOCAL" in loss_type:
+        if "SOFTMAX" in loss_type:
+            y_pred = torch.softmax(y_pred, dim=1)
+        else:
+            y_pred = torch.sigmoid(y_pred)
+
+    elif "NEGATIVE_LOG_LIKELIHOOD" == loss_type or "SOFTMAX_CROSS_ENTROPY" in loss_type:
+        y_pred = torch.softmax(y_pred, dim=1)
+
+    return y_pred
+
+
+def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
+    if weights is None or not hasattr(weights, 'shape') or weights.shape == None or weights.numel() == 0:
+        return Y_hat, Y
+
+    if not isinstance(weights, Tensor):
+        weights = torch.tensor(weights)
+
+    idx = torch.nonzero(weights).view(-1)
+
+    if Y.dim() > 1:
+        Y = Y[idx, :]
+    else:
+        Y = Y[idx]
+
+    if Y_hat.dim() > 1:
+        Y_hat = Y_hat[idx, :]
+    else:
+        Y_hat = Y_hat[idx]
+
+    return Y_hat, Y
+
+
+def filter_samples_weights(y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, return_index=False):
+    if weights is None or not isinstance(weights, (Tensor, np.ndarray)) or weights.shape == None:
+        return y_pred, y_true, None
+    else:
+        assert weights.dim() == 1, f"`weights` must be a 1D vector of size n_samples. Current size: {weights.shape}"
+
+    if isinstance(weights, Tensor) and weights.numel():
+        idx = torch.nonzero(weights).ravel()
+    else:
+        idx = torch.tensor(np.nonzero(weights)[0])
+
+    if return_index:
+        return idx
+
+    if y_true.dim() > 1:
+        y_true_out = y_true[idx, :]
+    else:
+        y_true_out = y_true[idx]
+
+    if y_pred.dim() > 1:
+        y_pred_out = y_pred[idx, :]
+    else:
+        y_pred_out = y_pred[idx]
+
+    return y_pred_out, y_true_out, weights[idx]
+
+
+def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
+                      weights: Optional[Dict[str, Tensor]] = None) \
+        -> Tuple[Tensor, Tensor, Tensor]:
+    # Filter out node types which have no labels and ensure same order of ntypes
+    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items()})
+
+    if isinstance(y_true, dict):
+        y_true_concat = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+    elif isinstance(y_true, Tensor):
+        size = list(batch_size.values())[0]
+        y_true_concat = y_true[:size]
+    else:
+        raise Exception(f"Check `y_true` type: {y_true}")
+
+    if isinstance(y_pred, dict):
+        y_pred_concat = torch.cat([y_pred[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+    elif isinstance(y_pred, Tensor):
+        size = list(batch_size.values())[0]
+        y_pred_concat = y_pred[:size]
+    else:
+        raise Exception()
+
+    if isinstance(weights, dict):
+        weights = torch.cat([weights[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+    elif isinstance(weights, (np.ndarray, pd.Series, pd.DataFrame, Tensor)):
+        size = list(batch_size.values())[0]
+        weights = weights[:size]
+    else:
+        raise Exception()
+
+    return y_pred_concat, y_true_concat, weights
+
+
+def stack_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
+                       weights: Optional[Dict[str, Tensor]] = None) \
+        -> Tuple[Tensor, Tensor, Tensor]:
+    """
+    Returns y_pred, y_true, weights as Tensors and ensure they all have the same batch_size in dim 0.
+
+    Args:
+        y_pred ():
+        y_true ():
+        weights ():
+
+    Returns:
+
+    """
+    if isinstance(y_true, dict) and isinstance(y_pred, dict):
+        ntypes = list(y_pred.keys())
+        # Filter node types which have no data
+        ntypes = [ntype for ntype in ntypes if y_true[ntype].sum() > 0]
+
+        y_true = torch.cat([y_true[ntype] for ntype in ntypes], dim=0)
+        y_pred = torch.cat([y_pred[ntype] for ntype in ntypes], dim=0)
+        if isinstance(weights, dict):
+            weights = torch.cat([weights[ntype] for ntype in ntypes], dim=0)
+
+    elif isinstance(y_true, dict) and isinstance(y_pred, Tensor):
+        head_node_type = list({ntype for ntype, label in y_true.items() if label.numel() > 0}).pop()
+        y_true = y_true[head_node_type]
+        if isinstance(weights, dict):
+            weights = weights[head_node_type]
+
+    elif isinstance(y_true, Tensor) and isinstance(y_pred, dict):
+        head_node_type = list(y_pred.keys()).pop()
+        y_pred = y_pred[head_node_type]
+        if isinstance(weights, dict):
+            weights = weights[head_node_type]
+
+    return y_pred, y_true, weights
 
 def edge_index_sizes(edge_index_dict):
     output = {}

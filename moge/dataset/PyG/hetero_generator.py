@@ -220,7 +220,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         else:
             weights = None
 
-        assert weights is None or weights.dim() == 1
+        assert weights is None or isinstance(weights, dict) or (isinstance(weights, Tensor) and weights.dim() == 1)
 
         return X, y_dict, weights
 
