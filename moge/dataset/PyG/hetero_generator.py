@@ -8,7 +8,13 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
-from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
+from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
@@ -16,11 +22,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -159,9 +160,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         print(f"{self.neighbor_loader} neighbor_sizes:") if verbose else None
         pprint(self.num_neighbors, width=300) if verbose else None
 
-        args = dict(data=graph, num_neighbors=self.num_neighbors,
+        args = dict(data=graph,
+                    num_neighbors=self.num_neighbors,
                     batch_size=batch_size,
-                    # directed=True,
                     transform=transform_fn,
                     input_nodes=(node_type, node_mask),
                     shuffle=shuffle,
@@ -172,9 +173,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             args['class_indices'] = self.class_indices
 
         if self.neighbor_loader == "NeighborLoader":
-            dataset = NeighborLoader(**args)
+            dataset = NeighborLoaderX(**args)
         elif self.neighbor_loader == "HGTLoader":
-            dataset = HGTLoader(**args)
+            dataset = HGTLoaderX(**args)
 
         return dataset
 

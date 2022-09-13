@@ -3,14 +3,15 @@ import copy
 from typing import Union, List, Optional, Callable, Any, Dict, Tuple
 
 import torch
-from torch import Tensor, LongTensor
+from torch import Tensor
 from torch_geometric.data import Data, HeteroData
-from torch_geometric.loader.base import BaseDataLoader
-from torch_geometric.loader.neighbor_loader import NumNeighbors, get_input_node_type, \
-    get_input_node_indices
+from torch_geometric.data.feature_store import FeatureStore
+from torch_geometric.data.graph_store import GraphStore
+from torch_geometric.loader import HGTLoader
+from torch_geometric.loader.neighbor_loader import NumNeighbors, NeighborSampler, NeighborLoader, get_input_nodes
 from torch_geometric.loader.neighbor_sampler import EdgeIndex, Adj
-from torch_geometric.loader.utils import filter_data, to_hetero_csc, filter_node_store_, \
-    edge_type_to_str, filter_edge_store_, to_csc, filter_hetero_data
+from torch_geometric.loader.utils import to_hetero_csc, filter_node_store_, \
+    edge_type_to_str, filter_edge_store_
 from torch_geometric.typing import InputNodes, NodeType, OptTensor
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import SparseTensor
@@ -96,184 +97,215 @@ class HeteroNeighborSampler(torch.utils.data.DataLoader):
         return batch_size, n_id, adjs
 
 
-class NeighborSampler:
-    def __init__(self, data: HeteroData, num_neighbors: NumNeighbors, replace: bool = False, directed: bool = True,
-                 input_node_type: Optional[str] = None, class_indices: Dict[str, Tensor] = None):
-        self.data_cls = data.__class__
-        self.num_neighbors = num_neighbors
-        self.replace = replace
-        self.directed = directed
+class NeighborSamplerX(NeighborSampler):
+
+    def __init__(self, data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]], num_neighbors: NumNeighbors,
+                 replace: bool = False, directed: bool = True, input_type: Optional[Any] = None,
+                 time_attr: Optional[str] = None, is_sorted: bool = False, share_memory: bool = False,
+                 class_indices: Dict[str, Tensor] = None):
+        super().__init__(data, num_neighbors, replace, directed, input_type, time_attr, is_sorted, share_memory)
         self.class_indices = class_indices
 
-        if isinstance(data, Data):
-            # Convert the graph data into a suitable format for sampling.
-            self.colptr, self.row, self.perm = to_csc(data, device='cpu')
-            assert isinstance(num_neighbors, (list, tuple))
+    def __call__(self, index: Union[List[int], Tensor]):
+        if not isinstance(index, torch.LongTensor):
+            index = torch.LongTensor(index)
 
-        elif isinstance(data, HeteroData):
-            # Convert the graph data into a suitable format for sampling.
-            # NOTE: Since C++ cannot take dictionaries with tuples as key as
-            # input, edge type triplets are converted into single strings.
-            out = to_hetero_csc(data, device='cpu')
-            self.colptr_dict, self.row_dict, self.perm_dict = out
+        if self.data_cls != 'custom' and issubclass(self.data_cls, Data):
+            return self._sparse_neighbor_sample(index) + (index.numel(),)
 
-            self.node_types, self.edge_types = data.metadata()
-            if isinstance(num_neighbors, (list, tuple)):
-                num_neighbors = {key: num_neighbors for key in self.edge_types}
-            assert isinstance(num_neighbors, dict)
-            self.num_neighbors = {
-                edge_type_to_str(key): value
-                for key, value in num_neighbors.items()
-            }
+        elif self.data_cls == 'custom' or issubclass(self.data_cls,
+                                                     HeteroData):
+            query_nodes = {self.input_type: index}
+            if self.class_indices is not None:
+                query_nodes.update(self.class_indices)
 
-            self.num_hops = max([len(v) for v in self.num_neighbors.values()])
-
-            assert isinstance(input_node_type, str)
-            self.input_node_type = input_node_type
-
-        else:
-            raise TypeError(f'NeighborLoader found invalid type: {type(data)}')
-
-    def __call__(self, nids: Union[LongTensor, Dict[str, Tensor]]):
-        if isinstance(nids, dict):
-            query_nodes = {ntype: torch.LongTensor(nids) if not isinstance(nids, torch.LongTensor) else nids \
-                           for ntype, nids in nids.items()}
-        else:
-            query_nodes = {self.input_node_type: torch.LongTensor(nids) \
-                if not isinstance(nids, torch.LongTensor) else nids}
-
-        if self.class_indices is not None:
-            query_nodes.update(self.class_indices)
-            batch_size = sum([nids.numel() for ntype, nids in query_nodes.items() if ntype not in self.class_indices])
-        else:
-            batch_size = sum([nids.numel() for ntype, nids in query_nodes.items()])
-
-        if issubclass(self.data_cls, Data):
-            sample_fn = torch.ops.torch_sparse.neighbor_sample
-            node, row, col, edge = sample_fn(
-                self.colptr,
-                self.row,
-                query_nodes,
-                self.num_neighbors,
-                self.replace,
-                self.directed,
-            )
-            return node, row, col, edge, batch_size
-
-        elif issubclass(self.data_cls, HeteroData):
-            sample_fn = torch.ops.torch_sparse.hetero_neighbor_sample
-            node_dict, row_dict, col_dict, edge_dict = sample_fn(
-                self.node_types,
-                self.edge_types,
-                self.colptr_dict,
-                self.row_dict,
-                query_nodes,
-                self.num_neighbors,
-                self.num_hops,
-                self.replace,
-                self.directed,
-            )
-            return node_dict, row_dict, col_dict, edge_dict, batch_size
+            return self._hetero_sparse_neighbor_sample(query_nodes) + (index.numel(),)
 
 
-class NeighborLoader(BaseDataLoader):
-    def __init__(
-            self,
-            data: Union[Data, HeteroData],
-            num_neighbors: NumNeighbors,
-            input_nodes: InputNodes = None,
-            replace: bool = False,
-            directed: bool = True,
-            transform: Callable = None,
-            neighbor_sampler: Optional[NeighborSampler] = None,
-            class_indices: Dict[str, Tensor] = None, **kwargs,
-    ):
+# def __call__(self, nids: Union[LongTensor, Dict[str, Tensor]]):
+#     if isinstance(nids, dict):
+#         query_nodes = {ntype: torch.LongTensor(nids) if not isinstance(nids, torch.LongTensor) else nids \
+#                        for ntype, nids in nids.items()}
+#     else:
+#         query_nodes = {self.input_type: torch.LongTensor(nids) \
+#             if not isinstance(nids, torch.LongTensor) else nids}
+# 
+#     if self.class_indices is not None:
+#         query_nodes.update(self.class_indices)
+#         batch_size = sum([nids.numel() for ntype, nids in query_nodes.items() if ntype not in self.class_indices])
+#     else:
+#         batch_size = sum([nids.numel() for ntype, nids in query_nodes.items()])
+# 
+#     if issubclass(self.data_cls, Data):
+#         sample_fn = torch.ops.torch_sparse.neighbor_sample
+#         node, row, col, edge = sample_fn(
+#             self.colptr,
+#             self.row,
+#             query_nodes,
+#             self.num_neighbors,
+#             self.replace,
+#             self.directed,
+#         )
+#         return node, row, col, edge, batch_size
+# 
+#     elif issubclass(self.data_cls, HeteroData):
+#         sample_fn = torch.ops.torch_sparse.hetero_neighbor_sample
+#         node_dict, row_dict, col_dict, edge_dict = sample_fn(
+#             self.node_types,
+#             self.edge_types,
+#             self.colptr_dict,
+#             self.row_dict,
+#             query_nodes,
+#             self.num_neighbors,
+#             self.num_hops,
+#             self.replace,
+#             self.directed,
+#         )
+#         return node_dict, row_dict, col_dict, edge_dict, batch_size
+
+class NeighborLoaderX(NeighborLoader):
+
+    def __init__(self, data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]], num_neighbors: NumNeighbors,
+                 input_nodes: InputNodes = None, replace: bool = False, directed: bool = True,
+                 time_attr: Optional[str] = None, transform: Callable = None, is_sorted: bool = False,
+                 filter_per_worker: bool = False, neighbor_sampler: Optional[NeighborSampler] = None,
+                 class_indices: Dict[str, Tensor] = None,
+                 **kwargs):
+        # Remove for PyTorch Lightning:
         if 'dataset' in kwargs:
             del kwargs['dataset']
         if 'collate_fn' in kwargs:
             del kwargs['collate_fn']
 
-        # Save for PyTorch Lightning:
-        self.G = data
+        self.data = data
+
+        # Save for PyTorch Lightning < 1.6:
         self.num_neighbors = num_neighbors
         self.input_nodes = input_nodes
         self.replace = replace
         self.directed = directed
         self.transform = transform
+        self.filter_per_worker = filter_per_worker
         self.neighbor_sampler = neighbor_sampler
 
+        node_type, input_nodes = get_input_nodes(data, input_nodes)
+
         if neighbor_sampler is None:
-            input_node_type = get_input_node_type(input_nodes)
-            self.neighbor_sampler = NeighborSampler(data, num_neighbors=num_neighbors, replace=replace,
-                                                    directed=directed, input_node_type=input_node_type,
-                                                    class_indices=class_indices)
-        return super().__init__(get_input_node_indices(data, input_nodes),
-                                collate_fn=self.neighbor_sampler, **kwargs)
+            self.neighbor_sampler = NeighborSamplerX(
+                data,
+                num_neighbors,
+                replace,
+                directed,
+                input_type=node_type,
+                time_attr=time_attr,
+                is_sorted=is_sorted,
+                share_memory=kwargs.get('num_workers', 0) > 0,
+                class_indices=class_indices,
+            )
 
-    def transform_fn(self, out: Any) -> Union[Data, HeteroData]:
-        if isinstance(self.G, Data):
-            node, row, col, edge, batch_size = out
-            data = filter_data(self.G, node, row, col, edge,
-                               self.neighbor_sampler.perm)
-            data.batch_size = batch_size
-
-        elif isinstance(self.G, HeteroData):
-            node_dict, row_dict, col_dict, edge_dict, batch_size = out
-            # print({"edge_types": (len(self.G.edge_types), len(self.G.edge_stores)), "node_dict": len(node_dict),
-            #        "row_dict": len(row_dict), "col_dict": len(col_dict),
-            #        "edge_dict": len(edge_dict), 'perm_dict': len(self.neighbor_sampler.perm_dict)})
-
-            data = filter_hetero_data(self.G, node_dict, row_dict, col_dict,
-                                      edge_dict,
-                                      perm_dict=self.neighbor_sampler.perm_dict)
-            data[self.neighbor_sampler.input_node_type].batch_size = batch_size
-        else:
-            print(len(self.G))
-
-        return data if self.transform is None else self.transform(data)
-
-    @classmethod
-    def filter_hetero_data(self,
-                           data: HeteroData,
-                           node_dict: Dict[str, Tensor],
-                           row_dict: Dict[str, Tensor],
-                           col_dict: Dict[str, Tensor],
-                           edge_dict: Dict[str, Tensor],
-                           perm_dict: Dict[str, OptTensor],
-                           ) -> HeteroData:
-        # Filters a heterogeneous data object to only hold nodes in `node` and
-        # edges in `edge` for each node and edge type, respectively:
-        out = copy.copy(data)
-
-        for node_type in data.node_types:
-            filter_node_store_(data[node_type], out[node_type],
-                               node_dict[node_type])
-
-        for edge_type in data.edge_types:
-            edge_type_str = edge_type_to_str(edge_type)
-            if edge_type_str not in edge_dict: continue
-
-            filter_edge_store_(data[edge_type], out[edge_type],
-                               row_dict[edge_type_str], col_dict[edge_type_str],
-                               edge_dict[edge_type_str], perm_dict[edge_type_str])
-
-        return out
-
-    def __repr__(self) -> str:
-        return f'{self.__class__.__name__}()'
-
-    def sample(self, nids: Union[List[int], Tensor]):
-        print("sample", nids)
-        pass
+        super(NeighborLoader, self).__init__(input_nodes, collate_fn=self.collate_fn, **kwargs)
 
 
-class HGTLoader(BaseDataLoader):
+# class NeighborLoader(torch.utils.data.DataLoader):
+#     def __init__(
+#             self,
+#             data: Union[Data, HeteroData],
+#             num_neighbors: NumNeighbors,
+#             input_nodes: InputNodes = None,
+#             replace: bool = False,
+#             directed: bool = True,
+#             transform: Callable = None,
+#             neighbor_sampler: Optional[NeighborSamplerX] = None,
+#             class_indices: Dict[str, Tensor] = None,
+#             **kwargs,
+#     ):
+#         if 'dataset' in kwargs:
+#             del kwargs['dataset']
+#         if 'collate_fn' in kwargs:
+#             del kwargs['collate_fn']
+#
+#         # Save for PyTorch Lightning:
+#         self.G = data
+#         self.num_neighbors = num_neighbors
+#         self.input_nodes = input_nodes
+#         self.replace = replace
+#         self.directed = directed
+#         self.transform = transform
+#         self.neighbor_sampler = neighbor_sampler
+#
+#         if neighbor_sampler is None:
+#             input_node_type = get_input_node_type(input_nodes)
+#             self.neighbor_sampler = NeighborSamplerX(data, num_neighbors=num_neighbors, replace=replace,
+#                                                      directed=directed, input_type=input_node_type,
+#                                                      class_indices=class_indices)
+#         return super().__init__(get_input_node_indices(data, input_nodes),
+#                                 collate_fn=self.neighbor_sampler, **kwargs)
+#
+#     def transform_fn(self, out: Any) -> Union[Data, HeteroData]:
+#         if isinstance(self.G, Data):
+#             node, row, col, edge, batch_size = out
+#             data = filter_data(self.G, node, row, col, edge,
+#                                self.neighbor_sampler.perm)
+#             data.batch_size = batch_size
+#
+#         elif isinstance(self.G, HeteroData):
+#             node_dict, row_dict, col_dict, edge_dict, batch_size = out
+#             # print({"edge_types": (len(self.G.edge_types), len(self.G.edge_stores)), "node_dict": len(node_dict),
+#             #        "row_dict": len(row_dict), "col_dict": len(col_dict),
+#             #        "edge_dict": len(edge_dict), 'perm_dict': len(self.neighbor_sampler.perm_dict)})
+#
+#             data = filter_hetero_data(self.G, node_dict, row_dict, col_dict,
+#                                       edge_dict,
+#                                       perm_dict=self.neighbor_sampler.perm_dict)
+#             data[self.neighbor_sampler.input_type].batch_size = batch_size
+#         else:
+#             print(len(self.G))
+#
+#         return data if self.transform is None else self.transform(data)
+#
+#     @classmethod
+#     def filter_hetero_data(self,
+#                            data: HeteroData,
+#                            node_dict: Dict[str, Tensor],
+#                            row_dict: Dict[str, Tensor],
+#                            col_dict: Dict[str, Tensor],
+#                            edge_dict: Dict[str, Tensor],
+#                            perm_dict: Dict[str, OptTensor],
+#                            ) -> HeteroData:
+#         # Filters a heterogeneous data object to only hold nodes in `node` and
+#         # edges in `edge` for each node and edge type, respectively:
+#         out = copy.copy(data)
+#
+#         for node_type in data.node_types:
+#             filter_node_store_(data[node_type], out[node_type],
+#                                node_dict[node_type])
+#
+#         for edge_type in data.edge_types:
+#             edge_type_str = edge_type_to_str(edge_type)
+#             if edge_type_str not in edge_dict: continue
+#
+#             filter_edge_store_(data[edge_type], out[edge_type],
+#                                row_dict[edge_type_str], col_dict[edge_type_str],
+#                                edge_dict[edge_type_str], perm_dict[edge_type_str])
+#
+#         return out
+#
+#     def __repr__(self) -> str:
+#         return f'{self.__class__.__name__}()'
+#
+#     def sample(self, nids: Union[List[int], Tensor]):
+#         print("sample", nids)
+#         pass
+
+
+class HGTLoaderX(HGTLoader):
     def __init__(
             self,
             data: HeteroData,
             num_neighbors: Union[List[int], Dict[NodeType, List[int]]],
             input_nodes: Union[NodeType, Tuple[NodeType, Optional[Tensor]]],
             transform: Callable = None,
+            filter_per_worker: bool = False,
             class_indices: Dict[str, Tensor] = None,
             **kwargs,
     ):
@@ -295,23 +327,24 @@ class HGTLoader(BaseDataLoader):
             index = input_nodes[1].nonzero(as_tuple=False).view(-1)
             input_nodes = (input_nodes[0], index)
 
-        self.G = data
+        self.data = data
         self.num_samples = num_neighbors
         self.input_nodes = input_nodes
         self.num_hops = max([len(v) for v in num_neighbors.values()])
         self.transform = transform
+        self.filter_per_worker = filter_per_worker
         self.sample_fn = torch.ops.torch_sparse.hgt_sample
 
         # Convert the graph data into a suitable format for sampling.
         # NOTE: Since C++ cannot take dictionaries with tuples as key as
         # input, edge type triplets are converted into single strings.
         self.colptr_dict, self.row_dict, self.perm_dict = to_hetero_csc(
-            data, device='cpu')
+            data, device='cpu', share_memory=kwargs.get('num_workers', 0) > 0)
 
         self.class_indices = class_indices
 
-        super().__init__(input_nodes[1].tolist(), collate_fn=self.sample,
-                         **kwargs)
+        super(HGTLoader, self).__init__(input_nodes[1].tolist(), collate_fn=self.sample,
+                                        **kwargs)
 
     def sample(self, indices: Dict[List[int], Dict[str, List[int]]]) -> HeteroData:
         if isinstance(indices, dict):

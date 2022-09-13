@@ -3,6 +3,7 @@ import warnings
 from collections import defaultdict
 from typing import Dict, Tuple, Union, List, Any, Optional
 
+import dask.dataframe as dd
 import dgl
 import networkx as nx
 import numpy as np
@@ -249,6 +250,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             # True Positive links
             pos_annotations = go_ann[dst_node_col].dropna().explode().to_frame().reset_index()
+            if isinstance(pos_annotations, dd.DataFrame):
+                pos_annotations = pos_annotations.compute()
             pos_graph = nx.from_pandas_edgelist(pos_annotations, source=src_node_col, target=dst_node_col, **nx_options)
             if split_etype:
                 metapaths = {(src_ntype, etype, dst_ntype) for u, v, etype in pos_graph.edges}
@@ -270,6 +273,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
                 neg_dst_node_col = f"neg_{dst_node_col}"
                 neg_annotations = go_ann[neg_dst_node_col].dropna().explode().to_frame().reset_index()
+                if isinstance(neg_annotations, dd.DataFrame):
+                    neg_annotations = neg_annotations.compute()
                 neg_graph = nx.from_pandas_edgelist(neg_annotations, source=src_node_col, target=neg_dst_node_col,
                                                     **nx_options)
                 if split_etype:
@@ -289,8 +294,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             # Gather train/valid/test split of nodes
             node_lists.append({
-                src_ntype: set(self.nodes[src_ntype].intersection(pos_annotations[src_node_col])),
-                dst_ntype: set(self.nodes[dst_ntype].intersection(pos_annotations[dst_node_col])),
+                src_ntype: set(self.nodes[src_ntype].intersection(pos_annotations[src_node_col].unique())),
+                dst_ntype: set(self.nodes[dst_ntype].intersection(pos_annotations[dst_node_col].unique())),
             })
 
         # Save the list of positive prediction metapaths

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from ogb.nodeproppred import PygNodePropPredDataset
 
-from moge.dataset.PyG.neighbor_sampler import NeighborSampler
+from moge.dataset.PyG.neighbor_sampler import NeighborSamplerX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.utils import join_edge_indexes
 
@@ -17,8 +17,9 @@ class HeteroNeighborGenerator(HeteroGraphDataset):
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)
 
-        self.graph_sampler = NeighborSampler(neighbor_sizes, self.edge_index_dict, self.num_nodes_dict, self.node_types,
-                                             self.head_node_type)
+        self.graph_sampler = NeighborSamplerX(neighbor_sizes, self.edge_index_dict, self.num_nodes_dict,
+                                              self.node_types,
+                                              self.head_node_type)
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
