@@ -5,12 +5,11 @@ import numpy as np
 import pandas as pd
 from moge.network.base import Network
 from moge.network.base import SEQUENCE_COL
-from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
 from moge.network.utils import select_labels
 from sklearn import preprocessing
 
 import openomics
-from openomics.utils.df import concat_uniques
+from openomics.transforms.agg import concat_uniques
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
@@ -143,78 +142,6 @@ class AttributedNetwork(Network):
                 continue
 
         return transformers
-
-    def get_correlation_edges(self, modality, node_list, threshold=0.7):
-        # Filter similarity adj by correlation
-        correlations = compute_expression_correlation(self.multiomics, modalities=[modality],
-                                                      node_list=node_list, absolute_corr=True,
-                                                      return_distance=False,
-                                                      squareform=True)
-
-        # Selects positive edges with high affinity in the affinity matrix
-        similarity_filtered = np.triu(correlations >= threshold, k=1)  # A True/False matrix
-        edgelist = [(node_list[x], node_list[y], {"weight": correlations.iloc[x, y]}) for x, y in
-                    zip(*np.nonzero(similarity_filtered))]
-
-        return edgelist
-
-    def add_affinity_edges(self, modality, node_list, features=None, weights=None, nanmean=True,
-                           similarity_threshold=0.7, dissimilarity_threshold=0.1,
-                           negative_sampling_ratio=2.0, max_positive_edges=None,
-                           tissue_expression=False, histological_subtypes=[],
-                           pathologic_stages=[],
-                           epsilon=EPSILON, tag="affinity"):
-        """
-        Computes similarity measures between genes within the same modality, and add them as undirected edges to the
-network if the similarity measures passes the threshold
-
-        :param modality: E.g. ["GE", "MIR", "LNC"]
-        :param similarity_threshold: a hard-threshold to select positive edges with affinity value more than it
-        :param dissimilarity_threshold: a hard-threshold to select negative edges with affinity value less than
-        :param negative_sampling_ratio: the number of negative edges in proportion to positive edges to select
-        :param histological_subtypes: the patients' cancer subtype group to calculate correlation from
-        :param pathologic_stages: the patient's cancer stage group to calculate correlations from
-        """
-        annotations = self.multiomics[modality].get_annotations()
-
-        annotation_affinities_df = pd.DataFrame(
-            data=compute_annotation_affinities(annotations, node_list=node_list, modality=modality,
-                                               correlation_dist=None, nanmean=nanmean,
-                                               features=features, weights=weights, squareform=True),
-            index=node_list)
-
-        # Selects positive edges with high affinity in the affinity matrix
-        similarity_filtered = np.triu(annotation_affinities_df >= similarity_threshold, k=1)  # A True/False matrix
-        sim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y]) for x, y in
-                               zip(*np.nonzero(similarity_filtered))]
-        # Sample
-        if max_positive_edges is not None:
-            sample_indices = np.random.choice(a=range(len(sim_edgelist_ebunch)),
-                                              size=min(max_positive_edges, len(sim_edgelist_ebunch)), replace=False)
-            sim_edgelist_ebunch = [(u, v, d) for i, (u, v, d) in enumerate(sim_edgelist_ebunch) if i in sample_indices]
-            self.G_u.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
-        else:
-            self.G_u.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
-
-        print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
-
-        # Select negative edges at affinity close to zero in the affinity matrix
-        max_negative_edges = int(negative_sampling_ratio * len(sim_edgelist_ebunch))
-        dissimilarity_filtered = np.triu(annotation_affinities_df <= dissimilarity_threshold, k=1)
-
-        dissimilarity_index_rows, dissimilarity_index_cols = np.nonzero(dissimilarity_filtered)
-        sample_indices = np.random.choice(a=dissimilarity_index_rows.shape[0],
-                                          size=min(max_negative_edges, dissimilarity_index_rows.shape[0]),
-                                          replace=False)
-        # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
-        dissim_edgelist_ebunch = [(node_list[x], node_list[y], min(annotation_affinities_df.iloc[x, y], epsilon)) for
-                                  i, (x, y) in
-                                  enumerate(zip(dissimilarity_index_rows[sample_indices],
-                                                dissimilarity_index_cols[sample_indices])) if i < max_negative_edges]
-        self.G_u.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n", tag=tag)
-
-        print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
-        return annotation_affinities_df
 
     def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
         """

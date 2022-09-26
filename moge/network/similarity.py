@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
 from Bio import pairwise2
-from openomics import MultiOmics
 from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.spatial.distance import squareform as squareform_
 from sklearn.metrics.pairwise import pairwise_distances
+
+from openomics import MultiOmics
 
 
 def compute_annotation_affinities(genes_info, node_list, modality=None, correlation_dist=None, features=None,

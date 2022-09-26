@@ -11,22 +11,22 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology, GeneOntology
-from pandas import Series, Index, DataFrame
-from torch import Tensor
-from torch_geometric.data import HeteroData
-
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
+from pandas import Series, Index, DataFrame
+from torch import Tensor
+from torch_geometric.data import HeteroData
+
+from openomics import MultiOmics
+from openomics.database.ontology import Ontology, GeneOntology
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics: MultiOmics, node_types: list, layers: Dict[Tuple[str], nx.Graph],
+    def __init__(self, multiomics: MultiOmics, node_types: List, layers: Dict[Tuple[str], nx.Graph],
                  annotations=True, ) -> None:
         """
 
@@ -42,8 +42,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.annotations: Dict[str, DataFrame] = {}
 
         networks = {}
-        for src_etype_dst, GraphClass in layers.items():
-            networks[src_etype_dst] = GraphClass()
+        for src_etype_dst, nxgraph_constructor in layers.items():
+            networks[src_etype_dst] = nxgraph_constructor()
 
         super(HeteroNetwork, self).__init__(networks=networks, multiomics=multiomics, annotations=annotations)
 
@@ -51,7 +51,20 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         nodes = {ntype: nids.size for ntype, nids in self.nodes.items()}
         networks = {'.'.join(metapath): g.__str__() for metapath, g in self.networks.items()}
         annotations = {ntype: df.shape for ntype, df in self.annotations.items()}
-        return pprint.pformat({'nodes': nodes, 'networks': networks, 'annotations': annotations}, width=500)
+        return "HeteroNetwork {}\n{}".format(self.multiomics._cohort_name,
+                                             pprint.pformat(
+                                                 {'nodes': nodes, 'networks': networks, 'annotations': annotations},
+                                                 depth=3, width=150))
+
+    def isolated_nodes(self):
+        isolated_nodes = {ntype: set(nodelist) for ntype, nodelist in self.nodes.items()}
+
+        for metapath, g in self.networks.items():
+            isolates = nx.isolates(g)
+            for ntype in {metapath[0], metapath[-1]}:
+                isolated_nodes[ntype] = isolated_nodes[ntype].intersection(isolates)
+
+        return isolated_nodes
 
     def process_network(self):
         self.nodes = {}
@@ -68,7 +81,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 self.node_to_modality[gene] = self.node_to_modality.setdefault(gene, []) + [node_type, ]
             print(node_type, " nodes:", len(self.nodes[node_type]), self.multiomics[node_type].gene_index)
 
-        print("Total nodes:", len(self.get_node_list()))
+        print("Total nodes:", len(self.get_all_nodes()))
         self.nodes: Dict[str, pd.Index] = pd.Series(self.nodes)
         self.node_to_modality = pd.Series(self.node_to_modality)
 

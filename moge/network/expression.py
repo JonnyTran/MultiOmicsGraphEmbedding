@@ -1,5 +1,5 @@
 from moge.network.multi_digraph import MultiDigraphNetwork
-from moge.network.semantic_similarity import *
+from moge.network.similarity import *
 
 
 @DeprecationWarning

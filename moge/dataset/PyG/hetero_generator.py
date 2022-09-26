@@ -8,12 +8,6 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -22,6 +16,11 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -144,7 +143,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                              node_type: str, node_mask: Tensor,
                              transform_fn: Callable = None, num_workers=10, verbose=False, shuffle=True, **kwargs):
         min_expansion_size = min(self.neighbor_sizes)
-        # max_expansion_size = self.num_nodes_dict[self.go_ntype]
         max_expansion_size = 100
 
         if self.neighbor_loader == "NeighborLoader":

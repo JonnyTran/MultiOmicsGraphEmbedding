@@ -1,45 +1,51 @@
 from abc import abstractmethod
-from collections import OrderedDict
-from typing import List, Union, Tuple, Any, Dict
+from typing import List, Union, Tuple, Any, Dict, Set
 
-import numpy as np
+import networkx as nx
+import pandas as pd
 
 SEQ_DTYPE = "long"
 SEQUENCE_COL = "sequence"
 
 
 class Network(object):
-    def __init__(self, networks: list) -> None:
+    def __init__(self, networks: Dict[Tuple[str], nx.Graph]) -> None:
         """
         A class that manages multiple graphs and the nodes between those graphs. Inheriting this class will run .process_network() and get_node_list()
         :param networks (list): a list of Networkx Graph's
         """
         self.networks = networks
         self.process_network()
-        self.remove_invalid_nodes()
-        self.node_list = self.get_node_list()
+        self.node_list = self.get_all_nodes()
 
-    def get_node_list(self) -> List[str]:
+    def get_all_nodes(self) -> List[str]:
         if isinstance(self.networks, dict):
-            node_list = list(
-                OrderedDict.fromkeys([node for network in self.networks.values() for node in network.nodes]))
+            node_list = {node for network in self.networks.values() for node in network.nodes}
         elif isinstance(self.networks, list):
-            node_list = list(OrderedDict.fromkeys([node for network in self.networks for node in network.nodes]))
+            node_list = {node for network in self.networks for node in network.nodes}
 
         return node_list
 
-    def get_connected_nodelist(self, layer: Union[str, Tuple[str, str, str]]):
+    def get_connected_nodes(self, layer: Union[str, Tuple[str, str, str]]):
         degrees = self.networks[layer].degree()
         return [node for node, deg in degrees if deg > 0]
 
-    def remove_invalid_nodes(self) -> None:
-        bad_nodes = [node for node in self.get_node_list()
-                     if node is None or node == np.nan or \
-                     type(node) != str or \
-                     node == ""]
+    def remove_nodes_from(self, nodes: Union[List[str], Dict[str, Set[str]]]) -> None:
+        nan_nodes = [node for node in self.get_all_nodes()
+                     if pd.isna(node) or type(node) != str or len(node) == 0]
 
-        for network in self.networks.values() if isinstance(self.networks, dict) else self.networks:
-            network.remove_nodes_from(bad_nodes)
+        if isinstance(nodes, list):
+            for g in self.networks.values() if isinstance(self.networks, dict) else self.networks:
+                g.remove_nodes_from(nodes)
+                if nan_nodes:
+                    g.remove_nodes_from(nan_nodes)
+        elif isinstance(nodes, dict):
+            for metapath, g in self.networks.values():
+                if not any(ntype in nodes for ntype in {metapath[0], metapath[-1]}): continue
+                g.remove_nodes_from(nodes[metapath[0]])
+                g.remove_nodes_from(nodes[metapath[-1]])
+                if nan_nodes:
+                    g.remove_nodes_from(nan_nodes)
 
     @abstractmethod
     def process_network(self):

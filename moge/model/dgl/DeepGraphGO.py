@@ -19,6 +19,7 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
+from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
@@ -26,8 +27,6 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -556,14 +555,14 @@ def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFra
             return [line.split()[0] for line in fp]
 
     net_pid_list = get_pid_list(os.path.join(path, 'ppi_pid_list.txt'))
-    dgl_graph: dgl.DGLGraph = dgl.data.utils.load_graphs(f'{path}/ppi_dgl_top_100')[0][0]
-    self_loop = torch.zeros_like(dgl_graph.edata['ppi'])
-    nr_ = np.arange(dgl_graph.number_of_nodes())
-    self_loop[dgl_graph.edge_ids(nr_, nr_)] = 1.0
+    # dgl_graph: dgl.DGLGraph = dgl.data.utils.load_graphs(f'{path}/ppi_dgl_top_100')[0][0]
+    # self_loop = torch.zeros_like(dgl_graph.edata['ppi'])
+    # nr_ = np.arange(dgl_graph.number_of_nodes())
+    # self_loop[dgl_graph.edge_ids(nr_, nr_)] = 1.0
 
-    dgl_graph.edata['self'] = self_loop
-    dgl_graph.edata['ppi'] = dgl_graph.edata['ppi'].float()
-    dgl_graph.edata['self'] = dgl_graph.edata['self'].float()
+    # dgl_graph.edata['self'] = self_loop
+    # dgl_graph.edata['ppi'] = dgl_graph.edata['ppi'].float()
+    # dgl_graph.edata['self'] = dgl_graph.edata['self'].float()
 
     all_pid = set(net_pid_list)
     for namespace in namespaces:
@@ -617,6 +616,7 @@ def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFra
         uniprot_go_id.loc[valid_pid_list, "sequence"] = valid_seqs
         uniprot_go_id.loc[test_pid_list, "sequence"] = test_seqs
 
+    # If node not in either train/valid/test, then set mask to True on all train/valid/test
     uniprot_go_id[['train_mask', 'valid_mask', 'test_mask']] = uniprot_go_id[
         ['train_mask', 'valid_mask', 'test_mask']].apply(lambda x: ~x if not x.any() else x, axis=1)
     uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(
