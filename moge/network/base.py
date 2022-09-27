@@ -18,13 +18,15 @@ class Network(object):
         self.process_network()
         self.node_list = self.get_all_nodes()
 
-    def get_all_nodes(self) -> List[str]:
+    def get_all_nodes(self) -> Set[str]:
         if isinstance(self.networks, dict):
-            node_list = {node for network in self.networks.values() for node in network.nodes}
+            node_set = {node for network in self.networks.values() for node in network.nodes}
         elif isinstance(self.networks, list):
-            node_list = {node for network in self.networks for node in network.nodes}
+            node_set = {node for network in self.networks for node in network.nodes}
+        else:
+            node_set = {}
 
-        return node_list
+        return node_set
 
     def get_connected_nodes(self, layer: Union[str, Tuple[str, str, str]]):
         degrees = self.networks[layer].degree()
@@ -34,16 +36,17 @@ class Network(object):
         nan_nodes = [node for node in self.get_all_nodes()
                      if pd.isna(node) or type(node) != str or len(node) == 0]
 
-        if isinstance(nodes, list):
-            for g in self.networks.values() if isinstance(self.networks, dict) else self.networks:
-                g.remove_nodes_from(nodes)
-                if nan_nodes:
-                    g.remove_nodes_from(nan_nodes)
-        elif isinstance(nodes, dict):
+        if isinstance(nodes, dict):
             for metapath, g in self.networks.values():
                 if not any(ntype in nodes for ntype in {metapath[0], metapath[-1]}): continue
                 g.remove_nodes_from(nodes[metapath[0]])
                 g.remove_nodes_from(nodes[metapath[-1]])
+                if nan_nodes:
+                    g.remove_nodes_from(nan_nodes)
+
+        elif isinstance(nodes, list):
+            for g in self.networks.values() if isinstance(self.networks, dict) else self.networks:
+                g.remove_nodes_from(nodes)
                 if nan_nodes:
                     g.remove_nodes_from(nan_nodes)
 

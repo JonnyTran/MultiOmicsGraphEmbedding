@@ -7,15 +7,13 @@ import pandas as pd
 import scipy.sparse as ssp
 import torch
 from colorhash import ColorHash
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
-from torchtyping import TensorType
-
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -47,7 +45,7 @@ class MetapathGATConv(nn.Module):
                                   device=device, dtype=torch.long, requires_grad=False).T
         return edge_index
 
-    def construct_multigraph(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]) \
+    def construct_multigraph(self, relation_embs: Tensor) \
             -> Data:
         num_nodes = relation_embs.size(0)
         nid = torch.arange(self.n_relations, device=relation_embs.device)
@@ -68,9 +66,9 @@ class MetapathGATConv(nn.Module):
         return batch
 
     def deconstruct_multigraph(self, batch: Data,
-                               h: TensorType["batch_nodes", "embedding_dim"],
-                               alpha_edges: TensorType[2, "batch_edges"],
-                               alpha_values: TensorType["batch_edges", "attn_heads"]):
+                               h: Tensor,
+                               alpha_edges: Tensor,
+                               alpha_values: Tensor):
         node_embs = h[batch.nid == self.self_index]
 
         if alpha_edges is not None and alpha_values is not None:
@@ -88,7 +86,7 @@ class MetapathGATConv(nn.Module):
 
         return node_embs, betas
 
-    def forward(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]):
+    def forward(self, relation_embs: Tensor):
         batch: Data = self.construct_multigraph(relation_embs)
 
         h = torch.relu(batch.x)

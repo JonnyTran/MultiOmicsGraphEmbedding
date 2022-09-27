@@ -18,6 +18,7 @@ from torch import Tensor
 from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
+from torch_sparse import SparseTensor
 
 
 class Graph:
@@ -294,6 +295,14 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         else:
             node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items() if v.numel()}
         return node_attr_shape
+
+    @property
+    def node_attr_sparse(self):
+        if not hasattr(self, "x_dict") or len(self.x_dict) == 0:
+            node_sps_attr_shape = {}
+        else:
+            node_sps_attr_shape = {k: v.size(1) for k, v in self.x_dict.items() if isinstance(v, SparseTensor)}
+        return node_sps_attr_shape
 
     @property
     def node_attr_size(self):

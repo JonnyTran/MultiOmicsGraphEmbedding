@@ -8,6 +8,7 @@ import dgl
 import networkx as nx
 import numpy as np
 import pandas as pd
+import scipy.sparse
 import torch
 import tqdm
 from logzero import logger
@@ -17,12 +18,12 @@ from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
+from openomics import MultiOmics
+from openomics.database.ontology import Ontology, GeneOntology
 from pandas import Series, Index, DataFrame
 from torch import Tensor
 from torch_geometric.data import HeteroData
-
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology, GeneOntology
+from torch_sparse import SparseTensor
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -576,8 +577,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Add node attributes
         for ntype in tqdm.tqdm(node_types, desc="Adding node attrs to node types"):
-            hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
-            annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
+            nodelist = self.nodes[ntype]
+            hetero[ntype]['nid'] = torch.arange(len(nodelist), dtype=torch.long)
+            annotations: pd.DataFrame = self.annotations[ntype].loc[nodelist]
 
             for col in annotations.columns \
                     .drop([target, "omic", SEQUENCE_COL], errors="ignore") \
@@ -591,24 +593,26 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 else:
                     hetero[ntype][col] = annotations[col].to_numpy()
 
-            if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
-                                                                                    'expressions'):
-                expressions = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]]
-                if False and hasattr(expressions, 'sparse') and not expressions.empty:
-                    print(ntype, "sparse")
-                    csr_mtx = expressions.sparse.to_coo().tocsr()
-                    hetero[ntype]['x'] = csr_mtx
-                    # hetero[ntype]['x'] = torch.sparse_csr_tensor(crow_indices=csr_mtx.indptr,
-                    #                                              col_indices=csr_mtx.indices,
-                    #                                              values=csr_mtx.data,
-                    #                                              dtype=torch.float,
-                    #                                              size=expressions.shape)
-                elif not expressions.empty:
-                    hetero[ntype]['x'] = torch.tensor(expressions.values, dtype=torch.float)
-
             # DNA/RNA sequence
             if sequence and SEQUENCE_COL in annotations:
                 hetero[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL]  # .to_numpy()
+
+            if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
+                                                                                    'expressions'):
+                expressions = self.multiomics[ntype].expressions.loc[:, nodelist].T
+
+                if hasattr(expressions, 'sparse') and not expressions.empty:
+                    print(ntype, "expressions sparse", expressions.shape)
+                    csr_mtx: scipy.sparse.csr_matrix = expressions.sparse.to_coo().tocsr()
+
+                    hetero[ntype]['x'] = SparseTensor(rowptr=torch.tensor(csr_mtx.indptr, dtype=torch.long),
+                                                      col=torch.tensor(csr_mtx.indices, dtype=torch.long),
+                                                      value=torch.tensor(csr_mtx.data, dtype=torch.float))
+
+                elif not expressions.empty:
+                    print(ntype, 'expressions', expressions.shape)
+                    hetero[ntype]['x'] = torch.tensor(expressions.values, dtype=torch.float)
+
 
         # Node labels
         if target:

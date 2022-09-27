@@ -9,6 +9,7 @@ from moge.dataset.graph import HeteroGraphDataset
 from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch_sparse import SparseTensor
 from transformers import BertConfig, BertForSequenceClassification
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -26,21 +27,35 @@ class HeteroNodeFeatureEncoder(nn.Module):
         print("model.encoder.embeddings: ", tensor_sizes(self.embeddings))
 
         # node types that needs a projection to align to the embedding_dim
-        proj_node_types = []
+        linear_dict = {}
         for ntype in dataset.node_types:
             if ntype in dataset.node_attr_shape and dataset.node_attr_shape[ntype] and \
                     dataset.node_attr_shape[ntype] != hparams.embedding_dim:
-                proj_node_types.append(ntype)
-            elif ntype in self.embeddings and self.embeddings[ntype].weight.size(1) != hparams.embedding_dim:
-                proj_node_types.append(ntype)
 
-        self.linear_proj = nn.ModuleDict({
-            ntype: nn.Sequential(OrderedDict([
-                ('linear', nn.Linear(in_features=dataset.node_attr_shape[ntype], out_features=hparams.embedding_dim)),
-                ('relu', nn.ReLU()),
-                ('dropout', nn.Dropout(hparams.dropout if hasattr(hparams, 'dropout') else 0.0))
-            ])) \
-            for ntype in proj_node_types})
+                # Row Sparse Matrix Multiplication
+                if ntype in dataset.node_attr_sparse:
+                    linear_dict[ntype] = nn.ParameterList([
+                        nn.EmbeddingBag(dataset.node_attr_shape[ntype], hparams.embedding_dim,
+                                        mode='sum', include_last_offset=True),
+                        nn.Parameter(torch.zeros(hparams.embedding_dim)),
+                        nn.ReLU(),
+                        nn.Dropout(hparams.dropout if hasattr(hparams, 'dropout') else 0.0)
+                    ])
+
+                else:
+                    linear_dict[ntype] = nn.Sequential(OrderedDict(
+                        [('linear', nn.Linear(dataset.node_attr_shape[ntype], hparams.embedding_dim)),
+                         ('relu', nn.ReLU()),
+                         ('dropout', nn.Dropout(hparams.dropout if hasattr(hparams, 'dropout') else 0.0))]))
+
+            elif ntype in self.embeddings and self.embeddings[ntype].weight.size(1) != hparams.embedding_dim:
+                # Pretrained embeddings size doesn't match embedding_dim
+                linear_dict[ntype] = nn.Sequential(OrderedDict(
+                    [('linear', nn.Linear(self.embeddings[ntype].weight.size(1), hparams.embedding_dim)),
+                     ('relu', nn.ReLU()),
+                     ('dropout', nn.Dropout(hparams.dropout if hasattr(hparams, 'dropout') else 0.0))]))
+
+        self.linear_proj = nn.ModuleDict(linear_dict)
         print("model.encoder.feature_projection: ", self.linear_proj)
 
         self.reset_parameters()
@@ -54,9 +69,11 @@ class HeteroNodeFeatureEncoder(nn.Module):
             if hasattr(embedding, "weight"):
                 nn.init.xavier_uniform_(embedding.weight)
 
-    def init_embeddings(self, embedding_dim: int, num_nodes_dict: Dict[str, int],
+    def init_embeddings(self, embedding_dim: int,
+                        num_nodes_dict: Dict[str, int],
                         in_channels_dict: Dict[str, int],
-                        pretrain_embeddings: Dict[str, Tensor], subset_ntypes: List[str] = None,
+                        pretrain_embeddings: Dict[str, Tensor],
+                        subset_ntypes: List[str] = None,
                         freeze=True) -> Dict[str, nn.Embedding]:
         # If some node type are not attributed, instantiate nn.Embedding for them
         if isinstance(in_channels_dict, dict):
@@ -100,11 +117,26 @@ class HeteroNodeFeatureEncoder(nn.Module):
                 h_dict[ntype] = self.embeddings[ntype](global_node_index[ntype]).to(global_node_index[ntype].device)
 
             # project to embedding_dim if node features are of not the same dimension
-            if ntype in self.linear_proj:
+            if ntype in self.linear_proj and isinstance(h_dict[ntype], Tensor):
                 if hasattr(self, "batchnorm"):
                     h_dict[ntype] = self.batchnorm[ntype].forward(h_dict[ntype])
 
                 h_dict[ntype] = self.linear_proj[ntype].forward(h_dict[ntype])
+
+            elif ntype in self.linear_proj and isinstance(h_dict[ntype], SparseTensor):
+                self.linear_proj[ntype]: nn.ParameterList
+                for module in self.linear_proj[ntype]:
+                    if isinstance(module, nn.EmbeddingBag):
+                        sparse_tensor: SparseTensor = h_dict[ntype]
+                        h_dict[ntype] = module.forward(input=sparse_tensor.storage.col(),
+                                                       offsets=sparse_tensor.storage.rowptr(),
+                                                       per_sample_weights=sparse_tensor.storage.value())
+                    elif isinstance(module, (nn.Parameter, Tensor)):
+                        h_dict[ntype] = h_dict[ntype] + module
+                    elif isinstance(module, nn.ReLU):
+                        h_dict[ntype] = module.forward(h_dict[ntype])
+                    elif isinstance(module, nn.Dropout):
+                        h_dict[ntype] = module.forward(h_dict[ntype])
 
         return h_dict
 

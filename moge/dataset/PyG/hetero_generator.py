@@ -146,14 +146,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         max_expansion_size = 100
 
         if self.neighbor_loader == "NeighborLoader":
-            self.num_neighbors = {
-                metapath: self.neighbor_sizes \
-                for metapath in self.metapaths}
+            self.num_neighbors = {metapath: self.neighbor_sizes \
+                                  for metapath in self.metapaths}
 
         elif self.neighbor_loader == "HGTLoader":
-            self.num_neighbors = {
-                ntype: self.neighbor_sizes \
-                for ntype in self.node_types}
+            self.num_neighbors = {ntype: self.neighbor_sizes \
+                                  for ntype in self.node_types}
 
         print(f"{self.neighbor_loader} neighbor_sizes:") if verbose else None
         pprint(self.num_neighbors, width=300) if verbose else None
@@ -184,6 +182,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         X["global_node_index"] = {ntype: nid for ntype, nid in hetero.nid_dict.items() if nid.numel()}
         X['sizes'] = {ntype: size for ntype, size in hetero.num_nodes_dict.items() if size}
         X['batch_size'] = hetero.batch_size_dict
+
+        for ntype, feat in X["x_dict"].items():
+            if isinstance(feat, SparseTensor):
+                X["x_dict"][ntype] = feat[X["global_node_index"][ntype]]
+            elif isinstance(feat, pd.Series):
+                X["x_dict"][ntype] = feat.iloc[X["global_node_index"][ntype].numpy()]
 
         if hasattr(hetero, "sequence_dict") and hasattr(self, "seq_tokenizer"):
             X["sequences"] = {}
