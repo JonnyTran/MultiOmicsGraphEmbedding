@@ -10,6 +10,13 @@ import torch
 import torch.nn.functional as F
 import wandb
 from logzero import logger
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
+
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -18,12 +25,6 @@ from moge.dataset.utils import edge_index_to_adjs
 from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -449,14 +450,14 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         return losses
 
-    def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
+    def train_dataloader(self, batch_size=None, num_workers=10, **kwargs):
         dataset = self.dataset.train_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
                                                 batch_size=batch_size if batch_size else self.hparams.batch_size,
                                                 num_workers=num_workers,
                                                 **kwargs)
         return dataset
 
-    def val_dataloader(self, batch_size=None, num_workers=0, **kwargs):
+    def val_dataloader(self, batch_size=None, num_workers=10, **kwargs):
         dataset = self.dataset.valid_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
                                                 batch_size=batch_size if batch_size else self.hparams.batch_size,
                                                 num_workers=num_workers,
@@ -464,7 +465,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         return dataset
 
-    def test_dataloader(self, batch_size=None, num_workers=0, **kwargs):
+    def test_dataloader(self, batch_size=None, num_workers=10, **kwargs):
 
         dataset = self.dataset.test_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
                                                batch_size=batch_size if batch_size else self.hparams.batch_size,

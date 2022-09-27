@@ -378,6 +378,15 @@ class HGTLoaderX(HGTLoader):
 
         return data if self.transform is None else self.transform(data)
 
+    def filter_fn(self, out: Any) -> HeteroData:
+        node_dict, row_dict, col_dict, edge_dict, batch_size = out
+
+        data = self.filter_hetero_data(self.data, node_dict, row_dict, col_dict,
+                                       edge_dict, self.perm_dict)
+        data[self.input_nodes[0]].batch_size = batch_size
+
+        return data if self.transform is None else self.transform(data)
+
     def filter_hetero_data(self,
                            data: HeteroData,
                            node_dict: Dict[str, Tensor],
@@ -393,9 +402,9 @@ class HGTLoaderX(HGTLoader):
         for node_type in data.node_types:
             if node_type not in node_dict:
                 node_dict[node_type] = torch.tensor([], dtype=torch.long)
+                print('got here')
 
-            filter_node_store_(data[node_type], out[node_type],
-                               node_dict[node_type])
+            filter_node_store_(data[node_type], out[node_type], node_dict[node_type])
 
         for edge_type in data.edge_types:
             edge_type_str = edge_type_to_str(edge_type)

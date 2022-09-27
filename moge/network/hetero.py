@@ -12,6 +12,11 @@ import scipy.sparse
 import torch
 import tqdm
 from logzero import logger
+from pandas import Series, Index, DataFrame
+from torch import Tensor
+from torch_geometric.data import HeteroData
+from torch_sparse import SparseTensor
+
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
@@ -20,10 +25,6 @@ from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
-from pandas import Series, Index, DataFrame
-from torch import Tensor
-from torch_geometric.data import HeteroData
-from torch_sparse import SparseTensor
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -568,9 +569,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                    untag_negative_metapath(metapath) in exclude_etypes): continue
 
             hetero[metapath].edge_index, edge_attrs = get_edge_index_values(
-                self.networks[metapath], nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
-                edge_attrs=["train_mask", "valid_mask",
-                            "test_mask"] if 'edge' in train_test_split or inductive else None)
+                self.networks[metapath],
+                nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
+                edge_attrs=["train_mask", "valid_mask", "test_mask"] \
+                    if 'edge' in train_test_split or inductive else None)
 
             for edge_attr, edge_value in edge_attrs.items():
                 hetero[metapath][edge_attr] = edge_value
@@ -597,13 +599,13 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if sequence and SEQUENCE_COL in annotations:
                 hetero[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL]  # .to_numpy()
 
-            if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
-                                                                                    'expressions'):
-                expressions = self.multiomics[ntype].expressions.loc[:, nodelist].T
+            if expression and ntype in self.multiomics.get_omics_list() \
+                    and hasattr(self.multiomics[ntype], 'expressions'):
+                expressions = self.multiomics[ntype].expressions.loc[:, nodelist]
 
                 if hasattr(expressions, 'sparse') and not expressions.empty:
                     print(ntype, "expressions sparse", expressions.shape)
-                    csr_mtx: scipy.sparse.csr_matrix = expressions.sparse.to_coo().tocsr()
+                    csr_mtx: scipy.sparse.csr_matrix = expressions.sparse.to_coo().T.tocsr()
 
                     hetero[ntype]['x'] = SparseTensor(rowptr=torch.tensor(csr_mtx.indptr, dtype=torch.long),
                                                       col=torch.tensor(csr_mtx.indices, dtype=torch.long),
@@ -611,7 +613,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
                 elif not expressions.empty:
                     print(ntype, 'expressions', expressions.shape)
-                    hetero[ntype]['x'] = torch.tensor(expressions.values, dtype=torch.float)
+                    hetero[ntype]['x'] = torch.tensor(expressions.values.T, dtype=torch.float)
 
 
         # Node labels

@@ -144,6 +144,11 @@ class TrainTestSplit():
         logger.info(pprint.pformat(tensor_sizes(
             dict(train_nodes=train_nodes, valid_nodes=valid_nodes, test_nodes=test_nodes)))) if verbose else None
 
+        if not hasattr(self, 'train_nodes'):
+            self.train_nodes = defaultdict(set)
+            self.valid_nodes = defaultdict(set)
+            self.test_nodes = defaultdict(set)
+
         train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), \
                                                defaultdict(set, valid_nodes), \
                                                defaultdict(set, test_nodes)

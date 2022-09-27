@@ -6,7 +6,7 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from transformers import AlbertConfig
 
-from moge.model.albert import AlbertModel
+from moge.model.transformers.albert import AlbertModel
 
 
 # from transformers import AlbertModel

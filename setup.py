@@ -1,13 +1,7 @@
+import pandas as pd
 from setuptools import setup, find_packages
 
-requirements = [
-    'numpy', 'pandas', 'networkx>=2.1', "boto3",
-    'dask', 'plotly', 'python-igraph', "colorhash",
-    'biopython', 'bioservices', "gseapy", "obonet", 'iterative-stratification', 'scikit-multilearn',
-    "wandb", "pytorch-lightning", "pytorch-ignite", "ogb", "torchmetrics", "torchtext", "fairscale",
-    "logzero",
-]
-
+requirements = pd.read_table("./requirements.txt", header=None)[0].tolist()
 setup(
     name='MultiOmicsGraphEmbedding',
     version='0.3',
