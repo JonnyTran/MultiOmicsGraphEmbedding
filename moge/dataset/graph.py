@@ -1,3 +1,4 @@
+import pprint
 from abc import abstractmethod
 from typing import Union, List, Tuple, Dict, Optional
 
@@ -7,9 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
-from moge.network.sequence import BertSequenceTokenizer
+from logzero import logger
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -19,6 +18,10 @@ from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_sparse import SparseTensor
+
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 
 
 class Graph:
@@ -210,26 +213,27 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         # Node classifications
         num_samples = 1  # Used for computing class_weight
         if hasattr(self, "y_dict") and self.y_dict and self.head_node_type is not None:
-            print("update_classes", tensor_sizes(y_dict=self.y_dict))
+            logger.info(f"process_classes \n{pprint.pformat(tensor_sizes(y_dict=self.y_dict), depth=3)}")
 
-            if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
+            y_true = self.y_dict[self.head_node_type]
+            if y_true.dim() > 1 and y_true.size(-1) != 1:
                 self.multilabel = True
                 if not hasattr(self, 'classes') or self.classes is None:
-                    self.classes = torch.arange(self.y_dict[self.head_node_type].size(1))
+                    self.classes = torch.arange(y_true.size(1))
 
-                num_samples = self.y_dict[self.head_node_type].shape[0]
-                self.class_counts = self.y_dict[self.head_node_type].sum(0)
+                num_samples = y_true.size(0)
+                self.class_counts = y_true.sum(0)
 
             else:
                 self.multilabel = False
 
-                mask = self.y_dict[self.head_node_type] != -1
-                labels = self.y_dict[self.head_node_type][mask]
+                mask = y_true != -1
+                labels = y_true[mask]
 
                 if not hasattr(self, 'classes') or self.classes is None:
                     self.classes = labels.unique()
 
-                if self.y_dict[self.head_node_type].dim() > 1:
+                if y_true.dim() > 1:
                     labels = labels.squeeze(-1).numpy()
                 else:
                     labels = labels.numpy()
@@ -247,7 +251,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                 if not hasattr(self, 'classes') or self.classes is None:
                     self.classes = torch.arange(self.labels.size(1))
 
-                num_samples = self.labels.shape[0]
+                num_samples = self.labels.size(0)
                 self.class_counts = self.labels.sum(0)
             else:
                 self.multilabel = False

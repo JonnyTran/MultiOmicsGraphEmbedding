@@ -166,6 +166,52 @@ class TrainTestSplit():
                                                               defaultdict(set, valid_nodes), \
                                                               defaultdict(set, test_nodes)
 
+    def get_all_edges_mask(self, edgelist: EdgeView, metapath: Tuple[str, str, str],
+                           train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
+                           test_nodes: Dict[str, Set[str]]) \
+            -> Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]]:
+        """
+
+        Args:
+            edgelist ():
+            metapath ():
+            train_nodes ():
+            valid_nodes ():
+            test_nodes ():
+
+        Returns:
+
+        """
+        train_nodes = defaultdict(set, train_nodes)
+        valid_nodes = defaultdict(set, valid_nodes)
+        test_nodes = defaultdict(set, test_nodes)
+
+        def _get_edge_mask(u: str, v: str) -> Dict[str, Any]:
+            head_type, tail_type = metapath[0], metapath[-1]
+            train = u in train_nodes[head_type] and v in train_nodes[tail_type]
+            valid = u in valid_nodes[head_type] or v in valid_nodes[tail_type]
+            test = u in test_nodes[head_type] or v in test_nodes[tail_type]
+            if not valid and not test and not train:
+                train = valid = test = True
+            return {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
+
+        edge_attrs = {edge_tup: _get_edge_mask(edge_tup[0], edge_tup[1]) \
+                      for edge_tup, d in edgelist.items()}
+
+        return edge_attrs
+
+    def get_node_mask(self, node_dict: Dict[str, Set[str]], train=False, valid=False, test=False,
+                      ntypes: Set[str] = None) \
+            -> Dict[str, Dict[str, Dict[str, Any]]]:
+        mask = {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
+
+        node_attrs = {key: {node: mask[key] \
+                            for ntype, node_list in node_dict.items() if ntypes and ntype in ntypes \
+                            for node in node_list} \
+                      for key in ["train_mask", "valid_mask", "test_mask"]}
+
+        return node_attrs
+
     def set_edge_traintest_mask(self, train_nodes: Dict[str, Set[str]] = None, valid_nodes: Dict[str, Set[str]] = None,
                                 test_nodes: Dict[str, Set[str]] = None,
                                 exclude_metapaths: List[Tuple[str, str, str]] = None):
@@ -205,60 +251,17 @@ class TrainTestSplit():
             for nodes_dict in [train_nodes, valid_nodes, test_nodes]:
                 node_attr_dict = self.get_node_mask(nodes_dict,
                                                     train=nodes_dict is train_nodes,
-                                                    valid=nodes_dict is valid_nodes, test=nodes_dict is test_nodes)
-                for mask_name, node_mask in node_attr_dict.items():
-                    nx.set_node_attributes(self.networks[metapath], values=node_mask, name=mask_name)
+                                                    valid=nodes_dict is valid_nodes,
+                                                    test=nodes_dict is test_nodes,
+                                                    ntypes=metapath[::2])
+                for key, node_attrs in node_attr_dict.items():
+                    nx.set_node_attributes(self.networks[metapath], values=node_attrs, name=key)
 
         self.node_mask_counts = pd.DataFrame(
             tensor_sizes(train_nodes=train_nodes | self.nodes.drop(train_nodes).map(len).to_dict(),
                          valid_nodes=valid_nodes | self.nodes.drop(valid_nodes).map(len).to_dict(),
                          test_nodes=test_nodes | self.nodes.drop(test_nodes).map(len).to_dict()),
             dtype='int')
-
-    def get_node_mask(self, node_dict: Dict[str, Set[str]], train=False, valid=False, test=False) \
-            -> Dict[str, Dict[str, Dict[str, Any]]]:
-        mask = {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
-
-        node_attrs = {key: {node: mask[key] \
-                            for ntype, node_list in node_dict.items() \
-                            for node in node_list} \
-                      for key in ["train_mask", "valid_mask", "test_mask"]}
-
-        return node_attrs
-
-    def get_all_edges_mask(self, edgelist: EdgeView, metapath: Tuple[str, str, str],
-                           train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
-                           test_nodes: Dict[str, Set[str]]) \
-            -> Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]]:
-        """
-
-        Args:
-            edgelist ():
-            metapath ():
-            train_nodes ():
-            valid_nodes ():
-            test_nodes ():
-
-        Returns:
-
-        """
-        train_nodes = defaultdict(set, train_nodes)
-        valid_nodes = defaultdict(set, valid_nodes)
-        test_nodes = defaultdict(set, test_nodes)
-
-        def _get_edge_mask(u: str, v: str) -> Dict[str, Any]:
-            head_type, tail_type = metapath[0], metapath[-1]
-            train = u in train_nodes[head_type] and v in train_nodes[tail_type]
-            valid = u in valid_nodes[head_type] or v in valid_nodes[tail_type]
-            test = u in test_nodes[head_type] or v in test_nodes[tail_type]
-            if not valid and not test and not train:
-                train = valid = test = True
-            return {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
-
-        edge_attrs = {edge_tup: _get_edge_mask(edge_tup[0], edge_tup[1]) \
-                      for edge_tup, _ in edgelist.items()}
-
-        return edge_attrs
 
 
 def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_frac=0.0,

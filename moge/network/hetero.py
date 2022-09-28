@@ -8,11 +8,11 @@ import dgl
 import networkx as nx
 import numpy as np
 import pandas as pd
-import scipy.sparse
 import torch
 import tqdm
 from logzero import logger
 from pandas import Series, Index, DataFrame
+from scipy.sparse import csr_matrix
 from torch import Tensor
 from torch_geometric.data import HeteroData
 from torch_sparse import SparseTensor
@@ -95,23 +95,26 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         logger.info("All annotation columns (union): {}".format(
             {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()}))
 
-    def process_feature_tranformer(self, columns=None, ntype_subset: List[str] = None, delimiter: List[str] = "\||;",
+    def process_feature_tranformer(self, columns: List[str], ntype_subset: List[str] = None,
+                                   delimiter: List[str] = "\||;",
                                    labels_subset=None, min_count=0, verbose=False):
         self.delimiter = delimiter
         dfs = []
 
         for ntype in self.node_types:
             if ntype_subset and ntype not in ntype_subset: continue
-            df = self.annotations[ntype].drop(columns=[SEQUENCE_COL], errors="ignore")
-            if not columns or (columns and columns in df.columns):
-                dfs.append(df)
+            df: pd.DataFrame = self.annotations[ntype].drop(columns=[SEQUENCE_COL], errors="ignore")
 
-        all_annotations = pd.concat(dfs, join="inner")
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            self.feature_transformer = self.get_feature_transformers(all_annotations, labels_subset=labels_subset,
-                                                                     min_count=min_count, delimiter=delimiter,
-                                                                     verbose=verbose)
+            if len(df.columns.intersection(columns)):
+                dfs.append(df[df.columns.intersection(columns)])
+
+        if dfs:
+            all_annotations = pd.concat(dfs, join="inner")
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                self.feature_transformer = self.get_feature_transformers(all_annotations, labels_subset=labels_subset,
+                                                                         min_count=min_count, delimiter=delimiter,
+                                                                         verbose=verbose)
 
     def add_nodes(self, nodes: List[str], ntype: str, annotations: pd.DataFrame = None):
         """
@@ -256,13 +259,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         for go_ann in [train_ann, valid_ann, test_ann]:
             is_train, is_valid, is_test = go_ann is train_ann, go_ann is valid_ann, go_ann is test_ann
 
-            if is_train:
-                logger.info("Train:")
-            elif is_valid:
-                logger.info("Valid:")
-            elif is_test:
-                logger.info("Test:")
-
             # True Positive links
             pos_annotations = go_ann[dst_node_col].dropna().explode().to_frame().reset_index()
             if isinstance(pos_annotations, dd.DataFrame):
@@ -405,6 +401,16 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                            inductive=False,
                            train_test_split="edge_id", **kwargs) \
             -> Tuple[dgl.DGLHeteroGraph, Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
+        if node_attr_cols is None:
+            node_attr_cols = []
+
+        if target:
+            transform_cols = node_attr_cols + [target]
+        else:
+            transform_cols = node_attr_cols
+        transform_cols = [col for col in transform_cols if col not in self.feature_transformer]
+        self.process_feature_tranformer(columns=transform_cols, ntype_subset=head_node_type, min_count=min_count)
+
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
@@ -421,8 +427,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             edge_index, edge_attr = get_edge_index_values(
                 etype_graph, nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
-                edge_attrs=["train_mask", "valid_mask", "test_mask"] \
-                    if "edge" in train_test_split or inductive else None,
+                # edge_attrs=["train_mask", "valid_mask", "test_mask"] \
+                #     if "edge" in train_test_split or inductive else None,
                 format="dgl")
             edge_index_dict[metapath] = edge_index
 
@@ -494,9 +500,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Node labels
         if target is not None:
-            # Define classes set
-            self.process_feature_tranformer(ntype_subset=head_node_type, min_count=min_count)
-
             if labels_subset is not None:
                 self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
                                                                            labels_subset, assume_unique=True)
@@ -509,6 +512,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                        min_count=None, labels_subset=None,
                                        dropna=False, delimiter=self.delimiter)
                 labels[ntype] = self.feature_transformer[target].transform(y_label)
+                # TODO handle sparse labels
                 labels[ntype] = torch.tensor(labels[ntype])
 
                 G.nodes[ntype].data["label"] = labels[ntype]
@@ -543,15 +547,46 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         return G, classes, dict(self.nodes), training, validation, testing
 
-    def to_pyg_heterodata(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,
-                          labels_subset: Optional[Union[Index, np.ndarray]] = None, head_node_type=None,
+    def to_pyg_heterodata(self, node_attr_cols: List[str] = [], target: str = "go_id", min_count=10,
+                          labels_subset: Optional[Union[Index, np.ndarray]] = None, head_node_type: str = None,
                           ntype_subset: Optional[List[str]] = None, exclude_ntypes: Optional[List[str]] = None,
                           exclude_etypes: List[Union[str, Tuple]] = None, sequence=False, expression=False,
                           inductive=False, train_test_split="node_mask", **kwargs) \
             -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
+        """
+
+        Args:
+            node_attr_cols ():
+            target ():
+            min_count ():
+            labels_subset ():
+            head_node_type ():
+            ntype_subset ():
+            exclude_ntypes ():
+            exclude_etypes ():
+            sequence ():
+            expression ():
+            inductive ():
+            train_test_split ():
+            **kwargs ():
+
+        Returns:
+
+        """
+        if node_attr_cols is None:
+            node_attr_cols = []
+
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
+
+        # Build feature binarizer for attr columns and target classes
+        if target:
+            transform_cols = node_attr_cols + [target]
+        else:
+            transform_cols = node_attr_cols
+        transform_cols = [col for col in transform_cols if col not in self.feature_transformer]
+        self.process_feature_tranformer(columns=transform_cols, ntype_subset=head_node_type, min_count=min_count)
 
         node_types = self.node_types
         if ntype_subset:
@@ -571,8 +606,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             hetero[metapath].edge_index, edge_attrs = get_edge_index_values(
                 self.networks[metapath],
                 nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
+                format='pyg',
                 edge_attrs=["train_mask", "valid_mask", "test_mask"] \
-                    if 'edge' in train_test_split or inductive else None)
+                    if 'edge' in train_test_split or inductive else None
+            )
 
             for edge_attr, edge_value in edge_attrs.items():
                 hetero[metapath][edge_attr] = edge_value
@@ -601,79 +638,86 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             if expression and ntype in self.multiomics.get_omics_list() \
                     and hasattr(self.multiomics[ntype], 'expressions'):
-                expressions = self.multiomics[ntype].expressions.loc[:, nodelist]
+                expressions = self.multiomics[ntype].expressions.loc[:, nodelist]  # (num_features, num_samples)
 
                 if hasattr(expressions, 'sparse') and not expressions.empty:
-                    print(ntype, "expressions sparse", expressions.shape)
-                    csr_mtx: scipy.sparse.csr_matrix = expressions.sparse.to_coo().T.tocsr()
+                    csr_mtx: csr_matrix = expressions.sparse.to_coo().T.tocsr()
 
                     hetero[ntype]['x'] = SparseTensor(rowptr=torch.tensor(csr_mtx.indptr, dtype=torch.long),
                                                       col=torch.tensor(csr_mtx.indices, dtype=torch.long),
-                                                      value=torch.tensor(csr_mtx.data, dtype=torch.float))
+                                                      value=torch.tensor(csr_mtx.data, dtype=torch.float),
+                                                      sparse_sizes=csr_mtx.shape, is_sorted=True, trust_data=True)
+                    logger.info(f'{ntype}, "expressions sparse", {csr_mtx.shape}')
 
                 elif not expressions.empty:
-                    print(ntype, 'expressions', expressions.shape)
                     hetero[ntype]['x'] = torch.tensor(expressions.values.T, dtype=torch.float)
-
+                    logger.info(f"{ntype}, 'expressions', {hetero[ntype]['x'].shape}")
 
         # Node labels
         if target:
-            # Define classes set
-            self.process_feature_tranformer(ntype_subset=head_node_type, min_count=min_count)
-
             if labels_subset is not None:
                 self.feature_transformer[target].classes_ = np.intersect1d(
                     self.feature_transformer[target].classes_, labels_subset, assume_unique=True)
 
             classes = self.feature_transformer[target].classes_
 
+            if len(classes) > 1000:
+                self.feature_transformer[target].sparse_output = True
+
             # Transform labels matrix
-            labels = {}
             for ntype in hetero.node_types:
                 if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
                 y_label = parse_labels(self.annotations[ntype].loc[self.nodes[ntype], target],
                                        min_count=None, labels_subset=None,
                                        dropna=False, delimiter=self.delimiter)
-                labels[ntype] = self.feature_transformer[target].transform(y_label)
-                labels[ntype] = torch.tensor(labels[ntype])
 
-                hetero[ntype]['y'] = labels[ntype]
+                labels = self.feature_transformer[target].transform(y_label)
+                if isinstance(labels, np.ndarray):
+                    labels = torch.tensor(labels)
+
+                elif isinstance(labels, csr_matrix):
+                    labels = SparseTensor(rowptr=torch.tensor(labels.indptr, dtype=torch.long),
+                                          col=torch.tensor(labels.indices, dtype=torch.long),
+                                          value=torch.tensor(labels.data, dtype=torch.float),
+                                          sparse_sizes=labels.shape, is_sorted=True, trust_data=True)
+
+                hetero[ntype]['y'] = labels
         else:
             classes = None
 
         # Train test split (from previously saved node train/test split)
         if hasattr(self, "train_nodes") and self.train_nodes:
-            train_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.train_nodes[ntype])) \
-                         for ntype, nodelist in self.nodes.items() if self.train_nodes[ntype]}
-            valid_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.valid_nodes[ntype])) \
-                         for ntype, nodelist in self.nodes.items() if self.valid_nodes[ntype]}
-            test_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.test_nodes[ntype])) \
-                        for ntype, nodelist in self.nodes.items() if self.test_nodes[ntype]}
+            train_nodes_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.train_nodes[ntype])) \
+                               for ntype, nodelist in self.nodes.items() if self.train_nodes[ntype]}
+            valid_nodes_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.valid_nodes[ntype])) \
+                               for ntype, nodelist in self.nodes.items() if self.valid_nodes[ntype]}
+            test_nodes_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.test_nodes[ntype])) \
+                              for ntype, nodelist in self.nodes.items() if self.test_nodes[ntype]}
 
             for ntype in node_types:
                 hetero[ntype].num_nodes = len(self.nodes[ntype])
 
-                if ntype in train_idx:
+                if ntype in train_nodes_idx:
                     mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
-                    mask[train_idx[ntype]] = 1
+                    mask[train_nodes_idx[ntype]] = 1
                     hetero[ntype].train_mask = mask
                 else:
                     hetero[ntype].train_mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
 
-                if ntype in valid_idx:
+                if ntype in valid_nodes_idx:
                     mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
-                    mask[valid_idx[ntype]] = 1
+                    mask[valid_nodes_idx[ntype]] = 1
                     hetero[ntype].valid_mask = mask
                 else:
                     hetero[ntype].valid_mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
 
-                if ntype in test_idx:
+                if ntype in test_nodes_idx:
                     mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
-                    mask[test_idx[ntype]] = 1
+                    mask[test_nodes_idx[ntype]] = 1
                     hetero[ntype].test_mask = mask
                 else:
                     hetero[ntype].test_mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
         else:
-            train_idx = valid_idx = test_idx = None
+            train_nodes_idx = valid_nodes_idx = test_nodes_idx = None
 
-        return hetero, classes, self.nodes.to_dict(), train_idx, valid_idx, test_idx
+        return hetero, classes, self.nodes[node_types], train_nodes_idx, valid_nodes_idx, test_nodes_idx

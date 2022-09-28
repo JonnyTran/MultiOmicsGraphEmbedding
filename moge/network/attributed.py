@@ -3,12 +3,13 @@ from typing import List, Dict, Union
 
 import numpy as np
 import pandas as pd
-from moge.network.base import Network
-from moge.network.base import SEQUENCE_COL
-from moge.network.utils import select_labels
+from logzero import logger
 from sklearn import preprocessing
 
 import openomics
+from moge.network.base import Network
+from moge.network.base import SEQUENCE_COL
+from moge.network.utils import select_labels
 from openomics.transforms.agg import concat_uniques
 
 EPSILON = 1e-16
@@ -98,14 +99,14 @@ class AttributedNetwork(Network):
 
             values: pd.Series = annotation[col].dropna(axis=0)
             if values.map(type).nunique() > 1:
-                print(f"WARN: {col} has more than 1 dtypes: {values.map(type).unique()}")
+                logger.warn(f"{col} has more than 1 dtypes: {values.map(type).unique()}")
 
             try:
                 if annotation[col].dtypes == np.object and (annotation[col].dropna().map(type) == str).all():
                     transformers[col] = preprocessing.MultiLabelBinarizer()
 
                     if annotation[col].str.contains(delimiter, regex=True).any():
-                        print("INFO: Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(col,
+                        logger.info("Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(col,
                                                                                                                 delimiter)) if verbose else None
                         values = values.str.split(delimiter)
                         values = values.map(
@@ -118,22 +119,22 @@ class AttributedNetwork(Network):
                     transformers[col].fit(values)
 
                 elif annotation[col].dtypes == int or annotation[col].dtypes == float:
-                    print(
-                        "INFO: Label {} (of int/float) is transformed by StandardScaler".format(
-                            col)) if verbose else None
+                    logger.info("Label {} (of int/float) is transformed by StandardScaler".format(col)) \
+                        if verbose else None
                     transformers[col] = preprocessing.StandardScaler()
 
                     values = values.dropna().to_numpy()
                     transformers[col].fit(values.reshape(-1, 1))
 
                 else:
-                    print("INFO: Label {} is transformed by MultiLabelBinarizer".format(col)) if verbose else None
+                    logger.info("Label {} is transformed by MultiLabelBinarizer".format(col)) if verbose else None
                     transformers[col] = preprocessing.MultiLabelBinarizer()
                     values = values[~values.map(type).isin({str, float, int, bool, type(None)})]
                     transformers[col].fit(values)
 
-                if hasattr(transformers[col], 'classes_') and "" in transformers[col].classes_:
-                    print(f"removed '' from classes in {col}")
+                if hasattr(transformers[col], 'classes_') and \
+                        ("" in transformers[col].classes_ or pd.isna(transformers[col].classes_).any()):
+                    logger.warn(f"removed '' from classes in {col}")
                     transformers[col].classes_ = np.delete(transformers[col].classes_,
                                                            np.where(transformers[col].classes_ == "")[0])
             except Exception as e:

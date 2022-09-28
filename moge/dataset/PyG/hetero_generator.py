@@ -8,6 +8,12 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -16,11 +22,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -73,6 +74,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             train={etype: self.G[etype].train_mask.sum() for etype in etypes if hasattr(self.G[etype], 'train_mask')},
             valid={etype: self.G[etype].valid_mask.sum() for etype in etypes if hasattr(self.G[etype], 'valid_mask')},
             test={etype: self.G[etype].test_mask.sum() for etype in etypes if hasattr(self.G[etype], 'test_mask')})))
+        if df.empty:
+            return None
         df.index.names = ['src_ntype', 'etype', 'dst_ntype']
         return df.sort_index()
 
@@ -82,9 +85,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.num_nodes_dict = {ntype: hetero[ntype].num_nodes \
                                for ntype in hetero.node_types}
         self.global_node_index = {ntype: torch.arange(num_nodes) \
-                                  for ntype, num_nodes in self.num_nodes_dict.items()}
+                                  for ntype, num_nodes in self.num_nodes_dict.items() if num_nodes}
 
-        self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
+        self.y_dict = {ntype: hetero[ntype].y \
+                       for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
 
         # Add reverse metapaths to allow reverse message passing for directed edges
         if self.use_reverse:
@@ -177,17 +181,19 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def transform_heterograph(self, hetero: HeteroData):
         X = {}
-        X["x_dict"] = {ntype: x for ntype, x in hetero.x_dict.items() if x.numel()}
         X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in hetero.edge_index_dict.items()}
         X["global_node_index"] = {ntype: nid for ntype, nid in hetero.nid_dict.items() if nid.numel()}
         X['sizes'] = {ntype: size for ntype, size in hetero.num_nodes_dict.items() if size}
         X['batch_size'] = hetero.batch_size_dict
 
+        # Node featuers
+        X["x_dict"] = {ntype: x for ntype, x in hetero.x_dict.items() if x.numel()}
         for ntype, feat in X["x_dict"].items():
+            nids = X["global_node_index"][ntype]
             if isinstance(feat, SparseTensor):
-                X["x_dict"][ntype] = feat[X["global_node_index"][ntype]]
+                X["x_dict"][ntype] = feat[nids]
             elif isinstance(feat, pd.Series):
-                X["x_dict"][ntype] = feat.iloc[X["global_node_index"][ntype].numpy()]
+                X["x_dict"][ntype] = feat.iloc[nids.numpy()]
 
         if hasattr(hetero, "sequence_dict") and hasattr(self, "seq_tokenizer"):
             X["sequences"] = {}
@@ -195,7 +201,13 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 if not hasattr(hetero[ntype], "sequence") or ntype not in self.seq_tokenizer.tokenizers: continue
                 X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(hetero, ntype=ntype, max_length=None)
 
+        # Node labels
         y_dict = {ntype: y for ntype, y in hetero.y_dict.items() if y.size(0)}
+        for ntype, y in y_dict.items():
+            nids = X["global_node_index"][ntype]
+            if isinstance(y, SparseTensor):
+                y_dict[ntype] = y[nids].to_dense()
+
         if len(y_dict) == 1:
             y = y_dict[list(y_dict.keys()).pop()]
             if y.dim() == 2 and y.size(1) == 1:

@@ -274,8 +274,9 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
         # First order
         for metapath in self.get_tail_relations(ntype, order=1):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None: continue
             head, tail = metapath[0], metapath[-1]
+            if metapath not in edge_index_dict or edge_index_dict[metapath] is None or \
+                    head not in sizes or tail not in sizes: continue
             num_node_head, num_node_tail = sizes[head], sizes[tail]
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)

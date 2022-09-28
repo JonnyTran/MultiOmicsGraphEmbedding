@@ -267,31 +267,45 @@ def get_edge_attr_keys(nx_graph) -> Set[str]:
     return d.keys()
 
 
-def get_edge_index_values(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
+def get_edge_index_values(nx_graph: nx.MultiGraph, nodes_A: Union[List[str], np.array],
                           nodes_B: Union[List[str], np.array], edge_attrs: List[str] = None, format="pyg") \
         -> Tuple[Union[torch.LongTensor, Tuple[Tensor]], Optional[Dict[str, Tensor]]]:
-    values = {}
+    """
+    Convert an nx.MultiGraph into hetero edge_index_dict
+
+    Args:
+        nx_graph ():
+        nodes_A ():
+        nodes_B ():
+        edge_attrs ():
+        format ():
+
+    Returns:
+
+    """
+    edge_values = {}
 
     if edge_attrs is None or len(edge_attrs) == 0:
         edge_attrs = [None]
 
     for edge_attr in edge_attrs:
-        biadj = nx.bipartite.biadjacency_matrix(nx_graph, row_order=nodes_A, column_order=nodes_B, weight=edge_attr,
-                                                format="coo")
+        # Get edge_values for each `edge_attrs`
+        biadj = nx.bipartite.biadjacency_matrix(nx_graph, row_order=nodes_A, column_order=nodes_B,
+                                                weight=edge_attr, format="coo")
         if hasattr(biadj, 'data') and isinstance(biadj.data, np.ndarray) and edge_attr in get_edge_attr_keys(nx_graph):
-            values[edge_attr] = biadj.data
+            edge_values[edge_attr] = biadj.data
 
     if format == "pyg":
         import torch
         edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long), torch.tensor(biadj.col, dtype=torch.long)])
-        values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in values.items()}
+        edge_values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in edge_values.items()}
 
     elif format == "dgl":
         import torch
         edge_index = (torch.tensor(biadj.row, dtype=torch.int64), torch.tensor(biadj.col, dtype=torch.int64))
-        values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in values.items()}
+        edge_values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in edge_values.items()}
 
-    return edge_index, values
+    return edge_index, edge_values
 
 
 def one_hot_encoder(idx: Tensor):
