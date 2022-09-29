@@ -71,7 +71,8 @@ class Metrics(torch.nn.Module):
             elif "auroc" in name:
                 self.metrics[name] = AUROC(num_classes=n_classes, average="micro")
             elif "aupr" in name:
-                self.metrics[name] = AveragePrecision(average="pairwise")
+                self.metrics[name] = AveragePrecision_(average="pairwise")
+                # self.metrics[name] = AveragePrecisionPairwise(average='none')
 
             elif "mse" in name:
                 self.metrics[name] = MeanSquaredError()
@@ -428,7 +429,12 @@ class FMax(torchmetrics.Metric):
         return weighted_avg_score
 
 
-class AveragePrecision(torchmetrics.Metric):
+class AveragePrecisionPairwise(AveragePrecision):
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        super().update(preds.flatten(), target.flatten())
+
+
+class AveragePrecision_(torchmetrics.Metric):
     def __init__(self, average="macro", ):
         """
 

@@ -3,6 +3,7 @@ import traceback
 from argparse import Namespace
 from typing import List, Dict, Tuple, Union
 
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -479,3 +480,66 @@ class LATTE(nn.Module):
 
     def __getitem__(self, item) -> LATTEConv:
         return self.layers[item]
+
+    def get_sankey_flow(self, self_loop=True, agg="median"):
+        """
+        Concatenate multiple layer's sankey flow.
+        Args:
+            self_loop ():
+            agg ():
+
+        Returns:
+
+        """
+        nid_offset = 0
+        eid_offset = 0
+        all_nodes = []
+        all_links = []
+        last_dst_nids = {}
+
+        for i, layer in enumerate(self.layers):
+            nodes, links = layer.get_sankey_flow(node_types=None, self_loop=self_loop, agg=agg)
+
+            if nid_offset:
+                nodes.index = nodes.index + nid_offset
+                links['source'] += nid_offset
+                links['target'] += nid_offset
+                links.index = links.index + eid_offset
+
+            if len(all_nodes):
+                # nodes['level'] += level_offset
+                # Remove last layer's level=1 nodes, and replace current layer's level>1 node ids with last layer's level=1 nodes
+                current_src_ntypes = nodes.loc[nodes['level'] == nodes['level'].max()]['label'].unique()
+
+                for ntype, to_id in last_dst_nids.items():
+                    if ntype not in current_src_ntypes: continue
+
+                    from_id = nodes.loc[nodes['label'] == ntype]['level'].idxmax()
+
+                    print("\n>", ntype, to_id, from_id)
+                    print(to_id, all_nodes[-1].loc[to_id, ['label', 'level']].to_dict())
+                    print(from_id, nodes.loc[from_id, ['label', 'level']].to_dict())
+                    print(links.query(f'source == {from_id}')[['source', 'target', 'label']])
+
+                    nodes.rename(index={from_id: to_id}, inplace=True)
+                    all_nodes[-1].drop(index=to_id, inplace=True)
+                    links['source'].replace(from_id, to_id, inplace=True)
+
+            # Update dst_ntype_id to contain the dst nodes from current layers
+            last_dst_nids = {}
+            for id, node in nodes.loc[nodes['level'] == 1].iterrows():
+                last_dst_nids[node['label']] = id  # Get the index value
+
+            all_nodes.append(nodes)
+            all_links.append(links)
+
+            nid_offset += nodes.index.size
+            eid_offset += links.index.size
+
+        all_nodes = pd.concat(all_nodes, axis=0)
+        all_links = pd.concat(all_links, axis=0)
+
+        assert all_links['source'].isin(all_nodes.index).all()
+        assert all_links['target'].isin(all_nodes.index).all()
+
+        return all_nodes, all_links

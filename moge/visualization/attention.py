@@ -31,10 +31,8 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
             target=links['target'],
             label=links['label'],
             value=links['mean'],
-            customdata=links['std'],
             color=rgba_colors,
             hovertemplate='attn weight: %{value} ± %{customdata:.3f}',
-
         ),
 
     )], )

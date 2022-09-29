@@ -285,7 +285,7 @@ class RelationAttention(ABC):
                     output[metapath] = avg
         return output
 
-    def get_sankey_flow(self, node_types: Union[str, List[str]], self_loop=True, agg="median") \
+    def get_sankey_flow(self, node_types: Union[str, None, List[str]] = None, self_loop=True, agg="median") \
             -> Tuple[DataFrame, DataFrame]:
         if node_types is None:
             node_types = self._betas.keys()
@@ -313,6 +313,9 @@ class RelationAttention(ABC):
 
         all_nodes = pd.concat(all_nodes, axis=0)
         all_links = pd.concat(all_links, axis=0)
+
+        assert all_links['source'].isin(all_nodes.index).all()
+        assert all_links['target'].isin(all_nodes.index).all()
 
         return all_nodes, all_links
 
