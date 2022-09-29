@@ -234,11 +234,11 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
         if save_betas:
             try:
-                self.update_edge_attn(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
-                                      batch_sizes=batch_sizes)
                 self.update_relation_attn(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
                                           global_node_index=global_node_index,
                                           batch_size=batch_sizes)
+                self.update_edge_attn(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
+                                      batch_sizes=batch_sizes)
             except Exception as e:
                 traceback.print_exc()
 

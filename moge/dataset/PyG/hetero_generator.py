@@ -202,11 +202,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(hetero, ntype=ntype, max_length=None)
 
         # Node labels
-        y_dict = {ntype: y for ntype, y in hetero.y_dict.items() if y.size(0)}
-        for ntype, y in y_dict.items():
+        y_dict = {}
+        for ntype, y in hetero.y_dict.items():
+            if y.size(0) == 0 or ntype not in X["global_node_index"]: continue
             nids = X["global_node_index"][ntype]
             if isinstance(y, SparseTensor):
-                y_dict[ntype] = y[nids].to_dense()
+                if y.density():
+                    y_dict[ntype] = y[nids].to_dense()
+            elif isinstance(y, Tensor):
+                y_dict[ntype] = y
 
         if len(y_dict) == 1:
             y = y_dict[list(y_dict.keys()).pop()]

@@ -224,14 +224,13 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log plotly HTMLs as a wandb.Table
         plotly_htmls = []
-        for ntype in node_types:
-            nodes, links = self.embedder.layers[-1].get_sankey_flow(node_type=ntype, self_loop=True)
-            fig = plot_sankey_flow(nodes, links, width=width, height=height)
+        nodes, links = self.embedder.layers[-1].get_relation_attn_flow(node_type=None, self_loop=True)
+        fig = plot_sankey_flow(nodes, links, width=width, height=height)
 
-            path_to_plotly_html = f"./wandb_fig_run_{run_id}_{ntype}.html"
-            fig.write_html(path_to_plotly_html, auto_play=False, include_plotlyjs=True, full_html=True,
-                           config=dict(displayModeBar=False))
-            plotly_htmls.append(wandb.Html(path_to_plotly_html))
+        path_to_plotly_html = f"./wandb_fig_run_{run_id}_layer_{len(self.embedder.layers)}.html"
+        fig.write_html(path_to_plotly_html, auto_play=False, include_plotlyjs=True, full_html=True,
+                       config=dict(displayModeBar=False))
+        plotly_htmls.append(wandb.Html(path_to_plotly_html))
 
         # Add Plotly figure as HTML file into Table
         table.add_data(*plotly_htmls)

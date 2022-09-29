@@ -39,67 +39,64 @@ class Metrics(torch.nn.Module):
         if metrics is None:
             metrics = []
 
-        for metric in metrics:
-            if "precision" in metric:
-                self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)
-            elif "recall" in metric:
-                self.metrics[metric] = Recall(average=True, is_multilabel=multilabel)
+        for name in metrics:
+            top_k = int(name.split("@")[-1]) if "@" in name else None
 
-            elif "top_k" in metric:
+            if "precision" in name:
+                self.metrics[name] = Precision(average=True, is_multilabel=multilabel)
+            elif "recall" in name:
+                self.metrics[name] = Recall(average=True, is_multilabel=multilabel)
+
+            elif "top_k" in name:
                 if n_classes:
                     top_k = [k for k in top_k if k < n_classes]
 
                 if multilabel:
-                    self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
+                    self.metrics[name] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
-                    self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
-                                                                   output_transform=None)
-            elif "macro_f1" in metric:
-                self.metrics[metric] = F1Score(num_classes=n_classes, average="macro",
-                                               top_k=int(metric.split("@")[-1]) if "@" in metric else None,
-                                               # MacroF1@TopK
-                                               )
-            elif "micro_f1" in metric:
-                self.metrics[metric] = F1Score(num_classes=n_classes, average="micro",
-                                               top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
+                    self.metrics[name] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
+                                                                 output_transform=None)
+            elif "macro_f1" in name:
+                self.metrics[name] = F1Score(num_classes=n_classes, average="macro", top_k=top_k, )
+            elif "micro_f1" in name:
+                self.metrics[name] = F1Score(num_classes=n_classes, average="micro", top_k=top_k, )
 
-            elif "fmax_macro" in metric:
-                self.metrics[metric] = FMax_Macro()
+            elif "fmax_macro" in name:
+                self.metrics[name] = FMax_Macro()
 
-            elif "fmax" in metric:
-                self.metrics[metric] = FMax()
+            elif "fmax" in name:
+                self.metrics[name] = FMax()
 
 
-            elif "auroc" in metric:
-                self.metrics[metric] = AUROC(num_classes=n_classes, average="micro")
-            elif "aupr" in metric:
-                self.metrics[metric] = AveragePrecision(average="pairwise")
+            elif "auroc" in name:
+                self.metrics[name] = AUROC(num_classes=n_classes, average="micro")
+            elif "aupr" in name:
+                self.metrics[name] = AveragePrecision(average="pairwise")
 
-            elif "mse" in metric:
-                self.metrics[metric] = MeanSquaredError()
+            elif "mse" in name:
+                self.metrics[name] = MeanSquaredError()
 
-            elif "acc" in metric:
-                self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
-                                                subset_accuracy=multilabel)
+            elif "acc" in name:
+                self.metrics[name] = Accuracy(top_k=top_k, subset_accuracy=multilabel)
 
-            elif "ogbn" in metric or any("ogbn" in s for s in metric):
-                self.metrics[metric] = OGBNodeClfMetrics(
-                    NodeEvaluator(metric[0] if isinstance(metric, (list, tuple)) else metric))
-            elif "ogbl" in metric or any("ogbl" in s for s in metric):
-                self.metrics[metric] = OGBLinkPredMetrics(
-                    LinkEvaluator(metric[0] if isinstance(metric, (list, tuple)) else metric))
-            elif "ogbg" in metric or any("ogbg" in s for s in metric):
-                self.metrics[metric] = OGBNodeClfMetrics(
-                    GraphEvaluator(metric[0] if isinstance(metric, (list, tuple)) else metric))
+            elif "ogbn" in name or any("ogbn" in s for s in name):
+                self.metrics[name] = OGBNodeClfMetrics(
+                    NodeEvaluator(name[0] if isinstance(name, (list, tuple)) else name))
+            elif "ogbl" in name or any("ogbl" in s for s in name):
+                self.metrics[name] = OGBLinkPredMetrics(
+                    LinkEvaluator(name[0] if isinstance(name, (list, tuple)) else name))
+            elif "ogbg" in name or any("ogbg" in s for s in name):
+                self.metrics[name] = OGBNodeClfMetrics(
+                    GraphEvaluator(name[0] if isinstance(name, (list, tuple)) else name))
             else:
-                logger.warn(f"metric name {metric} not supported. Must containing a substring in "
+                logger.warn(f"metric name {name} not supported. Must containing a substring in "
                             f"['precision', 'recall', 'top_k', 'macro_f1', 'micro_f1', 'fmax', 'mse', "
                             f"'auroc', 'aupr', 'acc', 'ogbn', 'ogbl', 'ogbg', ]")
                 continue
 
             # Needed to add the torchmetrics as Modules, so they'll be on the correct CUDA device during training
-            if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
-                setattr(self, str(metric), self.metrics[metric])
+            if isinstance(self.metrics[name], torchmetrics.metric.Metric):
+                setattr(self, str(name), self.metrics[name])
 
         self.reset_metrics()
 
@@ -110,6 +107,7 @@ class Metrics(torch.nn.Module):
             labels = torch.eye(self.n_classes)[labels].type_as(type_as)
             return labels
 
+    @torch.no_grad()
     def update_metrics(self, y_pred: Tensor, y_true: Tensor,
                        weights=Optional[Tensor], subset: Union[List[str], str] = None):
         """
@@ -121,8 +119,8 @@ class Metrics(torch.nn.Module):
                 metrics with names containing the substring. If `subset` is a list of string, then select the metrics
                 with names in the list.
         """
-        y_pred = y_pred.detach().clone()
-        y_true = y_true.detach().clone()
+        y_pred = y_pred.clone()
+        y_true = y_true.clone()
 
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights)
         y_pred_act = activation(y_pred, loss_type=self.loss_type)
@@ -175,9 +173,8 @@ class Metrics(torch.nn.Module):
                 except Exception as e:
                     print(e, "\n", name, tensor_sizes({"y_pred": y_pred_act, "y_true": y_true}))
                     raise e
-                    # self.metrics[metric].update(y_pred_full, y_true_full)
 
-
+    @torch.no_grad()
     def compute_metrics(self) -> Dict[str, Tensor]:
         logs = {}
         for metric in self.metrics:
@@ -319,6 +316,7 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
         self._num_correct = {k: 0 for k in self.k_s}
         self._num_examples = 0
 
+    @torch.no_grad()
     def update(self, y_pred, y_true):
         batch_size, n_classes = y_true.size()
         _, top_indices = y_pred.topk(k=max(self.k_s), dim=1, largest=True, sorted=True)
@@ -355,12 +353,13 @@ class FMax(torchmetrics.Metric):
         self._threshs = []
         self._n_samples = []
 
+    @torch.no_grad()
     def update(self, scores: Tensor, targets: Tensor):
         n_samples = scores.shape[0]
         if isinstance(scores, Tensor):
-            scores = scores.detach().cpu().numpy()
+            scores = scores.cpu().numpy()
         if isinstance(targets, Tensor):
-            targets = targets.detach().cpu().numpy()
+            targets = targets.cpu().numpy()
 
         fmax_t = 0.0, 0.0
         for thresh in self.thresholds:
@@ -461,9 +460,10 @@ class AveragePrecision(torchmetrics.Metric):
         self._scores = []
         self._n_samples = []
 
+    @torch.no_grad()
     def update(self, y_pred: Tensor, y_true: Tensor):
-        y_true_ = y_true.detach().cpu().numpy()
-        y_pred_ = y_pred.detach().cpu().numpy()
+        y_true_ = y_true.cpu().numpy()
+        y_pred_ = y_pred.cpu().numpy()
         average = self.average
 
         if self.average == "pairwise":
@@ -518,6 +518,7 @@ class FMax_Macro(Metric):
                     dist_reduce_fx="sum",
                 )
 
+    @torch.no_grad()
     def update(self, preds: Tensor, targets: Tensor) -> None:
         if self.num_classes is None:
             self.num_classes = targets.size(1) if targets.dim() > 1 else 1
@@ -571,6 +572,7 @@ class FMax_Macro(Metric):
         return max_f1s.mean()
 
 
+@torch.no_grad()
 def precision_recall_curve(y_true: Tensor, y_pred: Tensor, n_thresholds=100, average='micro'):
     if not isinstance(y_true, Tensor):
         targets = torch.from_numpy(y_true)

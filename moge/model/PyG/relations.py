@@ -1,19 +1,20 @@
 import itertools
 from abc import ABC
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Union
 
 import numpy as np
 import pandas as pd
 import scipy.sparse as ssp
 import torch
 from colorhash import ColorHash
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
+
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -173,11 +174,10 @@ class RelationAttention(ABC):
             self._alphas = {}
 
         for ntype, nids in global_node_index.items():
-            if batch_sizes != None and ntype not in batch_sizes:
-                continue
-            elif batch_sizes[ntype] == 0:
-                continue
-            batch_nids = nids[:batch_sizes[ntype]].cpu().numpy()
+            if ntype in batch_sizes:
+                batch_nids = nids[:batch_sizes[ntype]].cpu().numpy()
+            else:
+                batch_nids = nids.cpu().numpy()
             counts_df = []
 
             for metapath in filter_metapaths(edge_index_dict, tail_type=ntype):
@@ -201,8 +201,8 @@ class RelationAttention(ABC):
                                   edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
                 csc_matrix = ssp.coo_matrix((value, (row, col)),
                                             shape=(global_node_index[head_type].shape[0],
-                                                   global_node_index[tail_type].shape[0])).transpose().tocsc()
-                edge_attn = pd.DataFrame.sparse.from_spmatrix(csc_matrix)
+                                                   global_node_index[tail_type].shape[0]))
+                edge_attn = pd.DataFrame.sparse.from_spmatrix(csc_matrix.transpose().tocsc())
                 edge_attn.index = pd.Index(global_node_index[tail_type].cpu().numpy(), name=f"{tail_type}_nid")
                 edge_attn.columns = pd.Index(global_node_index[head_type].cpu().numpy(), name=f"{head_type}_nid")
                 edge_attn = edge_attn.loc[batch_nids]
@@ -237,24 +237,20 @@ class RelationAttention(ABC):
                              global_node_index: Dict[str, Tensor],
                              batch_size: Dict[str, int]):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
-        if len(betas) < len({metapath[-1] for metapath in self.metapaths}):
-            return
-
         if not hasattr(self, "_betas"):
             self._betas = {}
 
         for ntype in betas:
             if ntype not in global_node_index or global_node_index[ntype].numel() == 0: continue
-            if batch_size and ntype not in batch_size:
-                continue
-            elif batch_size[ntype] == 0:
-                continue
 
             relations = self.get_tail_relations(ntype, str_form=True) + [ntype, ]
             if len(relations) <= 1: continue
 
             nids = global_node_index[ntype].cpu().numpy()
-            batch_nids = nids[:batch_size[ntype]]
+            if ntype in batch_size:
+                batch_nids = nids[:batch_size[ntype]]
+            else:
+                batch_nids = nids
 
             df = pd.DataFrame(betas[ntype].squeeze(-1).cpu().numpy(),
                               columns=relations, index=nids, dtype=np.float16)
@@ -289,9 +285,39 @@ class RelationAttention(ABC):
                     output[metapath] = avg
         return output
 
-    def get_sankey_flow(self, node_type: str, self_loop: bool = False, agg="median") \
+    def get_sankey_flow(self, node_types: Union[str, List[str]], self_loop=True, agg="median") \
             -> Tuple[DataFrame, DataFrame]:
+        if node_types is None:
+            node_types = self._betas.keys()
+        elif isinstance(node_types, str):
+            node_types = [node_types]
 
+        nid_offset = 0
+        eid_offset = 0
+        all_nodes = []
+        all_links = []
+        for ntype in node_types:
+            if ntype not in self._betas: continue
+            nodes, links = self.get_relation_attn_flow(ntype, self_loop=self_loop, agg=agg)
+            if nid_offset:
+                nodes.index = nodes.index + nid_offset
+                links['source'] = links['source'] + nid_offset
+                links['target'] = links['target'] + nid_offset
+                links.index = links.index + eid_offset
+
+            all_nodes.append(nodes)
+            all_links.append(links)
+
+            nid_offset += nodes.index.size
+            eid_offset += links.index.size
+
+        all_nodes = pd.concat(all_nodes, axis=0)
+        all_links = pd.concat(all_links, axis=0)
+
+        return all_nodes, all_links
+
+    def get_relation_attn_flow(self, node_type: str, self_loop=True, agg="median") \
+            -> Tuple[DataFrame, DataFrame]:
         rel_attn = self._betas[node_type]
 
         if agg == "sum":
