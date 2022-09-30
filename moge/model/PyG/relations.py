@@ -311,6 +311,8 @@ class RelationAttention(ABC):
             nid_offset += nodes.index.size
             eid_offset += links.index.size
 
+        if not len(all_nodes):
+            return None, None
         all_nodes = pd.concat(all_nodes, axis=0)
         all_links = pd.concat(all_links, axis=0)
 

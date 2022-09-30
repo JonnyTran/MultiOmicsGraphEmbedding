@@ -22,6 +22,7 @@ from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import edge_index_to_adjs
+from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
@@ -224,7 +225,10 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log plotly HTMLs as a wandb.Table
         plotly_htmls = []
-        nodes, links = self.embedder.layers[-1].get_relation_attn_flow(node_type=None, self_loop=True)
+        self.embedder.layers: List[RelationAttention]
+        nodes, links = self.embedder.layers[-1].get_sankey_flow(node_types=None, self_loop=True)
+        if nodes is None:
+            return
         fig = plot_sankey_flow(nodes, links, width=width, height=height)
 
         path_to_plotly_html = f"./wandb_fig_run_{run_id}_layer_{len(self.embedder.layers)}.html"

@@ -56,11 +56,11 @@ class Graph:
         node_type_nid = pd.MultiIndex.from_frame(index, names=["ntype", "nid"])
 
         metapaths = list(self.edge_index_dict.keys())
-        metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
-                          metapaths]
-        df = pd.DataFrame(data=0, index=node_type_nid, columns=metapath_names)
+        etypes = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
+                  metapaths]
+        df = pd.DataFrame(data=0, index=node_type_nid, columns=etypes)
 
-        for metapath, name in zip(metapaths, metapath_names):
+        for metapath, name in zip(metapaths, etypes):
             edge_index = self.edge_index_dict[metapath]
             head, tail = metapath[0], metapath[-1]
 
