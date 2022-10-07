@@ -345,6 +345,11 @@ class AveragePrecisionPairwise(BinnedAveragePrecision):
         super().__init__(num_classes, thresholds, **kwargs)
 
         self.shrink = torch.nn.Hardshrink(lambd=1e-2)
+        self.reset()
+
+    def reset(self) -> None:
+        super().reset()
+        self.num_samples = 0
 
     @torch.no_grad()
     def update(self, preds: Tensor, target: Tensor) -> None:
@@ -367,6 +372,14 @@ class AveragePrecisionPairwise(BinnedAveragePrecision):
             self.TPs[:, i] += (target & predictions).sum(dim=0)
             self.FPs[:, i] += ((~target) & predictions).sum(dim=0)
             self.FNs[:, i] += (target & (~predictions)).sum(dim=0)
+
+        self.num_samples += preds.shape[0]
+
+    def compute(self) -> Union[List[Tensor], Tensor]:
+        if self.num_samples == 0:
+            raise NotComputableError("AveragePrecisionPairwise must have at"
+                                     "least one example before it can be computed.")
+        return super().compute()
 
 
 class FMax_Micro(BinnedPrecisionRecallCurve):
