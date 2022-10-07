@@ -1,5 +1,4 @@
 from pprint import pprint
-from pprint import pprint
 from typing import List, Tuple, Union, Dict, Optional, Callable
 
 import networkx as nx
@@ -8,12 +7,6 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -22,6 +15,11 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -137,7 +135,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             self.ntype_mapping = {}
             for ntype, df in network.annotations.items():
                 if "namespace" in df.columns:
-                    self.nodes_namespace[ntype] = network.annotations[ntype]["namespace"]
+                    node2namespace = network.annotations[ntype]["namespace"]
+                    self.nodes_namespace[ntype] = node2namespace.loc[~node2namespace.index.duplicated()]
                     self.ntype_mapping.update(
                         {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 

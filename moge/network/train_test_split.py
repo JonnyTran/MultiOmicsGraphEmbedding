@@ -10,10 +10,9 @@ import pandas as pd
 import tqdm
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 from logzero import logger
+from moge.model.utils import tensor_sizes
 from networkx.classes.reportviews import EdgeView
 from sklearn.preprocessing import MultiLabelBinarizer
-
-from moge.model.utils import tensor_sizes
 
 
 def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):
@@ -223,9 +222,11 @@ class TrainTestSplit():
             test_nodes = self.test_nodes
 
         # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
-        for metapath, nxgraph in tqdm.tqdm(self.networks.items(), desc=f"Set train/valid/test_mask on edge types"):
+        etypes_networks_prog = tqdm.tqdm(self.networks.items(), desc=f"Set train/valid/test_mask on edge types")
+        for metapath, nxgraph in etypes_networks_prog:
             if exclude_metapaths is not None and metapath in exclude_metapaths:
                 continue
+            etypes_networks_prog.set_description(f"Set train/valid/test_mask on edges in {metapath}")
             edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=train_nodes,
                                                  valid_nodes=valid_nodes, test_nodes=test_nodes)
             nx.set_edge_attributes(nxgraph, edge_attrs)
@@ -247,7 +248,9 @@ class TrainTestSplit():
                       for ntype in set(test_nodes.keys()).union(nonincident_nodes.keys())}
 
         # Set train/valid/test_mask on node types
-        for metapath in tqdm.tqdm(self.networks.keys(), desc=f"Set train/valid/test_mask on node types"):
+        ntype_networks_prog = tqdm.tqdm(self.networks.keys(), desc=f"Set train/valid/test_mask on node types")
+        for metapath in ntype_networks_prog:
+            ntype_networks_prog.set_description(f"Set train/valid/test_mask on nodes in {metapath}")
             for nodes_dict in [train_nodes, valid_nodes, test_nodes]:
                 node_attr_dict = self.get_node_mask(nodes_dict,
                                                     train=nodes_dict is train_nodes,

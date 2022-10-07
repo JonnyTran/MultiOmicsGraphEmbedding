@@ -9,6 +9,9 @@ import pandas as pd
 import torch
 import torch_sparse
 from logzero import logger
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -18,10 +21,6 @@ from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_sparse import SparseTensor
-
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
-from moge.network.sequence import BertSequenceTokenizer
 
 
 class Graph:
@@ -56,8 +55,8 @@ class Graph:
         node_type_nid = pd.MultiIndex.from_frame(index, names=["ntype", "nid"])
 
         metapaths = list(self.edge_index_dict.keys())
-        etypes = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
-                  metapaths]
+        etypes = pd.Index([".".join(metapath) if isinstance(metapath, tuple) else metapath \
+                           for metapath in metapaths], name='etype')
         df = pd.DataFrame(data=0, index=node_type_nid, columns=etypes)
 
         for metapath, name in zip(metapaths, etypes):
