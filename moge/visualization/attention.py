@@ -1,15 +1,14 @@
 import plotly.graph_objects as go
 from matplotlib.colors import to_rgb
-from pandas import DataFrame
-
 from moge.visualization.utils import configure_layout
+from pandas import DataFrame
 
 
 def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=8, orientation="h",
                      **kwargs):
     # change '#fffff' to its 'rgba' value to add opacity
-    rgba_colors = [f"rgba{tuple(int(val * 255) for val in to_rgb(color)) + (opacity,)}" \
-                   for color in links['color']]
+    rgba_colors = [f"rgba{tuple(int(val * 255) for val in to_rgb(color)) + (opacity if src != dst else 0,)}" \
+                   for i, (src, dst, color) in links[['source', 'target', 'color']].iterrows()]
 
     fig = go.Figure(data=[go.Sankey(
         valueformat=".2f",
@@ -27,12 +26,14 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
         ),
         # Add links
         link=dict(
+            label=links['label'],
             source=links['source'],
             target=links['target'],
-            label=links['label'],
             value=links['mean'],
             color=rgba_colors,
-            hovertemplate='attn weight: %{value} ± %{customdata:.3f}',
+            # hoverlabel=dict(align='left'),
+            customdata=links['std'],
+            hovertemplate='%{label}: %{value} ± %{customdata:.3f}',
         ),
 
     )], )

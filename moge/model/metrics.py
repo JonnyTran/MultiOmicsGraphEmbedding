@@ -449,7 +449,7 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
         precisions = (TPs + METRIC_EPS) / (TPs + FPs + METRIC_EPS)
         recalls = TPs / (TPs + FNs + METRIC_EPS)
 
-        numerator = 2 * recalls * precisions
+        numerator = 2 * recalls * precisions + METRIC_EPS
         denom = recalls + precisions + METRIC_EPS
 
         f1_scores = torch.div(numerator, denom)  # shape: n_thresholds x n_samples
@@ -459,6 +459,34 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
         return max_f1
 
 
+def get_fmax(scores: np.ndarray, targets: np.ndarray, thresholds: np.ndarray) -> Tuple[float, float]:
+    fmax_t = 0.0, 0.0
+
+    for thresh in thresholds:
+        preds = (scores >= thresh).astype(np.int32)
+        TPs = (preds * targets).sum(axis=1).ravel()
+
+        precisions = np.true_divide(TPs, preds.sum(axis=1).ravel())
+        recalls = np.true_divide(TPs, targets.sum(axis=1).ravel())
+
+        avg_pr = np.average(precisions[~np.isnan(precisions)])
+        avg_rc = np.average(recalls)
+
+        if np.isnan(avg_pr): continue
+
+        try:
+            if avg_pr + avg_rc > 0.0:
+                fmax = (2 * avg_pr * avg_rc) / (avg_pr + avg_rc)
+            else:
+                fmax = 0.0
+
+            if fmax > fmax_t[0]:
+                # Updates higher fmax_t
+                fmax_t = (fmax, thresh)
+        except Exception:  # ZeroDivisionError
+            continue
+
+    return fmax_t
 class FMax_Slow(torchmetrics.Metric):
     def __init__(self, thresholds: Union[int, Tensor, List[float]] = 100):
         """
@@ -526,34 +554,6 @@ class FMax_Slow(torchmetrics.Metric):
         weighted_avg_score = np.average(self._scores, weights=self._n_samples)
         return weighted_avg_score
 
-def get_fmax(scores: np.ndarray, targets: np.ndarray, thresholds: np.ndarray) -> Tuple[float, float]:
-    fmax_t = 0.0, 0.0
-
-    for thresh in thresholds:
-        preds = (scores >= thresh).astype(np.int32)
-        TPs = (preds * targets).sum(axis=1).ravel()
-
-        precisions = np.true_divide(TPs, preds.sum(axis=1).ravel())
-        recalls = np.true_divide(TPs, targets.sum(axis=1).ravel())
-
-        avg_pr = np.average(precisions[~np.isnan(precisions)])
-        avg_rc = np.average(recalls)
-
-        if np.isnan(avg_pr): continue
-
-        try:
-            if avg_pr + avg_rc > 0.0:
-                fmax = (2 * avg_pr * avg_rc) / (avg_pr + avg_rc)
-            else:
-                fmax = 0.0
-
-            if fmax > fmax_t[0]:
-                # Updates higher fmax_t
-                fmax_t = (fmax, thresh)
-        except Exception:  # ZeroDivisionError
-            continue
-
-    return fmax_t
 
 @torch.no_grad()
 def precision_recall_curve(y_true: Tensor, y_pred: Tensor, n_thresholds=100, average='micro'):

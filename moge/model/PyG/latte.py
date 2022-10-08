@@ -247,7 +247,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                                    for ntype, nid in global_node_index[self.layer].items() \
                                    if ntype in beta_mean and sizes[self.layer][ntype][1]}
             self.update_relation_attn(beta_mean, global_node_idx_out,
-                                      batch_size={ntype: tup[1] for ntype, tup in sizes[self.layer].items()})
+                                      batch_sizes={ntype: tup[1] for ntype, tup in sizes[self.layer].items()})
 
         return (l_dict, h_out), edge_pred_dict
 

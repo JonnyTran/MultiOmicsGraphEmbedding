@@ -4,27 +4,26 @@ from argparse import Namespace
 from typing import List, Dict, Tuple, Union
 
 import pandas as pd
-import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
+from moge.model.PyG.relations import RelationAttention
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.PyG.relations import RelationAttention
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
 
-
-class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
+class LATTEConv(MessagePassing, RelationAttention):
     def __init__(self, input_dim: int, output_dim: int, num_nodes_dict: Dict[str, int], metapaths: List,
                  layer: int = 0, t_order: int = 1,
                  activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
                  layernorm=False, batchnorm=False, dropout=0.2,
-                 edge_threshold=0.0, verbose=False) -> None:
+                 edge_threshold=0.0, n_layers=False, verbose=False) -> None:
         super().__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
+        self.n_layers = n_layers
         self.t_order = t_order
         self.verbose = verbose
         self.node_types = list(num_nodes_dict.keys())
@@ -237,9 +236,9 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             try:
                 self.update_relation_attn(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
                                           global_node_index=global_node_index,
-                                          batch_size=batch_sizes)
+                                          batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
                 self.update_edge_attn(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
-                                      batch_sizes=batch_sizes)
+                                      batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
             except Exception as e:
                 traceback.print_exc()
 
@@ -421,6 +420,7 @@ class LATTE(nn.Module):
                                     attn_activation=attn_activation,
                                     attn_dropout=attn_dropout,
                                     edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
+                                    n_layers=n_layers,
                                     verbose=hparams.verbose if "verbose" in hparams else False))
 
             if l + 1 < t_order:
@@ -481,10 +481,11 @@ class LATTE(nn.Module):
     def __getitem__(self, item) -> LATTEConv:
         return self.layers[item]
 
-    def get_sankey_flow(self, self_loop=True, agg="median"):
+    def get_sankey_flow(self, node_types=None, self_loop=True, agg="median"):
         """
         Concatenate multiple layer's sankey flow.
         Args:
+            node_types (): for compability, ignored.
             self_loop ():
             agg ():
 
@@ -493,12 +494,14 @@ class LATTE(nn.Module):
         """
         nid_offset = 0
         eid_offset = 0
-        all_nodes = []
-        all_links = []
-        last_dst_nids = {}
+        layer_nodes = []
+        layer_links = []
+        last_src_nids = {}
 
-        for i, layer in enumerate(self.layers):
-            nodes, links = layer.get_sankey_flow(node_types=None, self_loop=self_loop, agg=agg)
+        for latte in reversed(self.layers):
+            nodes, links = latte.get_sankey_flow(node_types=node_types, self_loop=self_loop, agg=agg)
+            nodes['layer'] = latte.layer
+            links['layer'] = latte.layer
 
             if nid_offset:
                 nodes.index = nodes.index + nid_offset
@@ -506,40 +509,50 @@ class LATTE(nn.Module):
                 links['target'] += nid_offset
                 links.index = links.index + eid_offset
 
-            if len(all_nodes):
-                # nodes['level'] += level_offset
+            if len(layer_nodes) > 0:
                 # Remove last layer's level=1 nodes, and replace current layer's level>1 node ids with last layer's level=1 nodes
-                current_src_ntypes = nodes.loc[nodes['level'] == nodes['level'].max()]['label'].unique()
+                current_dst_ntypes = nodes.loc[nodes['level'] == 1]['label'].unique()
 
-                for ntype, to_id in last_dst_nids.items():
-                    if ntype not in current_src_ntypes: continue
+                for ntype, prev_src_id in last_src_nids.items():
+                    if ntype not in current_dst_ntypes: continue
 
-                    from_id = nodes.loc[nodes['label'] == ntype]['level'].idxmax()
+                    dst_nodes = nodes[(nodes['label'] == ntype) & (nodes['metapath'] == ntype) & nodes['level'] == 1]
+                    dst_id = dst_nodes.index[0].item()
+                    print("\n>", ntype, ":", dst_id, ">", prev_src_id)
+                    assert isinstance(dst_id, int) and nodes.loc[dst_id, 'level'] == 1
 
-                    print("\n>", ntype, to_id, from_id)
-                    print(to_id, all_nodes[-1].loc[to_id, ['label', 'level']].to_dict())
-                    print(from_id, nodes.loc[from_id, ['label', 'level']].to_dict())
-                    print(links.query(f'source == {from_id}')[['source', 'target', 'label']])
+                    # Overwrite last layer's src node to current layer's dst node
+                    nodes.drop(index=dst_id, inplace=True)
+                    # print(links.query(f'target == {dst_id}')[['source', 'target', 'label', 'layer']])
+                    links.query('source == target')['source'].replace(dst_id, prev_src_id, inplace=True)
+                    links['target'].replace(dst_id, prev_src_id, inplace=True)
 
-                    nodes.rename(index={from_id: to_id}, inplace=True)
-                    all_nodes[-1].drop(index=to_id, inplace=True)
-                    links['source'].replace(from_id, to_id, inplace=True)
+                    print(links.query(f'target == {prev_src_id}')[['source', 'target', 'label', 'layer']])
+                    # layer_links[-1].drop(layer_links[-1].query(f'source == {prev_src_id}').index, inplace=True)
 
-            # Update dst_ntype_id to contain the dst nodes from current layers
-            last_dst_nids = {}
-            for id, node in nodes.loc[nodes['level'] == 1].iterrows():
-                last_dst_nids[node['label']] = id  # Get the index value
+                nodes['level'] += layer_nodes[-1]['level'].max() - 1
 
-            all_nodes.append(nodes)
-            all_links.append(links)
+            # Update last_src_nids to contain the src nodes from current layers
+            last_src_nids = {}
+            for id, node in nodes.loc[nodes['level'] == nodes['level'].max()].iterrows():
+                last_src_nids[node['label']] = id  # Get the index value
+
+            layer_nodes.append(nodes)
+            layer_links.append(links)
 
             nid_offset += nodes.index.size
             eid_offset += links.index.size
 
-        all_nodes = pd.concat(all_nodes, axis=0)
-        all_links = pd.concat(all_links, axis=0)
+        layer_nodes = pd.concat(layer_nodes, axis=0)
+        layer_links = pd.concat(layer_links, axis=0).sort_values(by=['mean', 'target'], ascending=False)
+        layer_nodes = layer_nodes.drop(columns=['metapath'])
+        layer_links['label'] = layer_links['label'] + "_" + layer_links['layer'].astype(str)
 
-        assert all_links['source'].isin(all_nodes.index).all()
-        assert all_links['target'].isin(all_nodes.index).all()
+        print(pd.Index(layer_links['source']).difference(layer_nodes.index)) \
+            if not layer_links['source'].isin(layer_nodes.index).all() else None
+        print(pd.Index(layer_links['target']).difference(layer_nodes.index)) \
+            if not layer_links['target'].isin(layer_nodes.index).all() else None
+        assert not layer_nodes.index.duplicated().any(), layer_nodes.index[layer_nodes.index.duplicated(keep=False)]
+        assert not layer_links.index.duplicated().any(), layer_links.index[layer_links.index.duplicated(keep=False)]
 
-        return all_nodes, all_links
+        return layer_nodes, layer_links

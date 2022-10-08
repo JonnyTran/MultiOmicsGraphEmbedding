@@ -242,7 +242,7 @@ class LATTEConv(nn.Module, RelationAttention):
             global_node_index = {ntype: nid[:beta_mean[ntype].size(0)] \
                                  for ntype, nid in g.ndata["_ID"].items() if ntype in beta_mean}
             self.update_relation_attn(beta_mean, global_node_index,
-                                      batch_size={ntype: emb.size(0) for ntype, emb in feat_dst.items()})
+                                      batch_sizes={ntype: emb.size(0) for ntype, emb in feat_dst.items()})
 
         return h_out
 

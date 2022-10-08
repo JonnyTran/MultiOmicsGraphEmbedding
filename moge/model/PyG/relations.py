@@ -173,7 +173,7 @@ class RelationAttention(ABC):
             self._alphas = {}
 
         for ntype, nids in global_node_index.items():
-            if ntype in batch_sizes:
+            if batch_sizes and ntype in batch_sizes:
                 batch_nids = nids[:batch_sizes[ntype]].cpu().numpy()
             else:
                 batch_nids = nids.cpu().numpy()
@@ -196,7 +196,7 @@ class RelationAttention(ABC):
                 counts_df.append(dst_counts)
 
                 # Edge attn
-                if edge_values is None or save_count_only or tail_type not in batch_sizes: continue
+                if edge_values is None or save_count_only or (batch_sizes and tail_type not in batch_sizes): continue
                 value, row, col = edge_values.cpu().max(1).values.numpy(), \
                                   edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
                 csc_matrix = ssp.coo_matrix((value, (row, col)),
@@ -234,7 +234,7 @@ class RelationAttention(ABC):
     @torch.no_grad()
     def update_relation_attn(self, betas: Dict[str, Tensor],
                              global_node_index: Dict[str, Tensor],
-                             batch_size: Dict[str, int]):
+                             batch_sizes: Dict[str, int]):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
         if not hasattr(self, "_betas"):
             self._betas = {}
@@ -246,8 +246,8 @@ class RelationAttention(ABC):
             if len(relations) <= 1: continue
 
             nids = global_node_index[ntype].cpu().numpy()
-            if ntype in batch_size:
-                batch_nids = nids[:batch_size[ntype]]
+            if batch_sizes and ntype in batch_sizes:
+                batch_nids = nids[:batch_sizes[ntype]]
             else:
                 batch_nids = nids
 
@@ -313,16 +313,18 @@ class RelationAttention(ABC):
         if not len(all_nodes):
             return None, None
         all_nodes = pd.concat(all_nodes, axis=0)
-        all_links = pd.concat(all_links, axis=0)
+        all_links = pd.concat(all_links, axis=0).sort_values(by=['mean', 'target'], ascending=False)
 
-        assert all_links['source'].isin(all_nodes.index).all()
-        assert all_links['target'].isin(all_nodes.index).all()
+        # assert all_links['source'].isin(all_nodes.index).all()
+        # assert all_links['target'].isin(all_nodes.index).all()
+        assert not all_nodes.index.duplicated().any(), all_nodes.index[all_nodes.index.duplicated()]
+        assert not all_links.index.duplicated().any(), all_links.index[all_links.index.duplicated()]
 
         return all_nodes, all_links
 
-    def get_relation_attn_flow(self, node_type: str, self_loop=True, agg="median") \
+    def get_relation_attn_flow(self, ntype: str, self_loop=True, agg="median") \
             -> Tuple[DataFrame, DataFrame]:
-        rel_attn = self._betas[node_type]
+        rel_attn = self._betas[ntype]
 
         if agg == "sum":
             rel_attn_agg = rel_attn.sum(axis=0)
@@ -357,19 +359,24 @@ class RelationAttention(ABC):
 
                 path_links = pd.DataFrame({"source": sources,
                                            "target": targets,
-                                           "label": [metapath_name, ] * len(targets),
-                                           "mean": [attn_agg, ] * len(targets),
-                                           'std': [rel_attn_std.loc[metapath_name], ] * len(targets),
+                                           "label": [metapath_name for i in range(len(targets))],
+                                           "mean": [attn_agg for i in range(len(targets))],
+                                           'std': [rel_attn_std.loc[metapath_name] for i in range(len(targets))],
                                            })
                 links = links.append(path_links, ignore_index=True)
 
 
             elif self_loop:
                 source = indexed_nodes[indexed_metapath[0]]
-                links = links.append({"source": source, "target": source, "label": metapath_name,
-                                      "mean": attn_agg, "std": rel_attn_std.loc[node_type], }, ignore_index=True)
 
-        links["color"] = links["label"].apply(lambda label: ColorHash(label).hex)
+                links = links.append({"source": source, "target": source, "label": metapath_name,
+                                      "mean": attn_agg, "std": rel_attn_std.loc[ntype], }, ignore_index=True)
+
+        def _get_hash_label(metapaths):
+            label = metapaths.str.split(".", expand=True)[1].fillna(metapaths).str.replace("rev_", "")
+            return label
+
+        links["color"] = _get_hash_label(links["label"]).apply(lambda label: ColorHash(label).hex)
         links = links.iloc[::-1]
 
         # Nodes
@@ -382,13 +389,14 @@ class RelationAttention(ABC):
         nodes["metapath"] = [indexed_node2metapath[node] for node in indexed_nodes.keys()]
 
         # Get number of edge_index counts for each metapath
-        if node_type in self._counts:
-            nodes["count"] = nodes["metapath"].map(lambda m: self._counts[node_type].sum(axis=0).get(m, None))
+        if ntype in self._counts:
+            nodes["count"] = nodes["metapath"].map(lambda m: self._counts[ntype].sum(axis=0).get(m, 0)).astype(int)
+
         # Set count of target nodes
-        nodes.loc[nodes.query(f'label == "{node_type}" & metapath == "{node_type}"').index, 'count'] = rel_attn.shape[0]
+        nodes.loc[nodes.query(f'label == "{ntype}" & metapath == "{ntype}"').index, 'count'] = rel_attn.shape[0]
 
         nodes["color"] = nodes[["label", "level"]].apply(
-            lambda x: ColorHash(x["label"].strip("rev_")).hex \
+            lambda x: ColorHash(x["label"].replace("rev_", "")).hex \
                 if x["level"] % 2 == 0 \
                 else ColorHash(x["label"]).hex,
             axis=1)
