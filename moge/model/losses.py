@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+from torch_sparse import SparseTensor
 
 
 class ClassificationLoss(nn.Module):
@@ -57,6 +58,9 @@ class ClassificationLoss(nn.Module):
         Returns:
 
         """
+        if isinstance(targets, SparseTensor):
+            targets = targets.to_dense()
+
         if self.multilabel:
             assert self.loss_type in ["BCE_WITH_LOGITS", "BCE", "PU_LOSS_WITH_LOGITS",
                                       "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"], \

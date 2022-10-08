@@ -7,6 +7,12 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -15,11 +21,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -178,7 +179,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return dataset
 
-    def transform_heterograph(self, hetero: HeteroData):
+    def transform(self, hetero: HeteroData):
         X = {}
         X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in hetero.edge_index_dict.items()}
         X["global_node_index"] = {ntype: nid for ntype, nid in hetero.nid_dict.items() if nid.numel()}
@@ -207,7 +208,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             nids = X["global_node_index"][ntype]
             if isinstance(y, SparseTensor):
                 if y.density():
-                    y_dict[ntype] = y[nids].to_dense()
+                    y_dict[ntype] = y[nids]
             elif isinstance(y, Tensor):
                 y_dict[ntype] = y
 
@@ -243,7 +244,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return X, y_dict, weights
 
     def full_batch(self):
-        return self.transform_heterograph(self.G)
+        return self.transform(self.G)
 
     def get_node_metadata(self, global_node_index: Dict[str, Tensor],
                           embeddings: Dict[str, Tensor],
@@ -415,7 +416,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         node_mask = graph[self.head_node_type].train_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
 
         dataset = self.create_graph_sampler(graph, batch_size, node_type=self.head_node_type, node_mask=node_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers,
+                                            transform_fn=self.transform, num_workers=num_workers,
                                             shuffle=True)
 
         return dataset
@@ -425,7 +426,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         node_mask = graph[self.head_node_type].valid_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
 
         dataset = self.create_graph_sampler(self.G, batch_size, node_type=self.head_node_type, node_mask=node_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers,
+                                            transform_fn=self.transform, num_workers=num_workers,
                                             shuffle=False)
 
         return dataset
@@ -435,7 +436,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         node_mask = graph[self.head_node_type].test_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
 
         dataset = self.create_graph_sampler(self.G, batch_size, node_type=self.head_node_type, node_mask=node_mask,
-                                            transform_fn=self.transform_heterograph, num_workers=num_workers,
+                                            transform_fn=self.transform, num_workers=num_workers,
                                             shuffle=False)
 
         return dataset
@@ -468,7 +469,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
                                                        node_type=head_node_type,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
-                                                       transform_fn=super().transform_heterograph,
+                                                       transform_fn=super().transform,
                                                        num_workers=0)
 
     @classmethod

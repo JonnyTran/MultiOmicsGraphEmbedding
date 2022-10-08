@@ -19,7 +19,6 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
-from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
@@ -27,6 +26,8 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -149,7 +150,10 @@ def get_mlb(mlb_path: Path, labels=None, **kwargs) -> MultiLabelBinarizer:
     return mlb
 
 
-def fmax(targets: np.ndarray, scores: np.ndarray) -> Tuple[float, float]:
+def fmax(targets: ssp.csr_matrix, scores: np.ndarray) -> Tuple[float, float]:
+    if not isinstance(targets, ssp.csr_matrix):
+        targets = ssp.csr_matrix(targets)
+
     fmax_ = 0.0, 0.0
     for thresh in (c / 100 for c in range(101)):
         cut_sc = ssp.csr_matrix((scores >= thresh).astype(np.int32))
@@ -170,9 +174,12 @@ def fmax(targets: np.ndarray, scores: np.ndarray) -> Tuple[float, float]:
 
 
 def pair_aupr(targets: ssp.csr_matrix, scores: np.ndarray, top=200):
+    if isinstance(targets, ssp.csr_matrix):
+        targets = targets.toarray()
+
     scores[np.arange(scores.shape[0])[:, None],
            scores.argpartition(scores.shape[1] - top)[:, :-top]] = -1e100
-    return average_precision_score(targets.toarray().flatten(), scores.flatten())
+    return average_precision_score(targets.flatten(), scores.flatten())
 
 
 def output_res(res_path: Path, pid_list, go_list, sc_mat):
@@ -301,7 +308,7 @@ class DeepGraphGO(LightningModule):
         # self.train_metrics.update_metrics(torch.sigmoid(logits), y_true)
         scores = torch.sigmoid(logits).detach().cpu().numpy()
         y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        (fmax_, t_), aupr_ = fmax(y_true, scores), pair_aupr(y_true, scores)
         self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True,
                       on_step=False, on_epoch=True)
         return loss
@@ -317,7 +324,7 @@ class DeepGraphGO(LightningModule):
         # self.valid_metrics.update_metrics(torch.sigmoid(logits), y_true)
         scores = torch.sigmoid(logits).detach().cpu().numpy()
         y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        (fmax_, t_), aupr_ = fmax(y_true, scores), pair_aupr(y_true, scores)
         self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True,
                       on_step=False, on_epoch=True)
         return loss
@@ -333,7 +340,7 @@ class DeepGraphGO(LightningModule):
         # self.test_metrics.update_metrics(torch.sigmoid(logits), y_true)
         scores = torch.sigmoid(logits).detach().cpu().numpy()
         y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        (fmax_, t_), aupr_ = fmax(y_true, scores), pair_aupr(y_true, scores)
         self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True,
                       on_step=False, on_epoch=True)
         return loss

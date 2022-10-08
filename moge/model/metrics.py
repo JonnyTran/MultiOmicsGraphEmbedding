@@ -2,6 +2,7 @@ import traceback
 from typing import Optional, Any, Callable, List, Dict, Union, Tuple
 
 import numpy as np
+import scipy.sparse as ssp
 import torch
 import torchmetrics
 from ignite.exceptions import NotComputableError
@@ -11,6 +12,7 @@ from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from torch import Tensor
+from torch_sparse import SparseTensor
 from torchmetrics import Metric, F1Score, AUROC, MeanSquaredError, Accuracy, BinnedPrecisionRecallCurve, \
     BinnedAveragePrecision
 from torchmetrics.utilities.data import METRIC_EPS, to_onehot
@@ -407,7 +409,7 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
         self.FNs = [[] for i in range(self.num_thresholds)]
 
     @torch.no_grad()
-    def update(self, preds: Tensor, target: Tensor) -> None:
+    def update(self, preds: Tensor, target: Union[SparseTensor, Tensor]) -> None:
         """
         Args
             preds: (n_samples, n_classes) tensor
@@ -415,6 +417,9 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
         """
         if self.num_classes is None:
             self.num_classes = target.size(1) if target.dim() > 1 else 1
+
+        if isinstance(target, SparseTensor):
+            target = target.to_dense()
 
         # binary case
         if len(preds.shape) == len(target.shape) == 1:
@@ -453,40 +458,57 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
         denom = recalls + precisions + METRIC_EPS
 
         f1_scores = torch.div(numerator, denom)  # shape: n_thresholds x n_samples
-        f1_means = f1_scores.mean(axis=1)  # shape: n_thresholds x 1
+        f1_means = f1_scores.nanmean(axis=1)  # shape: n_thresholds x 1
         max_f1 = f1_means.max(axis=0).values
 
         return max_f1
 
 
-def get_fmax(scores: np.ndarray, targets: np.ndarray, thresholds: np.ndarray) -> Tuple[float, float]:
+def get_fmax(scores: Union[np.ndarray, ssp.csr_matrix], targets: Union[np.ndarray, ssp.csr_matrix],
+             thresholds: np.ndarray) -> Tuple[float, float]:
     fmax_t = 0.0, 0.0
 
+    if not isinstance(targets, ssp.csc_matrix):
+        targets = ssp.csr_matrix(targets)
+    if not isinstance(scores, ssp.csr_matrix):
+        scores = ssp.csr_matrix(scores)
+
     for thresh in thresholds:
-        preds = (scores >= thresh).astype(np.int32)
-        TPs = (preds * targets).sum(axis=1).ravel()
+        cut_sc = (scores > thresh).astype(np.int32)
+        correct = cut_sc.multiply(targets).sum(axis=1)
 
-        precisions = np.true_divide(TPs, preds.sum(axis=1).ravel())
-        recalls = np.true_divide(TPs, targets.sum(axis=1).ravel())
-
-        avg_pr = np.average(precisions[~np.isnan(precisions)])
-        avg_rc = np.average(recalls)
-
-        if np.isnan(avg_pr): continue
-
-        try:
-            if avg_pr + avg_rc > 0.0:
-                fmax = (2 * avg_pr * avg_rc) / (avg_pr + avg_rc)
-            else:
-                fmax = 0.0
-
-            if fmax > fmax_t[0]:
-                # Updates higher fmax_t
-                fmax_t = (fmax, thresh)
-        except Exception:  # ZeroDivisionError
+        p, r = correct / cut_sc.sum(axis=1), correct / targets.sum(axis=1)
+        p, r = np.average(p[np.invert(np.isnan(p))]), np.average(r)
+        if np.isnan(p):
             continue
-
+        try:
+            fmax_t = max(fmax_t, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
+        except ZeroDivisionError:
+            pass
     return fmax_t
+
+    #     preds = (scores >= thresh).astype(np.int32)
+    #     TPs = (preds * targets).sum(axis=1).ravel()
+    #
+    #     precisions = np.true_divide(TPs, preds.sum(axis=1).ravel())
+    #     recalls = np.true_divide(TPs, targets.sum(axis=1).ravel())
+    #
+    #     avg_pr = np.average(precisions[~np.isnan(precisions)])
+    #     avg_rc = np.average(recalls)
+    #
+    #     if np.isnan(avg_pr): continue
+    #
+    #     try:
+    #         if avg_pr + avg_rc > 0.0:
+    #             fmax = (2 * avg_pr * avg_rc) / (avg_pr + avg_rc)
+    #         else:
+    #             fmax = 0.0
+    #
+    #         if fmax > fmax_t[0]:
+    #             # Updates higher fmax_t
+    #             fmax_t = (fmax, thresh)
+
+
 class FMax_Slow(torchmetrics.Metric):
     def __init__(self, thresholds: Union[int, Tensor, List[float]] = 100):
         """
@@ -507,11 +529,14 @@ class FMax_Slow(torchmetrics.Metric):
         n_samples = scores.shape[0]
         with torch.no_grad():
             if isinstance(scores, Tensor):
-                scores = scores.cpu().numpy()
-            if isinstance(targets, Tensor):
+                scores = torch.nn.Hardshrink(lambd=1e-2)(scores).cpu().numpy()
+
+            if isinstance(targets, SparseTensor):
+                targets = targets.to_scipy()
+            elif isinstance(targets, Tensor):
                 targets = targets.cpu().numpy()
 
-        fmax, thresh = get_fmax(scores, targets, thresholds=self.thresholds)
+        fmax, thresh = get_fmax(scores=scores, targets=targets, thresholds=self.thresholds)
 
         self._scores.append(fmax)
         self._threshs.append(thresh)
