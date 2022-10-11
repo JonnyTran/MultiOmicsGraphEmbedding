@@ -64,7 +64,10 @@ class Metrics(torch.nn.Module):
             #     self.metrics[name] = FMax()
 
             elif "fmax" in name:
-                self.metrics[name] = FMax_Micro()
+                if prefix == '' or prefix == 'val_':
+                    self.metrics[name] = FMax_Micro()
+                else:
+                    self.metrics[name] = FMax_Slow()
 
 
             elif "auroc" in name:
@@ -468,7 +471,7 @@ def get_fmax(scores: Union[np.ndarray, ssp.csr_matrix], targets: Union[np.ndarra
              thresholds: np.ndarray) -> Tuple[float, float]:
     fmax_t = 0.0, 0.0
 
-    if not isinstance(targets, ssp.csc_matrix):
+    if not isinstance(targets, ssp.csr_matrix):
         targets = ssp.csr_matrix(targets)
     if not isinstance(scores, ssp.csr_matrix):
         scores = ssp.csr_matrix(scores)
@@ -533,6 +536,11 @@ class FMax_Slow(torchmetrics.Metric):
 
             if isinstance(targets, SparseTensor):
                 targets = targets.to_scipy()
+            elif targets.layout == torch.sparse_csr:
+                targets = ssp.csr_matrix((targets.values().numpy(),
+                                          targets.col_indices().numpy(),
+                                          targets.crow_indices().numpy()),
+                                         shape=targets.shape)
             elif isinstance(targets, Tensor):
                 targets = targets.cpu().numpy()
 

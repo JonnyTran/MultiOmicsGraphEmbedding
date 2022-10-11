@@ -208,7 +208,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             nids = X["global_node_index"][ntype]
             if isinstance(y, SparseTensor):
                 if y.density():
-                    y_dict[ntype] = y[nids]
+                    y_dict[ntype] = y[nids].to_dense()
             elif isinstance(y, Tensor):
                 y_dict[ntype] = y
 

@@ -11,6 +11,12 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
+from pandas import Series, Index, DataFrame
+from scipy.sparse import csr_matrix
+from torch import Tensor
+from torch_geometric.data import HeteroData
+from torch_sparse import SparseTensor
+
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
@@ -19,11 +25,6 @@ from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
-from pandas import Series, Index, DataFrame
-from scipy.sparse import csr_matrix
-from torch import Tensor
-from torch_geometric.data import HeteroData
-from torch_sparse import SparseTensor
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -43,8 +44,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.annotations: Dict[str, DataFrame] = {}
 
         networks = {}
-        for src_etype_dst, nxgraph_constructor in layers.items():
-            networks[src_etype_dst] = nxgraph_constructor()
+        for src_etype_dst, nxgraph in layers.items():
+            if callable(nxgraph):
+                networks[src_etype_dst] = nxgraph()
+            else:
+                networks[src_etype_dst] = nxgraph
 
         super(HeteroNetwork, self).__init__(networks=networks, multiomics=multiomics, annotations=annotations)
 
@@ -431,7 +435,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             transform_cols = node_attr_cols + [target]
         else:
             transform_cols = node_attr_cols
-        transform_cols = [col for col in transform_cols if col not in self.feature_transformer]
+        if hasattr(self, 'feature_transformer') and self.feature_transformer:
+            # Avoid running multiple times for columns that already have feature_transformer
+            transform_cols = [col for col in transform_cols if col not in self.feature_transformer]
         self.process_feature_tranformer(columns=transform_cols, ntype_subset=head_node_type, min_count=min_count)
 
         # Filter node that doesn't have a sequence
@@ -608,7 +614,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             transform_cols = node_attr_cols + [target]
         else:
             transform_cols = node_attr_cols
-        transform_cols = [col for col in transform_cols if col not in self.feature_transformer]
+
+        if hasattr(self, 'feature_transformer') and self.feature_transformer:
+            # Avoid running multiple times for columns that already have feature_transformer
+            transform_cols = [col for col in transform_cols if col not in self.feature_transformer]
         self.process_feature_tranformer(columns=transform_cols, ntype_subset=head_node_type, min_count=min_count)
 
         node_types = self.node_types
