@@ -7,13 +7,14 @@ import pandas as pd
 import scipy.sparse as ssp
 import torch
 from colorhash import ColorHash
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
+
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -297,7 +298,7 @@ class RelationAttention(ABC):
         all_links = []
         for ntype in node_types:
             if ntype not in self._betas: continue
-            nodes, links = self.get_relation_attn_flow(ntype, self_loop=self_loop, agg=agg)
+            nodes, links = self.get_relation_attn(ntype, self_loop=self_loop, agg=agg)
             if nid_offset:
                 nodes.index = nodes.index + nid_offset
                 links['source'] = links['source'] + nid_offset
@@ -322,7 +323,7 @@ class RelationAttention(ABC):
 
         return all_nodes, all_links
 
-    def get_relation_attn_flow(self, ntype: str, self_loop=True, agg="median") \
+    def get_relation_attn(self, ntype: str, self_loop=True, agg="median") \
             -> Tuple[DataFrame, DataFrame]:
         rel_attn = self._betas[ntype]
 
@@ -395,10 +396,11 @@ class RelationAttention(ABC):
         # Set count of target nodes
         nodes.loc[nodes.query(f'label == "{ntype}" & metapath == "{ntype}"').index, 'count'] = rel_attn.shape[0]
 
+        color_args = dict(lightness=np.arange(0.2, 0.8, 0.1), saturation=np.arange(0.2, 0.8, 0.1))
         nodes["color"] = nodes[["label", "level"]].apply(
-            lambda x: ColorHash(x["label"].replace("rev_", "")).hex \
+            lambda x: ColorHash(x["label"].replace("rev_", ""), **color_args).hex \
                 if x["level"] % 2 == 0 \
-                else ColorHash(x["label"]).hex,
+                else ColorHash(x["label"], **color_args).hex,
             axis=1)
 
         return nodes, links

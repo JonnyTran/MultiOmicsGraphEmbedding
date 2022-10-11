@@ -7,12 +7,13 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.relations import RelationAttention
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.relations import RelationAttention
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 
 
 class LATTEConv(MessagePassing, RelationAttention):
@@ -518,17 +519,21 @@ class LATTE(nn.Module):
 
                     dst_nodes = nodes[(nodes['label'] == ntype) & (nodes['metapath'] == ntype) & nodes['level'] == 1]
                     dst_id = dst_nodes.index[0].item()
-                    print("\n>", ntype, ":", dst_id, ">", prev_src_id)
-                    assert isinstance(dst_id, int) and nodes.loc[dst_id, 'level'] == 1
+                    # print("\n>", ntype, ":", dst_id, ">", prev_src_id)
+                    assert isinstance(dst_id, int) and dst_nodes.index.size == 1, dst_nodes
 
                     # Overwrite last layer's src node to current layer's dst node
                     nodes.drop(index=dst_id, inplace=True)
+
                     # print(links.query(f'target == {dst_id}')[['source', 'target', 'label', 'layer']])
                     links.query('source == target')['source'].replace(dst_id, prev_src_id, inplace=True)
                     links['target'].replace(dst_id, prev_src_id, inplace=True)
 
-                    print(links.query(f'target == {prev_src_id}')[['source', 'target', 'label', 'layer']])
-                    # layer_links[-1].drop(layer_links[-1].query(f'source == {prev_src_id}').index, inplace=True)
+                    if self_loop:
+                        prev_self_link = layer_links[-1].query(f'(source == target) and (label == "{ntype}")')
+                        if not prev_self_link.empty:
+                            prev_self_link['source'] = [prev_src_id]
+                            print(prev_self_link) if not prev_self_link.empty else None
 
                 nodes['level'] += layer_nodes[-1]['level'].max() - 1
 
@@ -546,13 +551,21 @@ class LATTE(nn.Module):
         layer_nodes = pd.concat(layer_nodes, axis=0)
         layer_links = pd.concat(layer_links, axis=0).sort_values(by=['mean', 'target'], ascending=False)
         layer_nodes = layer_nodes.drop(columns=['metapath'])
-        layer_links['label'] = layer_links['label'] + "_" + layer_links['layer'].astype(str)
 
-        print(pd.Index(layer_links['source']).difference(layer_nodes.index)) \
-            if not layer_links['source'].isin(layer_nodes.index).all() else None
-        print(pd.Index(layer_links['target']).difference(layer_nodes.index)) \
-            if not layer_links['target'].isin(layer_nodes.index).all() else None
-        assert not layer_nodes.index.duplicated().any(), layer_nodes.index[layer_nodes.index.duplicated(keep=False)]
-        assert not layer_links.index.duplicated().any(), layer_links.index[layer_links.index.duplicated(keep=False)]
+        if len(layer_nodes) > 1:
+            # Ensure node index is contiguous
+            replace_nid = pd.Series(layer_nodes.reset_index().index, index=layer_nodes.index)
+            replace_nid = {k: v for k, v in replace_nid.items() if k != v}
+            layer_nodes = layer_nodes.reset_index()
+            layer_links = layer_links.replace({'source': replace_nid, 'target': replace_nid})
+
+        if not layer_links['source'].isin(layer_nodes.index).all():
+            print('layer_links[source] not in layer_nodes.index:',
+                  pd.Index(layer_links['source']).difference(layer_nodes.index))
+        if not layer_links['target'].isin(layer_nodes.index).all():
+            print('layer_links[target] not in layer_nodes.index:',
+                  pd.Index(layer_links['target']).difference(layer_nodes.index))
+        assert not layer_nodes.index.duplicated().any(), f"layer_nodes.index.duplicated(): {layer_nodes.index[layer_nodes.index.duplicated(keep=False)].values}"
+        assert not layer_links.index.duplicated().any(), f"layer_links.index.duplicated(): {layer_links.index[layer_links.index.duplicated(keep=False)].values}"
 
         return layer_nodes, layer_links

@@ -457,7 +457,7 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
         precisions = (TPs + METRIC_EPS) / (TPs + FPs + METRIC_EPS)
         recalls = TPs / (TPs + FNs + METRIC_EPS)
 
-        numerator = 2 * recalls * precisions + METRIC_EPS
+        numerator = 2 * recalls * precisions
         denom = recalls + precisions + METRIC_EPS
 
         f1_scores = torch.div(numerator, denom)  # shape: n_thresholds x n_samples
