@@ -1,7 +1,7 @@
 import pprint
 import warnings
 from collections import defaultdict
-from typing import Dict, Tuple, Union, List, Any, Optional
+from typing import Dict, Tuple, Union, List, Any, Optional, Set
 
 import dask.dataframe as dd
 import dgl
@@ -11,12 +11,6 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
-from pandas import Series, Index, DataFrame
-from scipy.sparse import csr_matrix
-from torch import Tensor
-from torch_geometric.data import HeteroData
-from torch_sparse import SparseTensor
-
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
@@ -25,6 +19,11 @@ from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
+from pandas import Series, Index, DataFrame
+from scipy.sparse import csr_matrix
+from torch import Tensor
+from torch_geometric.data import HeteroData
+from torch_sparse import SparseTensor
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -56,18 +55,30 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         nodes = {ntype: nids.size for ntype, nids in self.nodes.items()}
         networks = {'.'.join(metapath): g.__str__() for metapath, g in self.networks.items()}
         annotations = {ntype: df.shape for ntype, df in self.annotations.items()}
-        return "HeteroNetwork {}\n{}".format(self.multiomics._cohort_name,
-                                             pprint.pformat(
-                                                 {'nodes': nodes, 'networks': networks, 'annotations': annotations},
-                                                 depth=3, width=150))
+        return "HeteroNetwork {}\n{}".format(
+            self.multiomics._cohort_name,
+            pprint.pformat({'nodes': nodes, 'networks': networks, 'annotations': annotations}, depth=3, width=150))
 
-    def isolated_nodes(self):
-        isolated_nodes = {ntype: set(nodelist) for ntype, nodelist in self.nodes.items()}
+    def isolated_nodes(self, ntypes: Set[str] = None) -> Dict[str, Set[str]]:
+        """
+        Collect all node that are isolated across all `networks`
+
+        Args:
+            ntypes (): List of node types to collect
+
+        Returns:
+            isolated_nodes (Dict[str, Set[str]]):
+        """
+        isolated_nodes = {ntype: set(nodelist) \
+                          for ntype, nodelist in self.nodes.items() \
+                          if not ntypes or ntype in ntypes}
 
         for metapath, g in self.networks.items():
-            isolates = nx.isolates(g)
-            for ntype in {metapath[0], metapath[-1]}:
-                isolated_nodes[ntype] = isolated_nodes[ntype].intersection(isolates)
+            g_ntypes = {metapath[0], metapath[-1]}.intersection(isolated_nodes.keys())
+            if g_ntypes:
+                isolates = nx.isolates(g)
+                for ntype in g_ntypes:
+                    isolated_nodes[ntype] = isolated_nodes[ntype].intersection(isolates)
 
         return isolated_nodes
 

@@ -37,12 +37,28 @@ class Network(object):
                      if pd.isna(node) or type(node) != str or len(node) == 0]
 
         if isinstance(nodes, dict):
-            for metapath, g in self.networks.values():
-                if not any(ntype in nodes for ntype in {metapath[0], metapath[-1]}): continue
-                g.remove_nodes_from(nodes[metapath[0]])
-                g.remove_nodes_from(nodes[metapath[-1]])
+            # Ensure no empty lists
+            nodes = {ntype: li for ntype, li in nodes.items() if li}
+
+            for metapath, g in self.networks.items():
+                g_ntypes = {metapath[0], metapath[-1]}.intersection(nodes)
+
+                if g_ntypes:
+                    for ntype in g_ntypes:
+                        g.remove_nodes_from(nodes[ntype])
+
                 if nan_nodes:
                     g.remove_nodes_from(nan_nodes)
+
+            for ntype, nodelist in nodes.items():
+                if hasattr(self, 'nodes'):
+                    self.nodes[ntype] = self.nodes[ntype].drop(nodelist)
+
+                if hasattr(self, 'annotations'):
+                    if hasattr(self, 'nodes'):
+                        self.annotations[ntype] = self.annotations[ntype].loc[self.nodes[ntype]]
+                    else:
+                        self.annotations[ntype] = self.annotations[ntype].drop(nodelist)
 
         elif isinstance(nodes, list):
             for g in self.networks.values() if isinstance(self.networks, dict) else self.networks:

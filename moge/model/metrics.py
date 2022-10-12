@@ -445,7 +445,7 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
             self.FNs[i].append(FNs)
 
     def compute(self) -> Tensor:
-        """Returns float tensor of size n_classes."""
+        """Returns a float scalar."""
         if not hasattr(self, "TPs") or len(self.TPs[0]) == 0:
             raise NotComputableError("FMax must have at"
                                      "least one example before it can be computed.")
@@ -458,13 +458,13 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
         recalls = TPs / (TPs + FNs + METRIC_EPS)
 
         numerator = 2 * recalls * precisions
-        denom = recalls + precisions + METRIC_EPS
+        denom = recalls + precisions
 
         f1_scores = torch.div(numerator, denom)  # shape: n_thresholds x n_samples
         f1_means = f1_scores.nanmean(axis=1)  # shape: n_thresholds x 1
-        max_f1 = f1_means.max(axis=0).values
+        max_f1_thresh = f1_means.max(axis=0)
 
-        return max_f1
+        return max_f1_thresh.values
 
 
 def get_fmax(scores: Union[np.ndarray, ssp.csr_matrix], targets: Union[np.ndarray, ssp.csr_matrix],
