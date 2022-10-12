@@ -529,11 +529,11 @@ class LATTE(nn.Module):
                     links.query('source == target')['source'].replace(dst_id, prev_src_id, inplace=True)
                     links['target'].replace(dst_id, prev_src_id, inplace=True)
 
-                    if self_loop:
-                        prev_self_link = layer_links[-1].query(f'(source == target) and (label == "{ntype}")')
-                        if not prev_self_link.empty:
-                            prev_self_link['source'] = [prev_src_id]
-                            print(prev_self_link) if not prev_self_link.empty else None
+                    # if self_loop:
+                    #     prev_self_link = layer_links[-1].query(f'(source == target) and (label == "{ntype}")')
+                    #     if not prev_self_link.empty:
+                    #         prev_self_link['source'] = [prev_src_id]
+                    #         print(prev_self_link) if not prev_self_link.empty else None
 
                 nodes['level'] += layer_nodes[-1]['level'].max() - 1
 
@@ -561,11 +561,13 @@ class LATTE(nn.Module):
 
         if not layer_links['source'].isin(layer_nodes.index).all():
             print('layer_links[source] not in layer_nodes.index:',
-                  pd.Index(layer_links['source']).difference(layer_nodes.index))
+                  pd.Index(layer_links['source']).difference(layer_nodes.index).values)
         if not layer_links['target'].isin(layer_nodes.index).all():
             print('layer_links[target] not in layer_nodes.index:',
-                  pd.Index(layer_links['target']).difference(layer_nodes.index))
-        assert not layer_nodes.index.duplicated().any(), f"layer_nodes.index.duplicated(): {layer_nodes.index[layer_nodes.index.duplicated(keep=False)].values}"
-        assert not layer_links.index.duplicated().any(), f"layer_links.index.duplicated(): {layer_links.index[layer_links.index.duplicated(keep=False)].values}"
+                  pd.Index(layer_links['target']).difference(layer_nodes.index).values)
+        assert not layer_nodes.index.duplicated().any(), \
+            f"layer_nodes.index.duplicated(): \n{layer_nodes[layer_nodes.index.duplicated(keep=False)]}"
+        assert not layer_links.index.duplicated().any(), \
+            f"layer_links.index.duplicated(): \n{layer_links[layer_links.index.duplicated(keep=False)]}"
 
         return layer_nodes, layer_links

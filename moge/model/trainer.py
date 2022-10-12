@@ -423,18 +423,15 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         return None
 
     def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, subset=None):
+                                y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, subset=None,
+                                global_node_index: Dict[str, Tensor] = None):
         if hasattr(self.dataset, "nodes_namespace"):
-            y_pred_dict = self.dataset.split_labels_by_nodes_namespace(y_pred)
-            y_true_dict = self.dataset.split_labels_by_nodes_namespace(y_true)
+            y_pred_dict = self.dataset.split_array_by_namespace(y_pred, axis=1, nids=self.dataset.classes)
+            y_true_dict = self.dataset.split_array_by_namespace(y_true, axis=1, nids=self.dataset.classes)
 
-            for namespace in y_true_dict.keys():
-                go_type = "BPO" if namespace == 'biological_process' else \
-                    "CCO" if namespace == 'cellular_component' else \
-                        "MFO" if namespace == 'molecular_function' else namespace
-
-                metrics.update_metrics(y_pred_dict[namespace], y_true_dict[namespace],
-                                       weights=weights, subset=go_type)
+            for pred_ntype in y_true_dict.keys():
+                metrics.update_metrics(y_pred_dict[pred_ntype], y_true_dict[pred_ntype],
+                                       weights=weights, subset=pred_ntype)
 
         else:
             metrics.update_metrics(y_pred, y_true, weights=weights, subset=subset)
@@ -446,8 +443,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         target = torch.from_numpy(targets.values if isinstance(targets, pd.DataFrame) else targets) \
             if not isinstance(targets, Tensor) else targets
 
-        losses = F.binary_cross_entropy(y_pred, target=target.float(),
-                                        reduce=False).mean(dim=1).numpy()
+        losses = F.binary_cross_entropy(y_pred, target=target.float(), reduce=False).mean(dim=1).numpy()
 
         losses = {self.head_node_type: losses}
 

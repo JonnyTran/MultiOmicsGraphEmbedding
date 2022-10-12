@@ -362,8 +362,7 @@ class RelationAttention(ABC):
                                            "target": targets,
                                            "label": [metapath_name for i in range(len(targets))],
                                            "mean": [attn_agg for i in range(len(targets))],
-                                           'std': [rel_attn_std.loc[metapath_name] for i in range(len(targets))],
-                                           })
+                                           'std': [rel_attn_std.loc[metapath_name] for i in range(len(targets))]})
                 links = links.append(path_links, ignore_index=True)
 
 
@@ -396,11 +395,10 @@ class RelationAttention(ABC):
         # Set count of target nodes
         nodes.loc[nodes.query(f'label == "{ntype}" & metapath == "{ntype}"').index, 'count'] = rel_attn.shape[0]
 
-        color_args = dict(lightness=np.arange(0.2, 0.8, 0.1), saturation=np.arange(0.2, 0.8, 0.1))
         nodes["color"] = nodes[["label", "level"]].apply(
-            lambda x: ColorHash(x["label"].replace("rev_", ""), **color_args).hex \
+            lambda x: ColorHash(x["label"].replace("rev_", ""), saturation=np.arange(0.2, 0.8, 0.1)).hex \
                 if x["level"] % 2 == 0 \
-                else ColorHash(x["label"], **color_args).hex,
+                else ColorHash(x["label"], saturation=np.arange(0.2, 0.8, 0.2)).hex,
             axis=1)
 
         return nodes, links

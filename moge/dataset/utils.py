@@ -18,7 +18,7 @@ def is_sorted(arr: Tensor):
     return torch.all(arr[:-1] <= arr[1:])
 
 
-def split_edge_index_by_namespace(nodes_namespace: Dict[str, Union[np.ndarray, Series]],
+def split_edge_index_by_namespace(nodes_namespace: Dict[str, Series],
                                   edge_index_dict: Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]],
                                   edge_values: Dict[Tuple[str, str, str], Tensor]) \
         -> Tuple[Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]], Dict[Tuple[str, str, str], Tensor]]:
@@ -85,6 +85,23 @@ def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dic
     nodes = {ntype: torch.unique(torch.cat(nids, dim=0)) for ntype, nids in nodes.items()}
 
     return nodes
+
+
+def select_mask(arr: Tensor, mask: Tensor, axis=0):
+    if axis == 0:
+        if isinstance(arr, pd.DataFrame):
+            out = arr.loc[mask, :]
+        else:
+            out = arr[mask, :]
+    elif axis == 1:
+        if isinstance(arr, pd.DataFrame):
+            out = arr.loc[:, mask]
+        else:
+            out = arr[:, mask]
+    else:
+        raise Exception()
+
+    return out
 
 
 def get_relabled_edge_index(triples: Dict[str, Tensor], global_node_index: Dict[str, Tensor],

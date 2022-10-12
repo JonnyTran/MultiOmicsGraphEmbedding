@@ -17,7 +17,7 @@ from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
-    get_relabled_edge_index, is_negative
+    get_relabled_edge_index, is_negative, select_mask
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
@@ -137,6 +137,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             for ntype, df in network.annotations.items():
                 if "namespace" in df.columns:
                     node2namespace = network.annotations[ntype]["namespace"]
+
+                    if ntype in self.pred_ntypes:
+                        node2namespace = node2namespace.replace({'biological_process': 'BPO',
+                                                                 'cellular_component': 'CCO',
+                                                                 'molecular_function': 'MFO'})
+
                     self.nodes_namespace[ntype] = node2namespace.loc[~node2namespace.index.duplicated()]
                     self.ntype_mapping.update(
                         {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
@@ -178,6 +184,49 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             dataset = HGTLoaderX(**args)
 
         return dataset
+
+    def split_array_by_namespace(self, inputs: Union[Tensor, Dict[str, Tensor], np.ndarray, pd.DataFrame],
+                                 nids=Union[pd.Series, pd.Index, np.ndarray, List],
+                                 axis=1):
+        assert hasattr(self, "nodes_namespace")
+        if axis == 1:
+            if nids is None:
+                nids = self.classes
+            assert len(nids) == inputs.shape[1]
+
+            nodes_namespace = pd.concat([v for k, v in self.nodes_namespace.items() \
+                                         if not self.pred_ntypes or k in self.pred_ntypes])
+
+        elif axis == 0:
+            assert self.head_node_type in self.nodes_namespace
+            assert nids is not None, 'when axis=1, must provide `nids` arg containing the node indices in `input`.'
+            assert len(nids) == inputs.shape[0]
+
+            nodes_namespace = self.nodes_namespace[self.head_node_type]
+
+        else:
+            raise Exception(f"axis must be 0 or 1. Given {axis}.")
+
+        if isinstance(nids, Tensor):
+            namespaces = nodes_namespace.iloc[nids.cpu().numpy()]
+        elif isinstance(nids, (pd.Series, pd.Index, np.ndarray, list)):
+            namespaces = nodes_namespace.loc[nids]
+        else:
+            assert len(nodes_namespace) == inputs.shape[0]
+            namespaces = nodes_namespace
+
+        y_dict = {}
+        for name in np.unique(namespaces):
+            mask = namespaces == name
+
+            if isinstance(inputs, (Tensor, np.ndarray, pd.DataFrame)):
+                y_dict[name] = select_mask(inputs, mask=mask, axis=axis)
+
+            elif isinstance(inputs, dict):
+                for ntype, input in inputs.items():
+                    y_dict.setdefault(ntype, {})[name] = select_mask(input, mask=mask, axis=axis)
+
+        return y_dict
 
     def transform(self, hetero: HeteroData):
         X = {}
@@ -387,30 +436,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return H
 
-    def split_labels_by_nodes_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray, DataFrame]):
-        assert hasattr(self, "nodes_namespace")
-        assert len(self.classes) == labels.shape[1]
-        nodes_namespaces = pd.concat(self.nodes_namespace.values())[self.classes]
-
-        y_dict = {}
-        for namespace in np.unique(nodes_namespaces):
-            mask = nodes_namespaces == namespace
-
-            if isinstance(labels, (Tensor, np.ndarray)):
-                y_dict[namespace] = labels[:, mask]
-
-            elif isinstance(labels, DataFrame):
-                y_dict[namespace] = labels.loc[:, mask]
-
-            elif isinstance(labels, dict):
-                for ntype, labels in labels.items():
-                    if isinstance(labels, DataFrame):
-                        y_dict.setdefault(ntype, {})[namespace] = labels.loc[:, mask]
-                    else:
-                        y_dict.setdefault(ntype, {})[namespace] = labels[:, mask]
-
-        return y_dict
-
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
         node_mask = graph[self.head_node_type].train_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
@@ -486,19 +511,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                           label_subset=label_subset, head_node_type=head_node_type,
                                           ntype_subset=ntype_subset,
                                           exclude_etypes=network.pred_metapaths,
-                                          add_reverse_metapaths=add_reverse_metapaths, **kwargs)
-
-        # Whether to use split_namespace of GO_term's
-        self.split_namespace = split_namespace
-        if split_namespace:
-            assert self.go_ntype is not None
-            self.nodes_namespace = {}
-            self.ntype_mapping = {}
-            for ntype, df in network.annotations.items():
-                if "namespace" in df.columns:
-                    self.nodes_namespace[ntype] = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]]
-                    self.ntype_mapping.update(
-                        {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
+                                          add_reverse_metapaths=add_reverse_metapaths, split_namespace=split_namespace,
+                                          **kwargs)
 
         # Train/valid/test positive annotations
         self.triples, self.training_idx, self.validation_idx, self.testing_idx = \

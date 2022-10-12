@@ -155,7 +155,8 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
     batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items()})
 
     if isinstance(y_true, dict):
-        y_true_concat = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+        y_trues = [y_true[ntype][:size] for ntype, size in batch_size.items()]
+        y_true_concat = torch.cat(y_trues, dim=0) if len(y_trues) > 1 else y_trues[0]
     elif isinstance(y_true, Tensor):
         size = list(batch_size.values())[0]
         y_true_concat = y_true[:size]
@@ -163,7 +164,8 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
         raise Exception(f"Check `y_true` type: {y_true}")
 
     if isinstance(y_pred, dict):
-        y_pred_concat = torch.cat([y_pred[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+        y_preds = [y_pred[ntype][:size] for ntype, size in batch_size.items()]
+        y_pred_concat = torch.cat(y_preds, dim=0) if len(y_preds) > 1 else y_preds[0]
     elif isinstance(y_pred, Tensor):
         size = list(batch_size.values())[0]
         y_pred_concat = y_pred[:size]

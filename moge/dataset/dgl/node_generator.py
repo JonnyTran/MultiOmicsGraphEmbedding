@@ -417,7 +417,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
             tail_counts.index = tail_counts.index.set_names(["nid", "relation", "ntype"])
             return head_counts.append(tail_counts)  # (node_id, relation, ntype): count
 
-    def split_labels_by_nodes_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray], ntype=None):
+    def split_array_by_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray], ntype=None):
         assert hasattr(self, "nodes_namespace")
         if ntype is None:
             ntype = self.go_ntype if hasattr(self, "go_ntype") else "GO_term"

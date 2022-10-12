@@ -275,8 +275,8 @@ class LATTENodeClf(NodeClfTrainer):
                 y_true, scores, embs, nids = self.predict(self.test_dataloader())
 
                 if hasattr(self.dataset, "nodes_namespace"):
-                    y_true_dict = self.dataset.split_labels_by_nodes_namespace(y_true)
-                    y_pred_dict = self.dataset.split_labels_by_nodes_namespace(scores)
+                    y_true_dict = self.dataset.split_array_by_namespace(y_true)
+                    y_pred_dict = self.dataset.split_array_by_namespace(scores)
 
                     for namespace in y_true_dict.keys():
                         go_type = "BPO" if namespace == 'biological_process' else \
@@ -288,7 +288,6 @@ class LATTENodeClf(NodeClfTrainer):
 
                 self.plot_embeddings_tsne(global_node_index=nids, embeddings={self.head_node_type: embs},
                                           targets=y_true, y_pred=scores)
-                self.plot_sankey_flow(layer=-1)
                 self.cleanup_artifacts()
 
         except Exception as e:
@@ -427,6 +426,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
             return torch.tensor(0.0, requires_grad=False)
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
+
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
 
         self.log("val_loss", val_loss, )
@@ -769,8 +769,8 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
     def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
                                 y_pred: Tensor, y_true: Tensor, weights: Tensor):
         if isinstance(metrics, dict):
-            y_pred_dict = self.dataset.split_labels_by_nodes_namespace(y_pred)
-            y_true_dict = self.dataset.split_labels_by_nodes_namespace(y_true)
+            y_pred_dict = self.dataset.split_array_by_namespace(y_pred)
+            y_true_dict = self.dataset.split_array_by_namespace(y_true)
 
             for namespace in y_true_dict.keys():
                 go_type = "BPO" if namespace == 'biological_process' else \
