@@ -9,6 +9,7 @@ import pandas as pd
 import torch
 import torch_sparse
 from logzero import logger
+from moge.dataset.utils import select_mask
 from moge.model.utils import tensor_sizes
 from moge.network.hetero import HeteroNetwork
 from moge.network.sequence import BertSequenceTokenizer
@@ -130,6 +131,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
     def __init__(self, dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
                                       DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
+                 pred_ntypes=None,
                  edge_dir: str = "in", add_reverse_metapaths: bool = True, inductive: bool = False, **kwargs):
         self.dataset = dataset
         self.edge_dir = edge_dir
@@ -137,6 +139,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         self.node_types = node_types
         self.head_node_type: str = head_node_type
         self.inductive = inductive
+        self.pred_ntypes = pred_ntypes
 
         # OGB Datasets
         if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):
@@ -453,6 +456,49 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         else:
             train_ratio = train_size / sum([train_size, valid_size])
         return train_ratio
+
+    def split_array_by_namespace(self, inputs: Union[Tensor, Dict[str, Tensor], np.ndarray, pd.DataFrame],
+                                 nids: Union[pd.Series, pd.Index, np.ndarray, List] = None,
+                                 axis=1):
+        assert hasattr(self, "nodes_namespace")
+        if axis == 1:
+            if nids is None:
+                nids = self.classes
+            assert len(nids) == inputs.shape[1]
+
+            nodes_namespace = pd.concat([v for k, v in self.nodes_namespace.items() \
+                                         if not self.pred_ntypes or k in self.pred_ntypes])
+
+        elif axis == 0:
+            assert self.head_node_type in self.nodes_namespace
+            assert nids is not None, 'when axis=1, must provide `nids` arg containing the node indices in `input`.'
+            assert len(nids) == inputs.shape[0]
+
+            nodes_namespace = self.nodes_namespace[self.head_node_type]
+
+        else:
+            raise Exception(f"axis must be 0 or 1. Given {axis}.")
+
+        if isinstance(nids, Tensor):
+            namespaces = nodes_namespace.iloc[nids.cpu().numpy()]
+        elif isinstance(nids, (pd.Series, pd.Index, np.ndarray, list)):
+            namespaces = nodes_namespace.loc[nids]
+        else:
+            assert len(nodes_namespace) == inputs.shape[0]
+            namespaces = nodes_namespace
+
+        y_dict = {}
+        for name in np.unique(namespaces):
+            mask = namespaces == name
+
+            if isinstance(inputs, (Tensor, np.ndarray, pd.DataFrame)):
+                y_dict[name] = select_mask(inputs, mask=mask, axis=axis)
+
+            elif isinstance(inputs, dict):
+                for ntype, input in inputs.items():
+                    y_dict.setdefault(ntype, {})[name] = select_mask(input, mask=mask, axis=axis)
+
+        return y_dict
 
 
 @DeprecationWarning

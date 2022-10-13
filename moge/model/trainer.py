@@ -10,13 +10,6 @@ import torch
 import torch.nn.functional as F
 import wandb
 from logzero import logger
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
-
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -26,6 +19,12 @@ from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -204,11 +203,12 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         recall_micro, precision_micro, _ = precision_recall_curve(target, preds, n_thresholds=n_thresholds,
                                                                   average='micro')
+        columns = ["recall_micro", "precision_micro"]
+        df = pd.DataFrame({columns[0]: recall_micro, columns[1]: precision_micro})
 
-        data = [[x, y] for (x, y) in zip(recall_micro, precision_micro)]
-        table = wandb.Table(data=data, columns=["recall_micro", "precision_micro"])
-        wandb.log({title: wandb.plot.line(table, x="recall_micro", y="precision_micro",
-                                          stroke=None, title=title.replace("_", " "))})
+        table = wandb.Table(dataframe=df, columns=columns)
+        lineplot = wandb.plot.line(table, x=columns[0], y=columns[1], stroke=None, title=title.replace("_", " "))
+        wandb.log({title: lineplot})
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
         if self.wandb_experiment is None or not hasattr(self.embedder, "layers") or \
@@ -226,7 +226,10 @@ class NodeEmbeddingEvaluator(LightningModule):
         # Log plotly HTMLs as a wandb.Table
         plotly_htmls = []
         self.embedder.layers: List[RelationAttention]
-        nodes, links = self.embedder.layers[-1].get_sankey_flow(node_types=None, self_loop=True)
+        if hasattr(self.embedder, 'get_sankey_flow'):
+            nodes, links = self.embedder.get_sankey_flow(node_types=None, self_loop=False)
+        else:
+            nodes, links = self.embedder.layers[-1].get_sankey_flow(node_types=None, self_loop=True)
         if nodes is None:
             return
         fig = plot_sankey_flow(nodes, links, width=width, height=height)

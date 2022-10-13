@@ -7,14 +7,13 @@ import pandas as pd
 import scipy.sparse as ssp
 import torch
 from colorhash import ColorHash
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
-
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -119,9 +118,9 @@ class RelationAttention(ABC):
     _counts: Dict[str, DataFrame]
 
     def __init__(self):
-        self.reset_betas()
+        self.reset()
 
-    def reset_betas(self):
+    def reset(self):
         self._counts = {}
         self._betas = {}
         self._alphas = {}

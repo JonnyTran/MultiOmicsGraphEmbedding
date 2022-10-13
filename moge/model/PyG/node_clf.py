@@ -11,25 +11,25 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
 from moge.model.PyG.latte import LATTE
 from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
 from moge.model.PyG.link_pred import LATTEFlatLinkPred
+from moge.model.PyG.relations import RelationAttention
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier, LabelNodeClassifer
 from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -136,17 +136,17 @@ class LATTENodeClf(NodeClfTrainer):
 
     def on_validation_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
-            self.embedder.layers[l].reset_betas()
+            self.embedder.layers[l].reset()
         super().on_validation_epoch_start()
 
     def on_test_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
-            self.embedder.layers[l].reset_betas()
+            self.embedder.layers[l].reset()
         super().on_test_epoch_start()
 
     def on_predict_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
-            self.embedder.layers[l].reset_betas()
+            self.embedder.layers[l].reset()
         super().on_predict_epoch_start()
 
     def training_step(self, batch, batch_nb):
@@ -215,78 +215,83 @@ class LATTENodeClf(NodeClfTrainer):
         return predict_loss
 
     @torch.no_grad()
-    def predict(self, dataloader: DataLoader, node_names: pd.Index = None, **kwargs) \
+    def predict(self, dataloader: DataLoader, node_names: pd.Index = None, save_betas=False, **kwargs) \
             -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, np.ndarray]]:
-        targets = []
-        scores = []
-        embeddings = []
+        """
+
+        Args:
+            dataloader ():
+            node_names (): an pd.Index or np.ndarray to map node indices to node names for `head_node_type`.
+            **kwargs ():
+
+        Returns:
+            targets, scores, embeddings, ntype_nids
+        """
+        if isinstance(self, RelationAttention):
+            self.reset()
+
+        y_trues = []
+        y_preds = []
+        embs = []
         nids = []
 
         for batch in tqdm.tqdm(dataloader, desc='Predict dataloader'):
             X, y_true, weights = to_device(batch, device=self.device)
-            h_dict, logits = self.forward(X, save_betas=True, return_embeddings=True)
+            h_dict, logits = self.forward(X, save_betas=save_betas, return_embeddings=True)
             y_pred = activation(logits, loss_type=self.hparams.loss_type)
 
             y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
             y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
-            mask_idx = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
+            mask = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
 
-            y_true = y_true[mask_idx]
-            y_pred = activation(y_pred[mask_idx], loss_type=self.hparams["loss_type"])
+            y_true = y_true[mask]
+            y_pred = activation(y_pred[mask], loss_type=self.hparams["loss_type"])
+            emb: Tensor = h_dict[self.head_node_type][mask]
 
             global_node_index = X["global_node_index"][-1] \
                 if isinstance(X["global_node_index"], (list, tuple)) else X["global_node_index"]
-            emb = h_dict[self.head_node_type][mask_idx]
+            nid = global_node_index[self.head_node_type][mask]
 
-            # Covert all to CPU device
-            y_true, y_pred, emb, mask_idx, global_node_index = to_device(
-                [y_true, y_pred, emb, mask_idx, global_node_index], device='cpu')
+            # Convert all to CPU device
+            y_trues.append(y_true.cpu().numpy())
+            y_preds.append(y_pred.cpu().numpy())
+            embs.append(emb.cpu().numpy())
+            nids.append(nid.cpu().numpy())
 
-            node_ids = global_node_index[self.head_node_type].numpy()[mask_idx]
-            if node_names is not None:
-                index = node_names[node_ids]
-            else:
-                index = pd.Index(node_ids, name=f"{self.head_node_type}_nid")
+        targets = np.concatenate(y_trues, axis=0)
+        scores = np.concatenate(y_preds, axis=0)
+        embeddings = np.concatenate(embs, axis=0)
+        node_ids = np.concatenate(nids, axis=0)
 
-            y_true = pd.DataFrame(y_true.numpy(), index=index, columns=self.dataset.classes)
-            y_pred = pd.DataFrame(y_pred.numpy(), index=index, columns=self.dataset.classes)
-            emb = pd.DataFrame(emb.numpy(), index=index)
+        if node_names is not None:
+            index = node_names[node_ids]
+        else:
+            index = pd.Index(node_ids, name=f"{self.head_node_type}_nid")
 
-            targets.append(y_true)
-            scores.append(y_pred)
-            embeddings.append(emb)
-            nids.append(node_ids)
-
-        targets = pd.concat(targets, axis=0)
-        scores = pd.concat(scores, axis=0)
-        embeddings = pd.concat(embeddings, axis=0)
-        ntype_nids = {self.head_node_type: np.concatenate(nids, axis=0)}
+        targets = pd.DataFrame(targets, index=index, columns=self.dataset.classes)
+        scores = pd.DataFrame(scores, index=index, columns=self.dataset.classes)
+        embeddings = pd.DataFrame(embeddings, index=index)
+        ntype_nids = {self.head_node_type: node_ids}
 
         return targets, scores, embeddings, ntype_nids
-
-    def on_validation_end(self) -> None:
-        super().on_validation_end()
-        if self.current_epoch % 50 == 1:
-            self.plot_sankey_flow(layer=-1)
 
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
-                y_true, scores, embs, nids = self.predict(self.test_dataloader())
+                dataloader = self.test_dataloader()
+                y_true, scores, embeddings, global_node_index = self.predict(dataloader)
 
                 if hasattr(self.dataset, "nodes_namespace"):
-                    y_true_dict = self.dataset.split_array_by_namespace(y_true)
-                    y_pred_dict = self.dataset.split_array_by_namespace(scores)
+                    y_true_dict = self.dataset.split_array_by_namespace(y_true, axis=1)
+                    y_pred_dict = self.dataset.split_array_by_namespace(scores, axis=1)
 
                     for namespace in y_true_dict.keys():
-                        go_type = "BPO" if namespace == 'biological_process' else \
-                            "CCO" if namespace == 'cellular_component' else \
-                                "MFO" if namespace == 'molecular_function' else namespace
                         self.plot_pr_curve(targets=y_true_dict[namespace],
                                            scores=y_pred_dict[namespace],
-                                           title=f"{go_type}_PR_Curve")
+                                           title=f"{namespace}_PR_Curve")
 
-                self.plot_embeddings_tsne(global_node_index=nids, embeddings={self.head_node_type: embs},
+                self.plot_embeddings_tsne(global_node_index=global_node_index,
+                                          embeddings={self.head_node_type: embeddings},
                                           targets=y_true, y_pred=scores)
                 self.cleanup_artifacts()
 

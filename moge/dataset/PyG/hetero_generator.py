@@ -7,20 +7,19 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.sequences import SequenceTokenizers
+from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
+    get_relabled_edge_index, is_negative
+from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
+from moge.model.utils import to_device, tensor_sizes
+from moge.network.hetero import HeteroNetwork
 from pandas import DataFrame, Series, Index
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
 from torch_sparse.tensor import SparseTensor
-
-from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
-    get_relabled_edge_index, is_negative, select_mask
-from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
-from moge.model.utils import to_device, tensor_sizes
-from moge.network.hetero import HeteroNetwork
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -40,11 +39,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                  pred_ntypes: List[str] = None,
                  edge_dir: str = "in", add_reverse_metapaths: bool = False, inductive: bool = False, **kwargs):
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
+                         pred_ntypes=pred_ntypes,
                          edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         if seq_tokenizer:
             self.seq_tokenizer = seq_tokenizer
 
-        self.pred_ntypes = pred_ntypes
         self.neighbor_loader = neighbor_loader
         self.neighbor_sizes = neighbor_sizes
 
@@ -184,49 +183,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             dataset = HGTLoaderX(**args)
 
         return dataset
-
-    def split_array_by_namespace(self, inputs: Union[Tensor, Dict[str, Tensor], np.ndarray, pd.DataFrame],
-                                 nids=Union[pd.Series, pd.Index, np.ndarray, List],
-                                 axis=1):
-        assert hasattr(self, "nodes_namespace")
-        if axis == 1:
-            if nids is None:
-                nids = self.classes
-            assert len(nids) == inputs.shape[1]
-
-            nodes_namespace = pd.concat([v for k, v in self.nodes_namespace.items() \
-                                         if not self.pred_ntypes or k in self.pred_ntypes])
-
-        elif axis == 0:
-            assert self.head_node_type in self.nodes_namespace
-            assert nids is not None, 'when axis=1, must provide `nids` arg containing the node indices in `input`.'
-            assert len(nids) == inputs.shape[0]
-
-            nodes_namespace = self.nodes_namespace[self.head_node_type]
-
-        else:
-            raise Exception(f"axis must be 0 or 1. Given {axis}.")
-
-        if isinstance(nids, Tensor):
-            namespaces = nodes_namespace.iloc[nids.cpu().numpy()]
-        elif isinstance(nids, (pd.Series, pd.Index, np.ndarray, list)):
-            namespaces = nodes_namespace.loc[nids]
-        else:
-            assert len(nodes_namespace) == inputs.shape[0]
-            namespaces = nodes_namespace
-
-        y_dict = {}
-        for name in np.unique(namespaces):
-            mask = namespaces == name
-
-            if isinstance(inputs, (Tensor, np.ndarray, pd.DataFrame)):
-                y_dict[name] = select_mask(inputs, mask=mask, axis=axis)
-
-            elif isinstance(inputs, dict):
-                for ntype, input in inputs.items():
-                    y_dict.setdefault(ntype, {})[name] = select_mask(input, mask=mask, axis=axis)
-
-        return y_dict
 
     def transform(self, hetero: HeteroData):
         X = {}

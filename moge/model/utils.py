@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from typing import Dict, Tuple, Optional, Union, List, Any
+from typing import Dict, Tuple, Optional, Union, List
 
 import dgl
 import numpy as np
@@ -10,10 +10,17 @@ from dgl._deprecate.graph import DGLGraph
 from dgl.heterograph import DGLBlock, DGLHeteroGraph
 from torch import Tensor
 from torch_geometric.data import HeteroData
+from torch_sparse import SparseTensor
 
 
-def to_device(obj: Union[Dict, List[Any], Tensor], device: str):
+def to_device(obj: Union[Tensor, Dict, List, Tuple], device: str):
     if torch.is_tensor(obj):
+        return obj.to(device)
+
+    elif isinstance(obj, SparseTensor):
+        return obj.to(device)
+
+    elif isinstance(obj, torch.nn.Module):
         return obj.to(device)
 
     elif isinstance(obj, (dgl.DGLHeteroGraph, dgl.DGLGraph, DGLBlock)):
