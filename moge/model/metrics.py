@@ -590,6 +590,7 @@ class FMax_Slow(torchmetrics.Metric):
 
 @torch.no_grad()
 def precision_recall_curve(y_true: Tensor, y_pred: Tensor, n_thresholds=100, average='micro'):
+    assert average == 'micro'
     if not isinstance(y_true, Tensor):
         targets = torch.from_numpy(y_true)
     else:

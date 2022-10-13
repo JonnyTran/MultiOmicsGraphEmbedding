@@ -335,6 +335,49 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         testing_idx = indices[int(num_indices * train_ratio):]
         return training_idx, validation_idx, testing_idx
 
+    def split_array_by_namespace(self, inputs: Union[Tensor, Dict[str, Tensor], np.ndarray, pd.DataFrame],
+                                 nids: Union[pd.Series, pd.Index, np.ndarray, List] = None,
+                                 axis=1):
+        assert hasattr(self, "nodes_namespace")
+        if axis == 1:
+            if nids is None:
+                nids = self.classes
+            assert len(nids) == inputs.shape[1]
+
+            nodes_namespace = pd.concat([v for k, v in self.nodes_namespace.items() \
+                                         if not self.pred_ntypes or k in self.pred_ntypes])
+
+        elif axis == 0:
+            assert self.head_node_type in self.nodes_namespace
+            assert nids is not None, 'when axis=1, must provide `nids` arg containing the node indices in `input`.'
+            assert len(nids) == inputs.shape[0]
+
+            nodes_namespace = self.nodes_namespace[self.head_node_type]
+
+        else:
+            raise Exception(f"axis must be 0 or 1. Given {axis}.")
+
+        if isinstance(nids, Tensor):
+            namespaces = nodes_namespace.iloc[nids.cpu().numpy()]
+        elif isinstance(nids, (pd.Series, pd.Index, np.ndarray, list)):
+            namespaces = nodes_namespace.loc[nids]
+        else:
+            assert len(nodes_namespace) == inputs.shape[0]
+            namespaces = nodes_namespace
+
+        y_dict = {}
+        for name in np.unique(namespaces):
+            mask = namespaces == name
+
+            if isinstance(inputs, (Tensor, np.ndarray, pd.DataFrame)):
+                y_dict[name] = select_mask(inputs, mask=mask, axis=axis)
+
+            elif isinstance(inputs, dict):
+                for ntype, input in inputs.items():
+                    y_dict.setdefault(ntype, {})[name] = select_mask(input, mask=mask, axis=axis)
+
+        return y_dict
+
     def get_metapaths(self, k_hop=False):
         """
         Returns original metapaths including reverse metapaths if use_reverse
@@ -406,7 +449,6 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                                  **kwargs)
         return loader
 
-
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
@@ -456,49 +498,6 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         else:
             train_ratio = train_size / sum([train_size, valid_size])
         return train_ratio
-
-    def split_array_by_namespace(self, inputs: Union[Tensor, Dict[str, Tensor], np.ndarray, pd.DataFrame],
-                                 nids: Union[pd.Series, pd.Index, np.ndarray, List] = None,
-                                 axis=1):
-        assert hasattr(self, "nodes_namespace")
-        if axis == 1:
-            if nids is None:
-                nids = self.classes
-            assert len(nids) == inputs.shape[1]
-
-            nodes_namespace = pd.concat([v for k, v in self.nodes_namespace.items() \
-                                         if not self.pred_ntypes or k in self.pred_ntypes])
-
-        elif axis == 0:
-            assert self.head_node_type in self.nodes_namespace
-            assert nids is not None, 'when axis=1, must provide `nids` arg containing the node indices in `input`.'
-            assert len(nids) == inputs.shape[0]
-
-            nodes_namespace = self.nodes_namespace[self.head_node_type]
-
-        else:
-            raise Exception(f"axis must be 0 or 1. Given {axis}.")
-
-        if isinstance(nids, Tensor):
-            namespaces = nodes_namespace.iloc[nids.cpu().numpy()]
-        elif isinstance(nids, (pd.Series, pd.Index, np.ndarray, list)):
-            namespaces = nodes_namespace.loc[nids]
-        else:
-            assert len(nodes_namespace) == inputs.shape[0]
-            namespaces = nodes_namespace
-
-        y_dict = {}
-        for name in np.unique(namespaces):
-            mask = namespaces == name
-
-            if isinstance(inputs, (Tensor, np.ndarray, pd.DataFrame)):
-                y_dict[name] = select_mask(inputs, mask=mask, axis=axis)
-
-            elif isinstance(inputs, dict):
-                for ntype, input in inputs.items():
-                    y_dict.setdefault(ntype, {})[name] = select_mask(input, mask=mask, axis=axis)
-
-        return y_dict
 
 
 @DeprecationWarning

@@ -165,8 +165,8 @@ class NodeEmbeddingEvaluator(LightningModule):
                              embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
                              columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> DataFrame:
-        if hasattr(self.hparams, "sweep") and self.hparams.sweep:
-            return
+        if self.wandb_experiment is not None and self.wandb_experiment.sweep_id is not None: return
+
         node_losses = self.get_node_loss(targets, y_pred, global_node_index=global_node_index)
         df = self.dataset.get_node_metadata(global_node_index, embeddings, weights=weights, losses=node_losses)
 
@@ -182,7 +182,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         return df
 
     def get_node_loss(self, targets: Union[Tensor, Dict[Any, Any]], y_pred: Union[Tensor, Dict[Any, Any]],
-                      global_node_index: Dict[str, Tensor], ) -> DataFrame:
+                      global_node_index: Dict[str, Tensor]) -> DataFrame:
         """
         Compute the loss for each nodes given targets and predicted values for either node_clf or link_pred tasks.
         Args:
@@ -193,28 +193,51 @@ class NodeEmbeddingEvaluator(LightningModule):
         raise NotImplementedError
 
     def plot_pr_curve(self, targets: Union[Tensor, pd.DataFrame], scores: Union[Tensor, pd.DataFrame],
-                      title="PR_Curve", n_thresholds=200):
+                      split_samples: Union[pd.Series, np.ndarray] = None,
+                      title="PR_Curve", n_thresholds=200, xaxis_title="recall_micro", yaxis_title="precision_micro") \
+            -> None:
         if self.wandb_experiment is None:
             return
-        elif hasattr(self.hparams, "sweep") and self.hparams.sweep:
+        elif self.wandb_experiment.sweep_id is not None:
             return
-        preds = (scores.values if isinstance(scores, pd.DataFrame) else scores).ravel()
-        target = (targets.values if isinstance(targets, pd.DataFrame) else targets).ravel()
 
-        recall_micro, precision_micro, _ = precision_recall_curve(target, preds, n_thresholds=n_thresholds,
-                                                                  average='micro')
-        columns = ["recall_micro", "precision_micro"]
-        df = pd.DataFrame({columns[0]: recall_micro, columns[1]: precision_micro})
+        preds = (scores.values if isinstance(scores, pd.DataFrame) else scores)
+        targets = (targets.values if isinstance(targets, pd.DataFrame) else targets)
 
-        table = wandb.Table(dataframe=df, columns=columns)
-        lineplot = wandb.plot.line(table, x=columns[0], y=columns[1], stroke=None, title=title.replace("_", " "))
+        if split_samples is not None:
+            if isinstance(split_samples, pd.Series):
+                split_samples = split_samples.fillna("")
+            dfs = {}
+            for split in np.unique(split_samples):
+                if split == '' or split is None: continue
+                mask = split_samples == split
+                if mask.sum() < 10: continue
+
+                row, col = (np.absolute(preds[mask] + targets[mask]) > 1e-2).nonzero()
+                precisions, recalls, _ = precision_recall_curve(y_true=targets[mask][row, col],
+                                                                y_pred=preds[mask][row, col],
+                                                                n_thresholds=n_thresholds // 2, average='micro')
+                dfs[split] = pd.DataFrame({xaxis_title: recalls, yaxis_title: precisions})
+
+            stroke = split_samples.name if isinstance(split_samples, pd.Series) else 'split'
+            df = pd.concat(dfs, names=[stroke, dfs[split].index.name], axis=0).reset_index(level=0)
+
+        else:
+            row, col = (np.absolute(preds + targets) > 1e-2).nonzero()
+            precisions, recalls, _ = precision_recall_curve(y_true=targets[row, col], y_pred=preds[row, col],
+                                                            n_thresholds=n_thresholds, average='micro')
+            df = pd.DataFrame({xaxis_title: recalls, yaxis_title: precisions})
+            stroke = None
+
+        table = wandb.Table(dataframe=df, columns=df.columns)
+        lineplot = wandb.plot.line(table, x=xaxis_title, y=yaxis_title, stroke=stroke, title=title.replace("_", " "))
         wandb.log({title: lineplot})
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
         if self.wandb_experiment is None or not hasattr(self.embedder, "layers") or \
                 not hasattr(self.embedder.layers[layer], "_betas"):
             return
-        elif hasattr(self.hparams, "sweep") and self.hparams.sweep:
+        elif self.wandb_experiment.sweep_id is not None:
             return
 
         run_id = self.wandb_experiment.id

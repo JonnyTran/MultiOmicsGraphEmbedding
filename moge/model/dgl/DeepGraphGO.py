@@ -19,6 +19,7 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
+from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
@@ -26,8 +27,6 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -173,7 +172,7 @@ def fmax(targets: ssp.csr_matrix, scores: np.ndarray) -> Tuple[float, float]:
     return fmax_
 
 
-def pair_aupr(targets: ssp.csr_matrix, scores: np.ndarray, top=200):
+def pair_aupr(targets: np.ndarray, scores: np.ndarray, top=200):
     if isinstance(targets, ssp.csr_matrix):
         targets = targets.toarray()
 

@@ -284,10 +284,15 @@ class LATTENodeClf(NodeClfTrainer):
                 if hasattr(self.dataset, "nodes_namespace"):
                     y_true_dict = self.dataset.split_array_by_namespace(y_true, axis=1)
                     y_pred_dict = self.dataset.split_array_by_namespace(scores, axis=1)
+                    if self.head_node_type in self.dataset.nodes_namespace:
+                        nids = global_node_index[self.head_node_type]
+                        split_samples = self.dataset.nodes_namespace[self.head_node_type].iloc[nids]
+                    else:
+                        split_samples = None
 
                     for namespace in y_true_dict.keys():
-                        self.plot_pr_curve(targets=y_true_dict[namespace],
-                                           scores=y_pred_dict[namespace],
+                        self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
+                                           split_samples=split_samples,
                                            title=f"{namespace}_PR_Curve")
 
                 self.plot_embeddings_tsne(global_node_index=global_node_index,
