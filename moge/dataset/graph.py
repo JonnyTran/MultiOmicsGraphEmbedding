@@ -9,10 +9,6 @@ import pandas as pd
 import torch
 import torch_sparse
 from logzero import logger
-from moge.dataset.utils import select_mask
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
-from moge.network.sequence import BertSequenceTokenizer
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -22,6 +18,11 @@ from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_sparse import SparseTensor
+
+from moge.dataset.utils import select_mask
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 
 
 class Graph:
@@ -77,29 +78,49 @@ class Graph:
     @abstractmethod
     def get_node_metadata(self, global_nodes_index: Dict[str, Tensor], embeddings: Dict[str, Tensor],
                           weights: Optional, losses: Optional[DataFrame]) -> DataFrame:
+        """
+
+
+        Args:
+            global_nodes_index ():
+            embeddings ():
+            weights ():
+            losses ():
+        """
         raise NotImplementedError()
 
     def create_node_metadata(
             self, network: HeteroNetwork,
-            nodes: Dict[str, List[str]],
-            columns: List[str] = None,
-            rename_mapper: Dict[str, str] = None) \
+            nodes: Dict[str, Union[pd.Index, List[str]]],
+            columns=["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
+                     "species_id", "RNA type", "gene_biotype", "transcript_biotype", "seqname", "length"],
+            rename_mapper={"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}) \
             -> DataFrame:
-        if columns is None:
-            columns = ["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
-                       "gene_biotype", "transcript_biotype", "seqname", "length"]
-        if rename_mapper is None:
-            rename_mapper = {"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}
+        """
+        Initialize hetero node features from `annotations`
+        Args:
+            network ():
+            nodes ():
+            columns ():
+            rename_mapper ():
+
+        Returns:
+
+        """
 
         def _process_int_values(s: Series) -> Series:
-            if s.str.contains("|").any():
+            if s.dtype == 'O' and s.str.contains("|").any():
                 s = s.str.split("|", expand=True)[0]
             return s.fillna(0).astype(int)
 
         dfs = []
         for ntype, node_list in nodes.items():
             df: DataFrame = network.annotations[ntype].loc[nodes[ntype]]
+            if hasattr(self, 'nodes_namespace') and ntype in self.nodes_namespace:
+                df['namespace'] = df.index.map(self.nodes_namespace[ntype])
+
             df = df.reset_index(drop=df.index.name in df.columns)
+
             if "start" in df.columns and "end" in df.columns:
                 df["length"] = _process_int_values(df["end"]) - _process_int_values(df["start"]) + 1
 
@@ -116,10 +137,11 @@ class Graph:
 
             dfs.append(df)
 
-        dfs = pd.concat(dfs, axis=0)
-        if "namespace" in dfs.columns:
-            dfs["namespace"].fillna(dfs["ntype"], inplace=True)
-        self.node_metadata = dfs.set_index(["ntype", "nid"]).dropna(axis=1, how="all")
+        node_metadata = pd.concat(dfs, axis=0)
+        # if "namespace" in node_metadata.columns:
+        #     node_metadata["namespace"].fillna(node_metadata["ntype"], inplace=True)
+
+        self.node_metadata = node_metadata.set_index(["ntype", "nid"]).dropna(axis=1, how="all")
 
         return self.node_metadata
 

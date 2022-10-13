@@ -7,6 +7,12 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -15,11 +21,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -279,12 +280,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                      for ntype in embeddings}
         nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
 
-        nodes_train_valid_test = np.vstack([
+        node_train_valid_test = np.vstack([
             np.concatenate([self.G[ntype].train_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
             np.concatenate([self.G[ntype].valid_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
             np.concatenate([self.G[ntype].test_mask[nids].numpy() for ntype, nids in global_node_index.items()])],
         ).T
-        nodes_train_valid_test = np.array(["Train", "Valid", "Test"])[nodes_train_valid_test.argmax(1)]
+        node_train_valid_test = np.array(["Train", "Valid", "Test"])[node_train_valid_test.argmax(1)]
 
         if losses:
             node_losses = np.concatenate([losses[ntype] if ntype in losses else \
@@ -298,7 +299,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         df = pd.DataFrame(
             {"node": np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]),
              "ntype": np.concatenate([[ntype] * global_node_index[ntype].shape[0] for ntype in global_node_index]),
-             "train_valid_test": nodes_train_valid_test,
+             "train_valid_test": node_train_valid_test,
              "loss": node_losses},
             index=pd.Index(np.concatenate([global_node_index[ntype] for ntype in global_node_index]), name="nid"))
 
@@ -313,6 +314,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         nodes_pos = tsne.fit_transform(nodes_emb)
         nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
+
+        df = df.assign(loss=df['loss'].astype(float), pos1=df['pos1'].astype(float), pos2=df['pos2'].astype(float))
 
         # Reset index
         df = df.reset_index()

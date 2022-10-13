@@ -8,8 +8,16 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+import tqdm
 import wandb
 from logzero import logger
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
+
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -19,12 +27,6 @@ from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -193,8 +195,8 @@ class NodeEmbeddingEvaluator(LightningModule):
         raise NotImplementedError
 
     def plot_pr_curve(self, targets: Union[Tensor, pd.DataFrame], scores: Union[Tensor, pd.DataFrame],
-                      split_samples: Union[pd.Series, np.ndarray] = None,
-                      title="PR_Curve", n_thresholds=200, xaxis_title="recall_micro", yaxis_title="precision_micro") \
+                      split_samples: Union[pd.Series, np.ndarray] = None, n_thresholds=200, title="PR_Curve",
+                      xaxis_title="recall_micro", yaxis_title="precision_micro") \
             -> None:
         if self.wandb_experiment is None:
             return
@@ -207,19 +209,26 @@ class NodeEmbeddingEvaluator(LightningModule):
         if split_samples is not None:
             if isinstance(split_samples, pd.Series):
                 split_samples = split_samples.fillna("")
+                stroke = split_samples.name
+            else:
+                stroke = 'sample'
+
             dfs = {}
-            for split in np.unique(split_samples):
+            splits_prog = tqdm.tqdm(split_samples.value_counts().head(15).index,
+                                    desc=f"Plotting PR Curve for {stroke} splits")
+            for split in splits_prog:
+                splits_prog.set_description(f"Plotting PR Curve for {stroke} splits: {split}")
                 if split == '' or split is None: continue
                 mask = split_samples == split
                 if mask.sum() < 10: continue
 
-                row, col = (np.absolute(preds[mask] + targets[mask]) > 1e-2).nonzero()
-                precisions, recalls, _ = precision_recall_curve(y_true=targets[mask][row, col],
-                                                                y_pred=preds[mask][row, col],
+                pred = preds[mask]
+                target = targets[mask]
+                row, col = (np.absolute(pred + target) > 1e-2).nonzero()
+                precisions, recalls, _ = precision_recall_curve(y_true=target[row, col], y_pred=pred[row, col],
                                                                 n_thresholds=n_thresholds // 2, average='micro')
                 dfs[split] = pd.DataFrame({xaxis_title: recalls, yaxis_title: precisions})
 
-            stroke = split_samples.name if isinstance(split_samples, pd.Series) else 'split'
             df = pd.concat(dfs, names=[stroke, None], axis=0).reset_index(level=0)
 
         else:
@@ -235,20 +244,11 @@ class NodeEmbeddingEvaluator(LightningModule):
         wandb.log({title: lineplot})
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
-        if self.wandb_experiment is None or not hasattr(self.embedder, "layers") or \
-                not hasattr(self.embedder.layers[layer], "_betas"):
+        if self.wandb_experiment is None:
             return
         elif self.wandb_experiment.sweep_id is not None:
             return
 
-        run_id = self.wandb_experiment.id
-
-        node_types = list(self.embedder.layers[layer]._betas.keys())
-        table = wandb.Table(columns=[f"Layer{layer + 1 if layer >= 0 else len(self.embedder.layers)}_{ntype}" \
-                                     for ntype in node_types])
-
-        # Log plotly HTMLs as a wandb.Table
-        plotly_htmls = []
         self.embedder.layers: List[RelationAttention]
         if hasattr(self.embedder, 'get_sankey_flow'):
             nodes, links = self.embedder.get_sankey_flow(node_types=None, self_loop=False)
@@ -256,7 +256,12 @@ class NodeEmbeddingEvaluator(LightningModule):
             nodes, links = self.embedder.layers[-1].get_sankey_flow(node_types=None, self_loop=True)
         if nodes is None:
             return
+
         fig = plot_sankey_flow(nodes, links, width=width, height=height)
+
+        # Log plotly HTMLs as a wandb.Table
+        plotly_htmls = []
+        run_id = self.wandb_experiment.id
 
         path_to_plotly_html = f"./wandb_fig_run_{run_id}_layer_{len(self.embedder.layers)}.html"
         fig.write_html(path_to_plotly_html, auto_play=False, include_plotlyjs=True, full_html=True,
@@ -264,6 +269,9 @@ class NodeEmbeddingEvaluator(LightningModule):
         plotly_htmls.append(wandb.Html(path_to_plotly_html))
 
         # Add Plotly figure as HTML file into Table
+        node_types = list(self.embedder.layers[layer]._betas.keys())
+        table = wandb.Table(columns=[f"Layer{layer + 1 if layer >= 0 else len(self.embedder.layers)}_{ntype}" \
+                                     for ntype in node_types])
         table.add_data(*plotly_htmls)
 
         # Log Table

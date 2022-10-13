@@ -11,6 +11,13 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -24,12 +31,6 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -266,7 +267,7 @@ class LATTENodeClf(NodeClfTrainer):
         if node_names is not None:
             index = node_names[node_ids]
         else:
-            index = pd.Index(node_ids, name=f"{self.head_node_type}_nid")
+            index = pd.Index(node_ids, name="nid")
 
         targets = pd.DataFrame(targets, index=index, columns=self.dataset.classes)
         scores = pd.DataFrame(scores, index=index, columns=self.dataset.classes)
@@ -290,14 +291,13 @@ class LATTENodeClf(NodeClfTrainer):
                             # nids = global_node_index[self.head_node_type]
                             nids = y_true_dict[namespace].index
                             split_samples = self.dataset.nodes_namespace[self.head_node_type].iloc[nids]
-                            title = f"{namespace}_PR_Curve_{split_samples.index.name}"
+                            title = f"{namespace}_PR_Curve_{split_samples.name}"
                         else:
                             split_samples = None
                             title = f"{namespace}_PR_Curve"
 
                         self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
-                                           split_samples=split_samples,
-                                           title=title)
+                                           split_samples=split_samples, title=title)
 
                 self.plot_embeddings_tsne(global_node_index=global_node_index,
                                           embeddings={self.head_node_type: embeddings},
@@ -449,7 +449,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X, save_betas=True)
+        y_pred = self.forward(X, save_betas=batch_nb == 0)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
