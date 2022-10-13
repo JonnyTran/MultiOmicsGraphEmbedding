@@ -90,7 +90,8 @@ class Graph:
         raise NotImplementedError()
 
     def create_node_metadata(
-            self, network: HeteroNetwork,
+            self,
+            network: HeteroNetwork,
             nodes: Dict[str, Union[pd.Index, List[str]]],
             columns=["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
                      "species_id", "RNA type", "gene_biotype", "transcript_biotype", "seqname", "length"],
@@ -115,33 +116,36 @@ class Graph:
 
         dfs = []
         for ntype, node_list in nodes.items():
-            df: DataFrame = network.annotations[ntype].loc[nodes[ntype]]
+            ann: DataFrame = network.annotations[ntype].loc[nodes[ntype]]
             if hasattr(self, 'nodes_namespace') and ntype in self.nodes_namespace:
-                df['namespace'] = df.index.map(self.nodes_namespace[ntype])
+                ann['namespace'] = ann.index.map(self.nodes_namespace[ntype])
 
-            df = df.reset_index(drop=df.index.name in df.columns)
+            ann = ann.reset_index(drop=ann.index.name in ann.columns)
 
-            if "start" in df.columns and "end" in df.columns:
-                df["length"] = _process_int_values(df["end"]) - _process_int_values(df["start"]) + 1
+            if "start" in ann.columns and "end" in ann.columns:
+                ann["length"] = _process_int_values(ann["end"]) - _process_int_values(ann["start"]) + 1
 
-            df = df.rename(columns=rename_mapper).filter(columns, axis="columns")
+            ann = ann.rename(columns=rename_mapper).filter(columns, axis="columns")
 
-            for col in df.columns.intersection(["class", "disease_associations"]):
-                if df[col].str.contains("\||, ", regex=True).any():
-                    df[col] = df[col].str.split("\||, ", regex=True, expand=True)[0]
-                elif df[col].apply(lambda x: isinstance(x, (tuple, list))).any():
-                    df[col] = df[col].apply(lambda li: li[0] if isinstance(li, (tuple, list)) else None)
+            for col in ann.columns.intersection(["class", "disease_associations"]):
+                if ann[col].str.contains("\||, ", regex=True).any():
+                    ann[col] = ann[col].str.split("\||, ", regex=True, expand=True)[0]
+                elif ann[col].apply(lambda x: isinstance(x, (tuple, list))).any():
+                    ann[col] = ann[col].apply(lambda li: li[0] if isinstance(li, (tuple, list)) else None)
 
-            df["ntype"] = ntype
-            df["nid"] = range(len(node_list))
+            ann["ntype"] = ntype
+            ann["nid"] = range(len(node_list))
 
-            dfs.append(df)
+            dfs.append(ann)
 
         node_metadata = pd.concat(dfs, axis=0)
-        # if "namespace" in node_metadata.columns:
-        #     node_metadata["namespace"].fillna(node_metadata["ntype"], inplace=True)
+        if "namespace" in node_metadata.columns:
+            node_metadata["namespace"].fillna(node_metadata["ntype"], inplace=True)
 
-        self.node_metadata = node_metadata.set_index(["ntype", "nid"]).dropna(axis=1, how="all")
+        node_metadata = node_metadata.set_index(["ntype", "nid"]).dropna(axis=1, how="all")
+        node_degrees = self.get_node_degrees(undirected=True).sum(1).astype(int)
+        node_degrees.name = 'degree'
+        self.node_metadata = node_metadata.join(node_degrees)
 
         return self.node_metadata
 

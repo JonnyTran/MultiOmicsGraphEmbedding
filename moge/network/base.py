@@ -33,7 +33,7 @@ class Network(object):
         return [node for node, deg in degrees if deg > 0]
 
     def remove_nodes_from(self, nodes: Union[List[str], Dict[str, Set[str]]]) -> None:
-        nan_nodes = [node for node in self.get_all_nodes()
+        nan_nodes = [node for node in self.get_all_nodes() \
                      if pd.isna(node) or type(node) != str or len(node) == 0]
 
         if isinstance(nodes, dict):

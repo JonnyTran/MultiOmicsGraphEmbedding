@@ -267,8 +267,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         Returns:
             node_metadata (DataFrame)
         """
-        if not hasattr(self, "node_metadata"):
-            self.create_node_metadata(self.network, nodes=self.nodes)
+        # if not hasattr(self, "node_metadata"):
+        self.create_node_metadata(self.network, nodes=self.nodes)
 
         global_node_index = {ntype: nids.numpy() if isinstance(nids, Tensor) else nids \
                              for ntype, nids in global_node_index.items() \
