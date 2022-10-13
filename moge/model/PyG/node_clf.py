@@ -277,23 +277,27 @@ class LATTENodeClf(NodeClfTrainer):
 
     def on_test_end(self):
         try:
-            if self.wandb_experiment is not None:
+            if True or self.wandb_experiment is not None:
                 dataloader = self.test_dataloader()
-                y_true, scores, embeddings, global_node_index = self.predict(dataloader)
+                y_true, scores, embeddings, global_node_index = self.predict(dataloader, save_betas=False)
 
                 if hasattr(self.dataset, "nodes_namespace"):
                     y_true_dict = self.dataset.split_array_by_namespace(y_true, axis=1)
                     y_pred_dict = self.dataset.split_array_by_namespace(scores, axis=1)
-                    if self.head_node_type in self.dataset.nodes_namespace:
-                        nids = global_node_index[self.head_node_type]
-                        split_samples = self.dataset.nodes_namespace[self.head_node_type].iloc[nids]
-                    else:
-                        split_samples = None
 
                     for namespace in y_true_dict.keys():
+                        if self.head_node_type in self.dataset.nodes_namespace:
+                            # nids = global_node_index[self.head_node_type]
+                            nids = y_true_dict[namespace].index
+                            split_samples = self.dataset.nodes_namespace[self.head_node_type].iloc[nids]
+                            title = f"{namespace}_PR_Curve_{split_samples.index.name}"
+                        else:
+                            split_samples = None
+                            title = f"{namespace}_PR_Curve"
+
                         self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
                                            split_samples=split_samples,
-                                           title=f"{namespace}_PR_Curve")
+                                           title=title)
 
                 self.plot_embeddings_tsne(global_node_index=global_node_index,
                                           embeddings={self.head_node_type: embeddings},

@@ -98,7 +98,8 @@ class Graph:
 
         dfs = []
         for ntype, node_list in nodes.items():
-            df: DataFrame = network.annotations[ntype].loc[nodes[ntype]].reset_index()
+            df: DataFrame = network.annotations[ntype].loc[nodes[ntype]]
+            df = df.reset_index(drop=df.index.name in df.columns)
             if "start" in df.columns and "end" in df.columns:
                 df["length"] = _process_int_values(df["end"]) - _process_int_values(df["start"]) + 1
 
@@ -108,8 +109,7 @@ class Graph:
                 if df[col].str.contains("\||, ", regex=True).any():
                     df[col] = df[col].str.split("\||, ", regex=True, expand=True)[0]
                 elif df[col].apply(lambda x: isinstance(x, (tuple, list))).any():
-                    df[col] = df[col].apply(
-                        lambda li: li[0] if isinstance(li, (tuple, list)) else None)
+                    df[col] = df[col].apply(lambda li: li[0] if isinstance(li, (tuple, list)) else None)
 
             df["ntype"] = ntype
             df["nid"] = range(len(node_list))

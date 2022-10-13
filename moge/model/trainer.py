@@ -220,7 +220,7 @@ class NodeEmbeddingEvaluator(LightningModule):
                 dfs[split] = pd.DataFrame({xaxis_title: recalls, yaxis_title: precisions})
 
             stroke = split_samples.name if isinstance(split_samples, pd.Series) else 'split'
-            df = pd.concat(dfs, names=[stroke, dfs[split].index.name], axis=0).reset_index(level=0)
+            df = pd.concat(dfs, names=[stroke, None], axis=0).reset_index(level=0)
 
         else:
             row, col = (np.absolute(preds + targets) > 1e-2).nonzero()
@@ -230,7 +230,8 @@ class NodeEmbeddingEvaluator(LightningModule):
             stroke = None
 
         table = wandb.Table(dataframe=df, columns=df.columns)
-        lineplot = wandb.plot.line(table, x=xaxis_title, y=yaxis_title, stroke=stroke, title=title.replace("_", " "))
+        lineplot = wandb.plot.line(table, x=xaxis_title, y=yaxis_title, stroke=stroke,
+                                   title=title.replace("_", " "))
         wandb.log({title: lineplot})
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
