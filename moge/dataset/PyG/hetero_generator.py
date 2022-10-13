@@ -289,7 +289,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         if losses:
             node_losses = np.concatenate([losses[ntype] if ntype in losses else \
-                                              [None] * global_node_index[ntype].size \
+                                              [None for i in range(global_node_index[ntype].size)] \
                                           for ntype in global_node_index])
         else:
             node_losses = None
@@ -297,12 +297,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Metadata
         # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
         df = pd.DataFrame(
-            {"node": np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]),
-             "ntype": np.concatenate([[ntype] * global_node_index[ntype].shape[0] for ntype in global_node_index]),
+            {"node": np.concatenate([self.nodes[ntype][global_node_index[ntype]] \
+                                     for ntype in global_node_index]),
+             "ntype": np.concatenate([[ntype for i in range(global_node_index[ntype].shape[0])] \
+                                      for ntype in global_node_index]),
              "train_valid_test": node_train_valid_test,
              "loss": node_losses},
-            index=pd.Index(np.concatenate([global_node_index[ntype] for ntype in global_node_index]), name="nid"))
+            index=pd.Index(np.concatenate([global_node_index[ntype] for \
+                                           ntype in global_node_index]), name="nid"))
 
+        # Get TSNE 2d position from embeddings
         try:
             from umap import UMAP
             tsne = UMAP(n_components=2, n_jobs=-1)
@@ -314,10 +318,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         nodes_pos = tsne.fit_transform(nodes_emb)
         nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
-
         df = df.assign(loss=df['loss'].astype(float), pos1=df['pos1'].astype(float), pos2=df['pos2'].astype(float))
 
-        # Reset index
+        # Set index
         df = df.reset_index()
         df["nx_node"] = df["ntype"] + "-" + df["node"]
         df = df.set_index(["ntype", "nid"])

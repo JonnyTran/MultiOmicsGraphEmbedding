@@ -34,14 +34,15 @@ main_colors = [
 ]
 
 
-def configure_layout(fig, showlegend=True, **kwargs) -> go.Figure:
+def configure_layout(fig, showlegend=True, showticklabels=False, showgrid=False, **kwargs) -> go.Figure:
     # Figure
     axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
                 zeroline=False,
-                showgrid=False,
-                showticklabels=False,
-                title=''
+                showgrid=showgrid,
+                showticklabels=showticklabels,
+                title='',
                 )
+
     fig.update_layout(
         **kwargs,
         showlegend=showlegend,
@@ -58,7 +59,7 @@ def configure_layout(fig, showlegend=True, **kwargs) -> go.Figure:
             l=5,
             r=5,
             b=5,
-            t=5,
+            t=30 if 'title' in kwargs else 5,
             pad=5
         ),
         xaxis=axis,
@@ -74,8 +75,8 @@ def compress_legend(fig):
         part1, part2 = trace.name.split(',')
         if part1 == group1_base:
             lines_marker_name.append(
-                {"line": trace.line.to_plotly_json(), "marker": trace.marker.to_plotly_json(),
-                 "mode": trace.mode, "name": part2.lstrip(" ")})
+                {"line": trace.line.to_plotly_json(), "marker": trace.marker.to_plotly_json(), "mode": trace.mode,
+                 "name": part2.lstrip(" ")})
         if part2 != group2_base:
             trace['name'] = ''
             trace['showlegend'] = False
@@ -88,8 +89,6 @@ def compress_legend(fig):
         lmn["marker"]["color"] = "black"
         fig.add_trace(go.Scatter(y=[None], **lmn))
 
-    fig.update_layout(legend_title_text='',
-                      # legend_itemclick=False,
-                      # legend_itemdoubleclick=False
-                      )
-    return fig
+    return fig.update_layout(legend_title_text='',
+                             legend_itemclick=False,
+                             legend_itemdoubleclick=False)

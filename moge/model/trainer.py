@@ -217,7 +217,7 @@ class NodeEmbeddingEvaluator(LightningModule):
             splits_prog = tqdm.tqdm(split_samples.value_counts().head(15).index,
                                     desc=f"Plotting PR Curve for {stroke} splits")
             for split in splits_prog:
-                splits_prog.set_description(f"Plotting PR Curve for {stroke} splits: {split}")
+                splits_prog.set_description(f"Plotting PR Curve for {stroke} splits {split}")
                 if split == '' or split is None: continue
                 mask = split_samples == split
                 if mask.sum() < 10: continue

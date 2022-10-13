@@ -94,8 +94,8 @@ class Graph:
             network: HeteroNetwork,
             nodes: Dict[str, Union[pd.Index, List[str]]],
             columns=["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
-                     "species_id", "RNA type", "gene_biotype", "transcript_biotype", "seqname", "length"],
-            rename_mapper={"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}) \
+                     "gene_name", "species_id", "RNA type", "gene_biotype", "transcript_biotype", "seqname", "length"],
+            rename_mapper={"name": "node", "Chromosome": "seqname", "Protein class": "class"}) \
             -> DataFrame:
         """
         Initialize hetero node features from `annotations`

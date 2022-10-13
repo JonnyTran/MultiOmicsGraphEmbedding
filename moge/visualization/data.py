@@ -8,11 +8,11 @@ import plotly.graph_objects as go
 import xarray as xr
 from datashader import reductions as rd
 from holoviews.operation.datashader import rasterize
-from moge.visualization.utils import configure_layout
 from plotly.subplots import make_subplots
 from scipy.sparse import coo_matrix
-from scipy.sparse import issparse
 from sklearn.metrics import classification_report
+
+from moge.visualization.utils import configure_layout
 
 hv.extension('plotly')
 
@@ -37,16 +37,26 @@ def rasterize_matrix(mtx: pd.DataFrame, x_label="X", y_label="Y", size=1000):
 
 def heatmap_fast(arr: pd.DataFrame, row_label="row", col_label="col", size=1000, agg="mean", **kwargs):
     if isinstance(arr, pd.DataFrame):
-        rows, row_label = arr.index, arr.index.name
-        cols, col_label = arr.columns, arr.columns.name
+        if isinstance(arr.index, pd.MultiIndex):
+            rows = arr.index.get_level_values(0)
+            row_label = arr.index.names[0]
+        else:
+            rows, row_label = arr.index, arr.index.name
+
+        if isinstance(arr.columns, pd.MultiIndex):
+            cols = arr.columns.get_level_values(0)
+            col_label = arr.columns.names[0]
+        else:
+            cols, col_label = arr.columns, arr.columns.name
+
     else:
         rows = np.arange(arr.shape[0])
         cols = np.arange(arr.shape[1])
 
     pw_s = xr.DataArray(arr, coords=[(row_label, rows), (col_label, cols)])
 
-    plot_width = int(size * cols.size / sum(arr.shape))
-    plot_height = int(size * rows.size / sum(arr.shape))
+    plot_width = int(size * len(cols) / sum(arr.shape))
+    plot_height = int(size * len(rows) / sum(arr.shape))
     cvs = ds.Canvas(plot_height=plot_height, plot_width=plot_width,
                     # x_range=(0, arr.shape[1]),
                     # y_range=(0, arr.shape[0])
@@ -169,21 +179,6 @@ def bar_chart(results: dict, measures, title=None, bar_width=0.08, loc="best"):
     plt.tight_layout()
     plt.title(title)
     plt.show()
-
-def matrix_heatmap(matrix, figsize=(12, 12), cmap='gray', **kwargs):
-    # Scatter plot of the graph adjacency matrix
-
-    fig = plt.figure(figsize=figsize)
-    ax = fig.add_subplot(111)
-
-    if issparse(matrix):
-        matrix = matrix.todense()
-
-    if np.isnan(matrix).any():
-        matrix = np.nan_to_num(matrix)
-
-    cax = ax.matshow(matrix, cmap=cmap, **kwargs)
-    fig.colorbar(cax)
 
 def plot_coo_matrix(m):
     if not isinstance(m, coo_matrix):
