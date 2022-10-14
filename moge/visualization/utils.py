@@ -54,7 +54,7 @@ def configure_layout(fig, showlegend=True, showticklabels=False, showgrid=False,
             bordercolor='rgba(255, 255, 255, 0)'
         ),
         legend_orientation="v",
-        autosize=True,
+        autosize=False,
         margin=dict(
             l=5,
             r=5,

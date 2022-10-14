@@ -2,9 +2,8 @@ import warnings
 
 import plotly.graph_objects as go
 from matplotlib.colors import to_rgb
-from pandas import DataFrame
-
 from moge.visualization.utils import configure_layout
+from pandas import DataFrame
 
 
 def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=8, orientation="h",
@@ -52,8 +51,7 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
             fig.add_vline(x=layer / n_layers, annotation_text=f'Layer {layer}', layer='below',
                           line_dash="dash", line_color="gray", opacity=0.25, annotation_position="bottom left")
 
-    fig = configure_layout(fig,
-                           paper_bgcolor='rgba(255,255,255,255)',
+    fig = configure_layout(fig, paper_bgcolor='rgba(255,255,255,255)',
                            plot_bgcolor='rgba(0,0,0,0)', **kwargs)
     fig.update_layout(font_size=font_size)
     return fig
