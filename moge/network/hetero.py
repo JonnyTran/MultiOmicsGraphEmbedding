@@ -1,6 +1,7 @@
 import pprint
 import warnings
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import Dict, Tuple, Union, List, Any, Optional, Set
 
 import dask.dataframe as dd
@@ -17,13 +18,14 @@ from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology, GeneOntology
 from pandas import Series, Index, DataFrame
 from scipy.sparse import csr_matrix
 from torch import Tensor
 from torch_geometric.data import HeteroData
 from torch_sparse import SparseTensor
+
+from openomics import MultiOmics
+from openomics.database.ontology import Ontology, GeneOntology
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -179,7 +181,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         logger.info(f"Added {len(nodes)} {ntype} nodes")
 
-    def add_edges(self, edgelist: List[Union[Tuple[str, str]]], etype: Tuple[str, str, str], database: str,
+    def add_edges(self, edgelist: Union[nx.Graph, List[Tuple[str, str, Dict]]], etype: Tuple[str, str, str],
+                  database: str,
                   directed=True, **kwargs):
         src_type, dst_type = etype[0], etype[-1]
         if etype not in self.networks:
@@ -188,7 +191,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             else:
                 self.networks[etype] = nx.Graph()
 
-        self.networks[etype].add_edges_from(edgelist, source=src_type, target=dst_type, database=database, **kwargs)
+        if isinstance(edgelist, Iterable):
+            self.networks[etype].add_edges_from(edgelist, source=src_type, target=dst_type, database=database, **kwargs)
+        elif isinstance(edgelist, nx.Graph):
+            self.networks[etype].add_edges_from(edgelist.edges.data(), source=src_type, target=dst_type,
+                                                database=database,
+                                                **kwargs)
 
         src_nodes, dst_nodes = {u for u, v, *_ in edgelist}, {v for u, v, *_ in edgelist}
         src_nodes = src_nodes.intersection(self.nodes[src_type])
