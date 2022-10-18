@@ -61,7 +61,7 @@ class Metrics(torch.nn.Module):
                 self.metrics[name] = F1Score(num_classes=n_classes, average="micro", top_k=top_k, )
 
             elif "fmax" in name:
-                self.metrics[name] = FMax_Slow()
+                self.metrics[name] = FMax_Slow() if 'test' in prefix else FMax_Micro()
 
             elif "auroc" in name:
                 self.metrics[name] = AUROC(num_classes=n_classes, average="micro")

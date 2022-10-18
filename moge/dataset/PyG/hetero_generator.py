@@ -48,36 +48,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.neighbor_loader = neighbor_loader
         self.neighbor_sizes = neighbor_sizes
 
-    @property
-    def class_indices(self) -> Optional[Dict[str, Tensor]]:
-        if self.pred_ntypes is None or set(self.pred_ntypes).difference(self.nodes.keys()) or self.classes is None:
-            return None
-        class_indices = {}
-        for pred_ntype in self.pred_ntypes:
-            class_indices[pred_ntype] = torch.from_numpy(self.nodes[pred_ntype].get_indexer_for(self.classes))
-            class_indices[pred_ntype] = class_indices[pred_ntype][class_indices[pred_ntype] >= 0]
-        return class_indices
-
-    @property
-    def node_mask_counts(self) -> DataFrame:
-        ntypes = self.G.node_types
-        return pd.DataFrame(tensor_sizes(dict(
-            train={ntype: self.G[ntype].train_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'train_mask')},
-            valid={ntype: self.G[ntype].valid_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'valid_mask')},
-            test={ntype: self.G[ntype].test_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'test_mask')})))
-
-    @property
-    def edge_mask_counts(self) -> DataFrame:
-        etypes = self.G.edge_types
-        df = pd.DataFrame(tensor_sizes(dict(
-            train={etype: self.G[etype].train_mask.sum() for etype in etypes if hasattr(self.G[etype], 'train_mask')},
-            valid={etype: self.G[etype].valid_mask.sum() for etype in etypes if hasattr(self.G[etype], 'valid_mask')},
-            test={etype: self.G[etype].test_mask.sum() for etype in etypes if hasattr(self.G[etype], 'test_mask')})))
-        if df.empty:
-            return None
-        df.index.names = ['src_ntype', 'etype', 'dst_ntype']
-        return df.sort_index()
-
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.x_dict = hetero.x_dict
         self.node_types = hetero.node_types
@@ -91,7 +61,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Add reverse metapaths to allow reverse message passing for directed edges
         if self.use_reverse:
-            transform = T.ToUndirected(merge=True)
+            transform = T.ToUndirected(merge=False)
             hetero: HeteroData = transform(hetero)
 
         self.metapaths = hetero.edge_types
@@ -148,6 +118,36 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                         {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 
         return self
+
+    @property
+    def class_indices(self) -> Optional[Dict[str, Tensor]]:
+        if self.pred_ntypes is None or set(self.pred_ntypes).difference(self.nodes.keys()) or self.classes is None:
+            return None
+        class_indices = {}
+        for pred_ntype in self.pred_ntypes:
+            class_indices[pred_ntype] = torch.from_numpy(self.nodes[pred_ntype].get_indexer_for(self.classes))
+            class_indices[pred_ntype] = class_indices[pred_ntype][class_indices[pred_ntype] >= 0]
+        return class_indices
+
+    @property
+    def node_mask_counts(self) -> DataFrame:
+        ntypes = self.G.node_types
+        return pd.DataFrame(tensor_sizes(dict(
+            train={ntype: self.G[ntype].train_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'train_mask')},
+            valid={ntype: self.G[ntype].valid_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'valid_mask')},
+            test={ntype: self.G[ntype].test_mask.sum() for ntype in ntypes if hasattr(self.G[ntype], 'test_mask')})))
+
+    @property
+    def edge_mask_counts(self) -> DataFrame:
+        etypes = self.G.edge_types
+        df = pd.DataFrame(tensor_sizes(dict(
+            train={etype: self.G[etype].train_mask.sum() for etype in etypes if hasattr(self.G[etype], 'train_mask')},
+            valid={etype: self.G[etype].valid_mask.sum() for etype in etypes if hasattr(self.G[etype], 'valid_mask')},
+            test={etype: self.G[etype].test_mask.sum() for etype in etypes if hasattr(self.G[etype], 'test_mask')})))
+        if df.empty:
+            return None
+        df.index.names = ['src_ntype', 'etype', 'dst_ntype']
+        return df.sort_index()
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
                              node_type: str, node_mask: Tensor,
