@@ -13,7 +13,7 @@ from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from torch import Tensor
 from torch_sparse import SparseTensor
-from torchmetrics import Metric, F1Score, AUROC, MeanSquaredError, Accuracy, BinnedPrecisionRecallCurve, \
+from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, BinnedPrecisionRecallCurve, \
     BinnedAveragePrecision
 from torchmetrics.utilities.data import METRIC_EPS, to_onehot
 
@@ -34,7 +34,7 @@ class Metrics(torch.nn.Module):
         self.top_ks = top_k
         self.prefix = prefix if isinstance(prefix, str) else ""
 
-        self.metrics: Dict[Union[str, Tuple[str]], Metric] = {}
+        self.metrics = torch.nn.ModuleDict()
         if metrics is None:
             metrics = []
 
@@ -61,7 +61,8 @@ class Metrics(torch.nn.Module):
                 self.metrics[name] = F1Score(num_classes=n_classes, average="micro", top_k=top_k, )
 
             elif "fmax" in name:
-                self.metrics[name] = FMax_Slow() if 'test' in prefix else FMax_Micro()
+                if 'test' in prefix:
+                    self.metrics[name] = FMax_Slow()
 
             elif "auroc" in name:
                 self.metrics[name] = AUROC(num_classes=n_classes, average="micro")
@@ -91,8 +92,8 @@ class Metrics(torch.nn.Module):
                 continue
 
             # Needed to add the torchmetrics as Modules, so they'll be on the correct CUDA device during training
-            if isinstance(self.metrics[name], torchmetrics.metric.Metric):
-                setattr(self, str(name), self.metrics[name])
+            # if isinstance(self.metrics[name], torchmetrics.metric.Metric):
+            #     setattr(self, str(name), self.metrics[name])
 
         self.reset_metrics()
 

@@ -211,7 +211,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 # new_values = torch.stack(new_values, dim=1)
                 new_edge_index, new_values = spspmm(indexA=edge_index_a.to(device), valueA=values_a,
                                                     indexB=edge_index_b.to(device), valueB=values_b,
-                                                    m=M, k=K, n=N)
+                                                    m=M, k=K, n=N, coalesced=True)
 
             except RuntimeError as re:
                 traceback.print_exc()
@@ -221,7 +221,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                                                     valueA=values_a.cpu() if isinstance(values_a, Tensor) else None,
                                                     indexB=edge_index_b.cpu(),
                                                     valueB=values_b.cpu() if isinstance(values_b, Tensor) else None,
-                                                    m=M, k=K, n=N)
+                                                    m=M, k=K, n=N, coalesced=True)
 
             except Exception as e:
                 traceback.print_exc()

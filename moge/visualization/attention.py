@@ -2,13 +2,14 @@ import warnings
 
 import plotly.graph_objects as go
 from matplotlib.colors import to_rgb
-from moge.visualization.utils import configure_layout
 from pandas import DataFrame
+
+from moge.visualization.utils import configure_layout
 
 
 def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=8, orientation="h",
                      **kwargs):
-    # change '#fffff' to its 'rgba' value to add opacity
+    # change hex to rgba color to add opacity
     rgba_colors = [f"rgba{tuple(int(val * 255) for val in to_rgb(color)) + (opacity if src != dst else 0,)}" \
                    for i, (src, dst, color) in links[['source', 'target', 'color']].iterrows()]
 
@@ -46,10 +47,14 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
     )
 
     if 'layer' in nodes.columns:
-        n_layers = nodes['layer'].nunique()
-        for layer in reversed(range(1, n_layers + 1)):
-            fig.add_vline(x=layer / n_layers, annotation_text=f'Layer {layer}', layer='below',
-                          line_dash="dash", line_color="gray", opacity=0.25, annotation_position="bottom left")
+        max_level = nodes['level'].max() - 1
+        for layer in nodes['layer'].unique():
+            level = (max_level - (nodes.query(f'layer == {layer}')['level'] - 1)).max()
+            if level != max_level:
+                level += 1
+            # print(layer, level, max_level)
+            fig.add_vline(x=level / max_level, annotation_text=f'Layer {layer + 1}', layer='below',
+                          line_dash="dot", line_color="gray", opacity=0.25, annotation_position="top left")
 
     fig = configure_layout(fig, paper_bgcolor='rgba(255,255,255,255)',
                            plot_bgcolor='rgba(0,0,0,0)', **kwargs)
