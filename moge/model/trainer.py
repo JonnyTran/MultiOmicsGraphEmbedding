@@ -11,6 +11,13 @@ import torch.nn.functional as F
 import tqdm
 import wandb
 from logzero import logger
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
+
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -20,12 +27,6 @@ from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -165,7 +166,22 @@ class NodeEmbeddingEvaluator(LightningModule):
     def plot_embeddings_tsne(self, global_node_index: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
-                             columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> DataFrame:
+                             columns=["node", "ntype", "gene_name", "species_id", "pos1", "pos2", "loss"],
+                             n_samples: int = 1000) -> DataFrame:
+        """
+
+        Args:
+            global_node_index (): Dict of ntype to node ids with same size as embeddings.shape[0]
+            embeddings (): Dict of ntype to embedding matrix, or an embedding Tensor for the `head_node_type`
+            targets (): an targets Tensor for the `head_node_type`.
+            y_pred ():
+            weights ():
+            columns ():
+            n_samples ():
+
+        Returns:
+
+        """
         if self.wandb_experiment is not None and self.wandb_experiment.sweep_id is not None: return
 
         node_losses = self.get_node_loss(targets, y_pred, global_node_index=global_node_index)

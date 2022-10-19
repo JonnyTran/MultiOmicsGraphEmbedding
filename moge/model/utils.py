@@ -83,7 +83,7 @@ def tensor_sizes(input=None, **kwargs) -> ...:
                {etype: input[etype].num_edges for etype in input.edge_types if input[etype].num_edges}
 
     elif isinstance(input, SparseTensor):
-        return input.storage.sparse_sizes()
+        return [tuple(input.sizes()), [f"nnz={input.nnz()}"]]
 
     else:
         if input is not None and hasattr(input, "shape"):

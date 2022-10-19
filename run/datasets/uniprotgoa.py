@@ -5,7 +5,6 @@ from collections import defaultdict
 import dgl
 import numpy as np
 import pandas as pd
-from openomics.database.ontology import UniProtGOA
 
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -13,12 +12,34 @@ from moge.dataset.utils import get_edge_index_dict
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.model.utils import tensor_sizes
 from moge.network.hetero import HeteroNetwork
+from openomics.database.ontology import UniProtGOA
 
 
 def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroNodeClfDataset:
     use_reverse = hparams.use_reverse
     head_node_type = hparams.head_node_type
 
+    # Set ntypes to include
+    hparams.ntype_subset = hparams.ntype_subset.split(" ") \
+        if 'ntype_subset' in hparams and hparams.ntype_subset else None
+    hparams.pred_ntypes = hparams.pred_ntypes.split(" ") \
+        if 'pred_ntypes' in hparams and hparams.pred_ntypes else []
+
+    # Set etypes to include
+    if 'etype_subset' in hparams and hparams.etype_subset:
+        hparams.etype_subset = hparams.etype_subset.split(" ")
+    else:
+        hparams.etype_subset = None
+
+    geneontology = UniProtGOA(path='~/Bioinformatics_ExternalData/UniProtGOA/',
+                              file_resources={"go.obo": "http://current.geneontology.org/ontology/go.obo",
+                                              "goa_uniprot_all.processed.parquet": "goa_uniprot_all.processed.parquet"},
+                              species=None)
+
+    all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
+    go_nodes = np.array(list(all_go))
+
+    # Load HeteroNetwork from pickle
     with open(dataset_path, "rb") as file:
         network: HeteroNetwork = pickle.load(file)
         if not hasattr(network, 'train_nodes'):
@@ -26,56 +47,37 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
             network.valid_nodes = defaultdict(set)
             network.test_nodes = defaultdict(set)
 
-    geneontology = UniProtGOA(file_resources={"go.obo": "http://current.geneontology.org/ontology/go.obo", })
-    annot_df = network.annotations[head_node_type]
-    annot_df['go_id'] = annot_df['go_id'].map(lambda d: d if isinstance(d, (list, np.ndarray)) else [])
-
-    all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
-    go_nodes = np.array(list(all_go))
-
-    # Set ntypes to include
-    hparams.ntype_subset = hparams.ntype_subset.split(" ")
-
-    # Set etypes to include
-    if len(hparams.etype_subset) <= 1:
-        hparams.etype_subset = None
-    else:
-        hparams.etype_subset = hparams.etype_subset.split(" ")
-
-    go_namespace_ntypes = set(hparams.ntype_subset).intersection(
-        ['biological_process', 'cellular_component', 'molecular_function'])
-    if go_namespace_ntypes:
-        split_ntype = 'namespace'
-    else:
-        split_ntype = None
-
     # Add GO interactions
-    network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype=split_ntype, etypes=hparams.etype_subset)
+    network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=hparams.etype_subset)
 
-    for namespace in go_namespace_ntypes:
+    for dst_ntype in set(['biological_process', 'molecular_function', 'cellular_component']).difference(
+            hparams.pred_ntypes):
         train_date = '2018-01-01'
         valid_date = (pd.to_datetime(train_date) + pd.to_timedelta(26, "W")).date().strftime("%Y-%m-%d")
         test_date = '2021-04-01'
-        network.add_edges_from_annotations(geneontology, filter_dst_nodes=network.nodes[namespace],
-                                           src_ntype=head_node_type, dst_ntype=namespace,
+        network.add_edges_from_annotations(geneontology, filter_dst_nodes=network.nodes[dst_ntype],
+                                           src_ntype=head_node_type, dst_ntype=dst_ntype,
                                            src_node_col='protein_id',
                                            train_date=train_date, valid_date=valid_date, test_date=test_date,
                                            use_neg_annotations=False)
 
     # Add GOA's from DeepGraphGO to UniProtGOA
-    uniprot_go_id = load_protein_dataset(hparams.deepgraphgo_data, namespaces=['mf', 'bp', 'cc'])
-    annot_df = annot_df.join(uniprot_go_id[['train_mask', 'valid_mask', 'test_mask']], on='protein_id')
+    annot_df = network.annotations[head_node_type]
+    annot_df['go_id'] = annot_df['go_id'].map(lambda d: d if isinstance(d, (list, np.ndarray)) else [])
+
+    dgg_go_id = load_protein_dataset(hparams.deepgraphgo_data, namespaces=['mf', 'bp', 'cc'])
+    annot_df = annot_df.join(dgg_go_id[['train_mask', 'valid_mask', 'test_mask']], on='protein_id')
     if 'DeepGraphGO' in name:
-        uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(
+        dgg_go_id['go_id'] = dgg_go_id['go_id'].map(
             lambda d: d if isinstance(d, (list, np.ndarray)) else [])
-        annot_df['go_id'] = annot_df['go_id'] + uniprot_go_id.loc[annot_df.index, 'go_id']
+        annot_df['go_id'] = annot_df['go_id'].map(list) + dgg_go_id.loc[annot_df.index, 'go_id']
         annot_df['go_id'] = annot_df['go_id'].map(np.unique).map(list)
 
     # Set train/valid/test split based on DeepGraphGO
     network.train_nodes[head_node_type] = set(annot_df.query('train_mask == True').index)
     network.valid_nodes[head_node_type] = set(annot_df.query('valid_mask == True').index)
     network.test_nodes[head_node_type] = set(annot_df.query('test_mask == True').index)
-    network.set_edge_traintest_mask(exclude_metapaths=[] if not hparams.inductive else None)
+    network.set_edge_traintest_mask()
 
     # Set classes
     if isinstance(hparams.pred_ntypes, str):
@@ -88,7 +90,7 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     if hparams.neighbor_loader == "NeighborLoader":
         hparams.neighbor_sizes = [8] * hparams.n_layers
     else:
-        hparams.neighbor_sizes = [hparams.n_neighbors] * hparams.n_layers
+        hparams.neighbor_sizes = [hparams.n_neighbors] * max(hparams.n_layers, hparams.t_order)
 
     # Sequences
     if hasattr(hparams, 'sequence') and hparams.sequence:

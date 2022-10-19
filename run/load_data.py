@@ -2,6 +2,7 @@ import logging
 import os
 import pickle
 from argparse import Namespace
+from pathlib import Path
 from typing import Union
 
 import dgl
@@ -10,7 +11,6 @@ import pandas as pd
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
-from openomics.database.ontology import GeneOntology
 from torch_geometric.datasets import AMiner
 
 import moge
@@ -20,12 +20,13 @@ from moge.dataset.dgl.graph_generator import DGLGraphSampler
 from moge.dataset.dgl.node_generator import HeteroNeighborGenerator, DGLNodeGenerator
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
+from openomics.database.ontology import GeneOntology
 from run.datasets.uniprotgoa import load_uniprotgoa
 from run.utils import add_node_embeddings
 
 
 def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
-                      dataset_path="dataset"):
+                      dataset_path: Path = "dataset"):
     if name == "NARS":
         use_reverse = False
     else:

@@ -278,7 +278,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def on_test_end(self):
         try:
-            if True or self.wandb_experiment is not None:
+            if self.wandb_experiment is not None:
                 dataloader = self.test_dataloader()
                 y_true, scores, embeddings, global_node_index = self.predict(dataloader, save_betas=False)
 
