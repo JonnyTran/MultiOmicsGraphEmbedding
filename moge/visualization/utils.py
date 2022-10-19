@@ -1,3 +1,6 @@
+from typing import Union
+
+import pandas as pd
 from plotly import graph_objects as go
 
 colors = ["aliceblue", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond",
@@ -32,6 +35,12 @@ main_colors = [
     '#bcbd22',  # curry yellow-green
     '#17becf'  # blue-teal
 ]
+
+
+def group_axis_ticks(series: Union[pd.MultiIndex, pd.Index], level=0):
+    ticks = series.get_level_values(level).to_series().reset_index(drop=True)
+    grouped_ticks = ticks.reset_index().groupby(ticks.name)['index'].mean().astype(int)
+    return grouped_ticks
 
 
 def configure_layout(fig, showlegend=True, showticklabels=False, showgrid=False, **kwargs) -> go.Figure:

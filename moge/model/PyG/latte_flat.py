@@ -7,12 +7,13 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.relations import RelationAttention
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.relations import RelationAttention, reindex_contiguous
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 
 
 class LATTEConv(MessagePassing, RelationAttention):
@@ -527,33 +528,19 @@ class LATTE(nn.Module):
                     links['source'].replace(dst_id, prev_src_id, inplace=True)
                     links['target'].replace(dst_id, prev_src_id, inplace=True)
 
-                    # if self_loop:
-                    #     prev_self_link = layer_links[-1].query(f'(source == target) and (label == "{ntype}")')
-                    #     if not prev_self_link.empty:
-                    #         prev_self_link['source'] = [prev_src_id]
-                    #         print(prev_self_link) if not prev_self_link.empty else None
-
-                if not layer_self_loop:
+                if True:
                     # Ensure dst ntypes in non-last-layers have correct positioning by adding a self loop.
                     for ntype in set(current_dst_ntypes).difference(last_src_nids.keys()):
                         nid = nodes.query(f'(level == {nodes["level"].min()}) and (label == "{ntype}")').index[0]
 
-                        links = links.append(pd.Series(
-                            {'source': nid, 'target': nid, 'label': ntype,
-                             'mean': 1 - links.query(f'target == {nid}')['mean'].sum(), 'std': 0.0,
-                             'color': nodes.loc[nid, 'color'], 'layer': latte.layer}, name=links.index.max() + 1))
+                        selfloop_weight = 1 - links.query(f'target == {nid}')['mean'].sum() + 1e-4
+                        selfloop_link = pd.Series({
+                            'source': nid, 'target': nid, 'label': ntype, 'color': nodes.loc[nid, 'color'],
+                            'mean': selfloop_weight, 'std': 0.0, 'layer': latte.layer},
+                            name=links.index.max() + 1)
+                        links = links.append(selfloop_link)
 
                 nodes['level'] += layer_nodes[-1]['level'].max() - 1
-
-            # if not self_loop and len(layer_nodes) == 0:
-            #     for dst_id, dst_node in nodes.query("level == 1").iterrows():
-            #         src_id = nodes.query(f"(level == {nodes['level'].max()}) and "
-            #                                        f"(label == '{dst_node['label']}')").index[0]
-            #         links = links.append(pd.Series(
-            #             {'source': src_id, 'target': dst_id, 'label': dst_node['label'],
-            #              'mean': 1 - links.query(f'target == {dst_id}')['mean'].sum(), 'std': 0.0,
-            #              'color': dst_node['color'], 'layer': latte.layer},
-            #             name=links.index.max() + 1))
 
             # Update last_src_nids to contain the src nodes from current layers
             last_src_nids = {}
@@ -572,10 +559,7 @@ class LATTE(nn.Module):
 
         if len(layer_nodes) > 1:
             # Ensure node index is contiguous
-            replace_nid = pd.Series(layer_nodes.reset_index().index, index=layer_nodes.index)
-            replace_nid = {k: v for k, v in replace_nid.items() if k != v}
-            layer_nodes = layer_nodes.reset_index()
-            layer_links = layer_links.replace({'source': replace_nid, 'target': replace_nid})
+            layer_nodes, layer_links = reindex_contiguous(layer_nodes, layer_links)
 
         if not layer_links['source'].isin(layer_nodes.index).all():
             print('layer_links[source] not in layer_nodes.index:',

@@ -7,13 +7,14 @@ import pandas as pd
 import scipy.sparse as ssp
 import torch
 from colorhash import ColorHash
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
+
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -286,6 +287,16 @@ class RelationAttention(ABC):
 
     def get_sankey_flow(self, node_types: Union[str, None, List[str]] = None, self_loop=True, agg="median") \
             -> Tuple[DataFrame, DataFrame]:
+        """
+        Combine relations for all `node_types` for a single LATTE layer.
+        Args:
+            node_types ():
+            self_loop ():
+            agg ():
+
+        Returns:
+
+        """
         if node_types is None:
             node_types = self._betas.keys()
         elif isinstance(node_types, str):
@@ -312,8 +323,29 @@ class RelationAttention(ABC):
 
         if not len(all_nodes):
             return None, None
+
         all_nodes = pd.concat(all_nodes, axis=0)
         all_links = pd.concat(all_links, axis=0).sort_values(by=['mean', 'target'], ascending=False)
+
+        # Set self-loops of dst nodes to src nodes
+        for link_id, link in all_links.query('source == target').iterrows():
+            ntype = all_nodes.loc[link['source'], 'label']
+            src_node = all_nodes.query(f"label == '{ntype}'")['level'].idxmax()
+            all_links.loc[link_id, 'source'] = src_node
+
+        # Group duplicated src_nodes into one
+        src_nodes = all_nodes.query("level == level.max()") \
+            .sort_values('count', ascending=False) \
+            .drop_duplicates(['label'])
+        for nid, node in src_nodes.iterrows():
+            prev_src_nodes = all_nodes.query(f'level == {node["level"]} and label == "{node["label"]}"').drop(
+                index=[nid])
+            replace_src_nodes = {prev_nid: nid for prev_nid in prev_src_nodes.index}
+            all_nodes.drop(index=prev_src_nodes.index, inplace=True)
+            all_links['source'].replace(replace_src_nodes, inplace=True)
+            all_links['target'].replace(replace_src_nodes, inplace=True)
+
+        all_nodes, all_links = reindex_contiguous(all_nodes, all_links)
 
         # assert all_links['source'].isin(all_nodes.index).all()
         # assert all_links['target'].isin(all_nodes.index).all()
@@ -401,3 +433,11 @@ class RelationAttention(ABC):
             axis=1)
 
         return nodes, links
+
+
+def reindex_contiguous(layer_nodes: pd.DataFrame, layer_links: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    replace_nid = pd.Series(layer_nodes.reset_index().index, index=layer_nodes.index)
+    replace_nid = {k: v for k, v in replace_nid.items() if k != v}
+    layer_nodes = layer_nodes.reset_index(drop=True)
+    layer_links = layer_links.replace({'source': replace_nid, 'target': replace_nid})
+    return layer_nodes, layer_links

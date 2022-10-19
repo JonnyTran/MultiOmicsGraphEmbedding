@@ -12,51 +12,64 @@ from plotly.subplots import make_subplots
 from scipy.sparse import coo_matrix
 from sklearn.metrics import classification_report
 
-from moge.visualization.utils import configure_layout
+from moge.visualization.utils import configure_layout, group_axis_ticks
 
 hv.extension('plotly')
 
 
-def rasterize_matrix(mtx: pd.DataFrame, x_label="X", y_label="Y", size=1000):
-    if isinstance(mtx, pd.DataFrame):
-        x_label = mtx.columns.name
-        y_label = mtx.index.name
-    width = max(int(size * mtx.shape[1] / sum(mtx.shape)), 500)
-    height = max(int(size * mtx.shape[0] / sum(mtx.shape)), 500)
+def rasterize_matrix(df: pd.DataFrame, x_label="X", y_label="Y", size=1000, **kwargs):
+    layout_args = dict()
+    if isinstance(df, pd.DataFrame):
+        y_label = df.index.name if df.index.name else df.index.names[0]
+        x_label = df.columns.name if df.columns.name else df.columns.names[0]
 
-    img = hv.Image((np.arange(mtx.shape[1]), np.arange(mtx.shape[0]), mtx))
-    rasterized_img = rasterize(img, width=width, height=height)
+        grouped_xticks = group_axis_ticks(df.index, level=0)
+        grouped_yticks = group_axis_ticks(df.columns, level=0)
+        layout_args = dict(
+            xaxis_tickmode='array', yaxis_tickmode='array',
+            xaxis_tickvals=grouped_xticks.values, xaxis_ticktext=grouped_xticks.index,
+            yaxis_tickvals=grouped_yticks.values, yaxis_ticktext=grouped_yticks.index,
+        )
+        if grouped_xticks.index.dtype == 'O':
+            layout_args['xaxis_tickangle'] = 90
+
+    width = max(int(size * df.shape[1] / sum(df.shape)), 500)
+    height = max(int(size * df.shape[0] / sum(df.shape)), 500)
+
+    img = hv.Image((np.arange(df.shape[1]), np.arange(df.shape[0]), df))
+    rasterized_img: hv.Image = rasterize(img, width=width, height=height)
 
     rasterized_img.opts(width=width, height=height, xlabel=x_label, ylabel=y_label)
     rasterized_img.opts(invert_yaxis=True, cmap=px.colors.sequential.Plasma, logz=True,
                         show_legend=True)
 
     fig = hv.render(rasterized_img, backend="plotly")
-    return go.Figure(fig)
+    go_fig = go.Figure(fig).update_layout(**layout_args, **kwargs)
+    return go_fig
 
 
-def heatmap_fast(arr: pd.DataFrame, row_label="row", col_label="col", size=1000, agg="mean", **kwargs):
-    if isinstance(arr, pd.DataFrame):
-        if isinstance(arr.index, pd.MultiIndex):
-            rows = arr.index.get_level_values(0)
-            row_label = arr.index.names[0]
+def heatmap_fast(df: pd.DataFrame, row_label="row", col_label="col", size=1000, agg="mean", **kwargs):
+    if isinstance(df, pd.DataFrame):
+        if isinstance(df.index, pd.MultiIndex):
+            rows = df.index.get_level_values(0)
+            row_label = df.index.names[0]
         else:
-            rows, row_label = arr.index, arr.index.name
+            rows, row_label = df.index, df.index.name
 
-        if isinstance(arr.columns, pd.MultiIndex):
-            cols = arr.columns.get_level_values(0)
-            col_label = arr.columns.names[0]
+        if isinstance(df.columns, pd.MultiIndex):
+            cols = df.columns.get_level_values(0)
+            col_label = df.columns.names[0]
         else:
-            cols, col_label = arr.columns, arr.columns.name
+            cols, col_label = df.columns, df.columns.name
 
     else:
-        rows = np.arange(arr.shape[0])
-        cols = np.arange(arr.shape[1])
+        rows = np.arange(df.shape[0])
+        cols = np.arange(df.shape[1])
 
-    pw_s = xr.DataArray(arr, coords=[(row_label, rows), (col_label, cols)])
+    pw_s = xr.DataArray(df, coords=[(row_label, rows), (col_label, cols)])
 
-    plot_width = int(size * len(cols) / sum(arr.shape))
-    plot_height = int(size * len(rows) / sum(arr.shape))
+    plot_width = int(size * len(cols) / sum(df.shape))
+    plot_height = int(size * len(rows) / sum(df.shape))
     cvs = ds.Canvas(plot_height=plot_height, plot_width=plot_width,
                     # x_range=(0, arr.shape[1]),
                     # y_range=(0, arr.shape[0])
