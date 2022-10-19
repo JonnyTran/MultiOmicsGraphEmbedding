@@ -12,18 +12,18 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
-from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
-    untag_negative_metapath
-from moge.network.attributed import AttributedNetwork
-from moge.network.base import SEQUENCE_COL
-from moge.network.train_test_split import TrainTestSplit
-from moge.network.utils import parse_labels
 from pandas import Series, Index, DataFrame
 from scipy.sparse import csr_matrix
 from torch import Tensor
 from torch_geometric.data import HeteroData
 from torch_sparse import SparseTensor
 
+from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
+    untag_negative_metapath
+from moge.network.attributed import AttributedNetwork
+from moge.network.base import SEQUENCE_COL
+from moge.network.train_test_split import TrainTestSplit
+from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
 
@@ -659,9 +659,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             hetero[metapath].edge_index, edge_attrs = get_edge_index_values(
                 self.networks[metapath],
                 nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
-                format='pyg',
                 edge_attrs=["train_mask", "valid_mask", "test_mask"] \
-                    if 'edge' in train_test_split or inductive else None
+                    if 'edge' in train_test_split or inductive else None,
+                format='pyg',
             )
 
             for edge_attr, edge_value in edge_attrs.items():
