@@ -47,12 +47,12 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
     )
 
     if 'layer' in nodes.columns:
-        max_level = nodes['level'].max() - 1
+        max_level = nodes['level'].max()
         for layer in nodes['layer'].unique():
-            level = (max_level - (nodes.query(f'layer == {layer}')['level'] - 1)).max()
-            # if level != max_level:
-            #     level += 1
-            fig.add_vline(x=level / max_level, annotation_text=f'Layer {layer + 1}', layer='below',
+            level = (max_level - nodes.query(f'layer == {layer}')['level']).max() + 1
+            level = min(level, max_level - 1)
+            # print(layer, level, max_level-1, level / (max_level-1))
+            fig.add_vline(x=level / (max_level - 1), annotation_text=f'Layer {layer + 1}', layer='below',
                           line_dash="dot", line_color="gray", opacity=0.25, annotation_position="top left")
 
     fig = configure_layout(fig, paper_bgcolor='rgba(255,255,255,255)',

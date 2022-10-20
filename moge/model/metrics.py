@@ -505,14 +505,14 @@ class FMax_Slow(torchmetrics.Metric):
 
         if not isinstance(targets, ssp.csr_matrix):
             targets = ssp.csr_matrix(targets)
-        if not isinstance(scores, ssp.csr_matrix):
-            scores = ssp.csr_matrix(scores)
+        targets_sum = targets.sum(axis=1)
 
         for thresh in thresholds:
-            cut_sc = (scores > thresh).astype(np.int32)
+            cut_sc = ssp.csr_matrix(scores > thresh).astype(np.int32)
             correct = cut_sc.multiply(targets).sum(axis=1)
 
-            p, r = correct / cut_sc.sum(axis=1), correct / targets.sum(axis=1)
+            p = correct / cut_sc.sum(axis=1)
+            r = correct / targets_sum
             p, r = np.average(p[np.invert(np.isnan(p))]), np.average(r)
             if np.isnan(p):
                 continue

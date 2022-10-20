@@ -239,14 +239,14 @@ class LATTENodeClf(NodeClfTrainer):
         for batch in tqdm.tqdm(dataloader, desc='Predict dataloader'):
             X, y_true, weights = to_device(batch, device=self.device)
             h_dict, logits = self.forward(X, save_betas=save_betas, return_embeddings=True)
-            y_pred = activation(logits, loss_type=self.hparams.loss_type)
+            y_pred = activation(logits, loss_type=self.hparams['loss_type'])
 
             y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
             y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
             mask = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
 
             y_true = y_true[mask]
-            y_pred = activation(y_pred[mask], loss_type=self.hparams["loss_type"])
+            y_pred = y_pred[mask]
             emb: Tensor = h_dict[self.head_node_type][mask]
 
             global_node_index = X["global_node_index"][-1] \
