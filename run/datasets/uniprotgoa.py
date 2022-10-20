@@ -1,6 +1,8 @@
+import os.path
 import pickle
 from argparse import Namespace
 from collections import defaultdict
+from collections.abc import Iterable
 
 import dgl
 import numpy as np
@@ -10,30 +12,42 @@ from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index_dict
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
-from moge.model.utils import tensor_sizes
 from moge.network.hetero import HeteroNetwork
 from openomics.database.ontology import UniProtGOA
 
 
-def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroNodeClfDataset:
+def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
+                    uniprotgoa_path='~/Bioinformatics_ExternalData/UniProtGOA/goa_uniprot_all.processed.parquet') \
+        -> HeteroNodeClfDataset:
     use_reverse = hparams.use_reverse
     head_node_type = hparams.head_node_type
 
     # Set ntypes to include
-    hparams.ntype_subset = hparams.ntype_subset.split(" ") \
-        if 'ntype_subset' in hparams and hparams.ntype_subset else None
-    hparams.pred_ntypes = hparams.pred_ntypes.split(" ") \
-        if 'pred_ntypes' in hparams and hparams.pred_ntypes else []
+    if 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, str):
+        hparams.ntype_subset = hparams.ntype_subset.split(" ")
+    elif 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, Iterable):
+        pass
+    else:
+        hparams.ntype_subset = None
+
+    if 'pred_ntypes' in hparams and isinstance(hparams.pred_ntypes, str):
+        hparams.pred_ntypes = hparams.pred_ntypes.split(" ")
+    elif 'pred_ntypes' in hparams and isinstance(hparams.pred_ntypes, Iterable):
+        pass
+    else:
+        raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
 
     # Set etypes to include
-    if 'etype_subset' in hparams and hparams.etype_subset:
+    if 'etype_subset' in hparams and isinstance(hparams.etype_subset, str):
         hparams.etype_subset = hparams.etype_subset.split(" ")
+    elif 'etype_subset' in hparams and isinstance(hparams.etype_subset, Iterable):
+        pass
     else:
         hparams.etype_subset = None
 
-    geneontology = UniProtGOA(path='~/Bioinformatics_ExternalData/UniProtGOA/',
+    geneontology = UniProtGOA(path=os.path.dirname(uniprotgoa_path),
                               file_resources={"go.obo": "http://current.geneontology.org/ontology/go.obo",
-                                              "goa_uniprot_all.processed.parquet": "goa_uniprot_all.processed.parquet"},
+                                              "goa_uniprot_all.processed.parquet": uniprotgoa_path},
                               species=None)
 
     all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
@@ -77,20 +91,19 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     network.train_nodes[head_node_type] = set(annot_df.query('train_mask == True').index)
     network.valid_nodes[head_node_type] = set(annot_df.query('valid_mask == True').index)
     network.test_nodes[head_node_type] = set(annot_df.query('test_mask == True').index)
-    network.set_edge_traintest_mask()
+    if hparams.inductive:
+        network.set_edge_traintest_mask()
 
     # Set classes
-    if isinstance(hparams.pred_ntypes, str):
-        hparams.pred_ntypes = hparams.pred_ntypes.split(" ")
-        go_classes = geneontology.data.index[geneontology.data['namespace'].isin(hparams.pred_ntypes)]
-    else:
-        raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
+    go_classes = geneontology.data.index[geneontology.data['namespace'].isin(hparams.pred_ntypes)]
 
     # Neighbor loader
+    max_order = max(hparams.n_layers, hparams.t_order if 't_order' in hparams else 0)
+
     if hparams.neighbor_loader == "NeighborLoader":
-        hparams.neighbor_sizes = [8] * hparams.n_layers
+        hparams.neighbor_sizes = [8] * max_order
     else:
-        hparams.neighbor_sizes = [hparams.n_neighbors] * max(hparams.n_layers, hparams.t_order)
+        hparams.neighbor_sizes = [hparams.n_neighbors] * max_order
 
     # Sequences
     if hasattr(hparams, 'sequence') and hparams.sequence:
@@ -121,12 +134,11 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
         inductive=hparams.inductive,
         pred_ntypes=hparams.pred_ntypes,
         ntype_subset=hparams.ntype_subset \
-            if hparams.ntype_subset else set(network.nodes.keys()).difference([hparams.pred_ntypes]),
+            if hparams.ntype_subset else set(network.nodes.keys()).difference(hparams.pred_ntypes),
         exclude_etypes=[
             (head_node_type, 'associated', go_ntype) for go_ntype in hparams.pred_ntypes], )
 
     dataset._name = name
-    print(dataset.G)
 
     # Create cls_graph at output layer
     if set(dataset.nodes.keys()).isdisjoint(hparams.pred_ntypes) and 'cls_graph' in hparams and hparams.cls_graph:
@@ -137,12 +149,5 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace) -> HeteroN
     else:
         hparams.cls_graph = None
 
-    print(pd.DataFrame(tensor_sizes(dict(
-        train={ntype: dataset.G[ntype].train_mask.sum() for ntype in dataset.G.node_types if
-               hasattr(dataset.G[ntype], 'train_mask')},
-        valid={ntype: dataset.G[ntype].valid_mask.sum() for ntype in dataset.G.node_types if
-               hasattr(dataset.G[ntype], 'valid_mask')},
-        test={ntype: dataset.G[ntype].test_mask.sum() for ntype in dataset.G.node_types if
-              hasattr(dataset.G[ntype], 'test_mask')}))).T)
 
     return dataset

@@ -91,7 +91,7 @@ class Graph:
 
     def create_node_metadata(
             self,
-            network: HeteroNetwork,
+            annotations: Dict[str, pd.DataFrame],
             nodes: Dict[str, Union[pd.Index, List[str]]],
             columns=["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
                      "gene_name", "species_id", "RNA type", "gene_biotype", "transcript_biotype", "seqname", "length"],
@@ -100,7 +100,7 @@ class Graph:
         """
         Initialize hetero node features from `annotations`
         Args:
-            network ():
+            annotations ():
             nodes ():
             columns ():
             rename_mapper ():
@@ -116,7 +116,7 @@ class Graph:
 
         dfs = []
         for ntype, node_list in nodes.items():
-            ann: DataFrame = network.annotations[ntype].loc[nodes[ntype]]
+            ann: DataFrame = annotations[ntype].loc[nodes[ntype]]
             if hasattr(self, 'nodes_namespace') and ntype in self.nodes_namespace:
                 ann['namespace'] = ann.index.map(self.nodes_namespace[ntype])
 
@@ -158,7 +158,9 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                                       DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  pred_ntypes=None,
-                 edge_dir: str = "in", add_reverse_metapaths: bool = True, inductive: bool = False, **kwargs):
+                 classes=None,
+                 edge_dir: str = "in", add_reverse_metapaths: bool = True, inductive: bool = False,
+                 name=None, **kwargs):
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
@@ -166,6 +168,9 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         self.head_node_type: str = head_node_type
         self.inductive = inductive
         self.pred_ntypes = pred_ntypes
+        self.classes = classes
+        if name:
+            self._name = name
 
         # OGB Datasets
         if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):

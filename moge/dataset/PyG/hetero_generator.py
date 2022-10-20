@@ -1,3 +1,8 @@
+import os
+import pickle
+from argparse import Namespace
+from os.path import join
+from pathlib import Path
 from pprint import pprint
 from typing import List, Tuple, Union, Dict, Optional, Callable
 
@@ -15,6 +20,7 @@ from torch_sparse.tensor import SparseTensor
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.io import get_attrs
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
     get_relabled_edge_index, is_negative
@@ -60,7 +66,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                        for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
 
         # Add reverse metapaths to allow reverse message passing for directed edges
-        if self.use_reverse:
+        if self.use_reverse and not any('rev_' in metapath[1] for metapath in hetero.edge_index_dict):
             transform = T.ToUndirected(merge=False)
             hetero: HeteroData = transform(hetero)
 
@@ -118,6 +124,57 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                         {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 
         return self
+
+    @classmethod
+    def load(cls, path: Path, **kwargs):
+        if isinstance(path, str) and '~' in path:
+            path = os.path.expanduser(path)
+
+        hetero: HeteroData = torch.load(join(path, 'heterodata.pt'))
+
+        with open(join(path, 'attrs.pickle'), 'rb') as f:
+            attrs: Dict = pickle.load(f)
+        if kwargs:
+            attrs.update(kwargs)
+
+        self = cls(hetero, **attrs)
+
+        self._name = os.path.basename(path)
+
+        self.network = Namespace()
+        self.network.annotations = {}
+        for ntype in hetero.node_types:
+            if os.path.exists(join(path, f'{ntype}.pickle')):
+                self.network.annotations[ntype] = pd.read_pickle(join(path, f'{ntype}.pickle'))
+            elif os.path.exists(join(path, f'{ntype}.parquet')):
+                self.network.annotations[ntype] = pd.read_parquet(join(path, f'{ntype}.parquet'))
+
+        nodes = pd.read_pickle(join(path, 'nodes.pickle'))
+        self.nodes = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
+        return self
+
+    def save(self, path):
+        if isinstance(path, str) and '~' in path:
+            path = os.path.expanduser(path)
+
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        if isinstance(self.network.nodes, (pd.Index, pd.Series)):
+            self.network.nodes.to_pickle(join(path, 'nodes.pickle'))
+        elif isinstance(self.network.nodes, dict):
+            with open(join(path, 'nodes.pickle'), 'wb') as f:
+                pickle.dump(self.network.nodes, f)
+
+        for ntype, df in self.network.annotations.items():
+            df.to_pickle(join(path, f'{ntype}.pickle'))
+
+        torch.save(self.G, join(path, 'heterodata.pt'))
+
+        attrs = get_attrs(self, exclude={'x_dict', 'y_dict', 'edge_index_dict', 'global_node_index',
+                                         'nodes', 'node_attr_shape', 'node_attr_sparse', 'num_nodes_dict'})
+        with open(join(path, 'attrs.pickle'), 'wb') as f:
+            pickle.dump(attrs, f)
 
     @property
     def class_indices(self) -> Optional[Dict[str, Tensor]]:
@@ -268,7 +325,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             node_metadata (DataFrame)
         """
         # if not hasattr(self, "node_metadata"):
-        self.create_node_metadata(self.network, nodes=self.nodes)
+        self.create_node_metadata(self.network.annotations, nodes=self.nodes)
 
         global_node_index = {ntype: nids.numpy() if isinstance(nids, Tensor) else nids \
                              for ntype, nids in global_node_index.items() \

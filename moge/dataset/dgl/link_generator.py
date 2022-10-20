@@ -223,7 +223,7 @@ class DGLLinkGenerator(DGLNodeGenerator):
             node_metadata (DataFrame)
         """
         if not hasattr(self, "node_metadata"):
-            self.create_node_metadata(self.network, nodes=self.nodes)
+            self.create_node_metadata(self.network.annotations, nodes=self.nodes)
 
         global_node_index = {ntype: nids.numpy() for ntype, nids in global_node_index.items() \
                              if ntype in embeddings}
