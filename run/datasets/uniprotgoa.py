@@ -133,10 +133,8 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
         seq_tokenizer=sequence_tokenizers,
         inductive=hparams.inductive,
         pred_ntypes=hparams.pred_ntypes,
-        ntype_subset=hparams.ntype_subset \
-            if hparams.ntype_subset else set(network.nodes.keys()).difference(hparams.pred_ntypes),
-        exclude_etypes=[
-            (head_node_type, 'associated', go_ntype) for go_ntype in hparams.pred_ntypes], )
+        ntype_subset=hparams.ntype_subset,
+        exclude_etypes=[(head_node_type, 'associated', go_ntype) for go_ntype in hparams.pred_ntypes], )
 
     dataset._name = name
 
@@ -148,6 +146,5 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
         hparams.cls_graph = cls_network
     else:
         hparams.cls_graph = None
-
 
     return dataset

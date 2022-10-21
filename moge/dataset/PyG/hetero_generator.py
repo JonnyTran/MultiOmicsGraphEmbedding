@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 from argparse import Namespace
@@ -132,7 +133,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         hetero: HeteroData = torch.load(join(path, 'heterodata.pt'))
 
-        with open(join(path, 'attrs.pickle'), 'rb') as f:
+        with open(join(path, 'metadata.pickle'), 'rb') as f:
             attrs: Dict = pickle.load(f)
         if kwargs:
             attrs.update(kwargs)
@@ -172,9 +173,28 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         torch.save(self.G, join(path, 'heterodata.pt'))
 
         attrs = get_attrs(self, exclude={'x_dict', 'y_dict', 'edge_index_dict', 'global_node_index',
-                                         'nodes', 'node_attr_shape', 'node_attr_sparse', 'num_nodes_dict'})
-        with open(join(path, 'attrs.pickle'), 'wb') as f:
+                                         'nodes', 'node_attr_shape', 'node_attr_sparse', 'num_nodes_dict',
+                                         'node_degrees', 'node_mask_counts', 'node_metadata', 'class_indices'})
+        with open(join(path, 'metadata.pickle'), 'wb') as f:
             pickle.dump(attrs, f)
+
+        # Write metadata to JSON so can be readable
+        def dumper(obj):
+            try:
+                if hasattr(obj, 'toJSON'):
+                    return obj.toJSON()
+                elif isinstance(obj, np.ndarray):
+                    return obj.shape
+                elif isinstance(obj, (pd.Series, pd.Index, pd.DataFrame)):
+                    return obj.shape
+            except:
+                return obj.__dict__
+
+        metadata = json.dumps(attrs, indent=4, default=dumper)
+
+        # Writing to metadata.json
+        with open(join(path, "metadata.json"), "w") as outfile:
+            outfile.write(metadata)
 
     @property
     def class_indices(self) -> Optional[Dict[str, Tensor]]:
