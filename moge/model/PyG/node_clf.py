@@ -34,8 +34,9 @@ from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activat
 
 
 class LATTENodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["accuracy"],
-                 collate_fn="neighbor_sampler") -> None:
+    def __init__(
+        self, hparams, dataset: HeteroGraphDataset, metrics=["accuracy"], collate_fn="neighbor_sampler"
+    ) -> None:
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
@@ -48,24 +49,26 @@ class LATTENodeClf(NodeClfTrainer):
         self.collate_fn = collate_fn
 
         # Node attr input
-        if hasattr(dataset, 'seq_tokenizer'):
+        if hasattr(dataset, "seq_tokenizer"):
             self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
         if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.node_types):
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
-        self.embedder = LATTE(n_layers=hparams.n_layers,
-                              t_order=min(hparams.t_order, hparams.n_layers),
-                              embedding_dim=hparams.embedding_dim,
-                              num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(k_hop=True if "khop" in collate_fn else None),
-                              activation=hparams.activation,
-                              attn_heads=hparams.attn_heads,
-                              attn_activation=hparams.attn_activation,
-                              attn_dropout=hparams.attn_dropout,
-                              layer_pooling=hparams.layer_pooling if 'layer_pooling' in hparams else 'last',
-                              edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
-                              hparams=hparams)
+        self.embedder = LATTE(
+            n_layers=hparams.n_layers,
+            t_order=min(hparams.t_order, hparams.n_layers),
+            embedding_dim=hparams.embedding_dim,
+            num_nodes_dict=dataset.num_nodes_dict,
+            metapaths=dataset.get_metapaths(k_hop=True if "khop" in collate_fn else None),
+            activation=hparams.activation,
+            attn_heads=hparams.attn_heads,
+            attn_activation=hparams.attn_activation,
+            attn_dropout=hparams.attn_dropout,
+            layer_pooling=hparams.layer_pooling if "layer_pooling" in hparams else "last",
+            edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
+            hparams=hparams,
+        )
 
         if hparams.layer_pooling == "concat":
             hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
@@ -73,7 +76,9 @@ class LATTENodeClf(NodeClfTrainer):
         elif hparams.layer_pooling == "order_concat":
             hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
         else:
-            assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
+            assert (
+                "concat" not in hparams.layer_pooling
+            ), "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
         if "cls_graph" in hparams and hparams.cls_graph:
             self.classifier = LabelGraphNodeClassifier(dataset, hparams)
@@ -81,13 +86,17 @@ class LATTENodeClf(NodeClfTrainer):
             self.classifier = DenseClassification(hparams)
 
         self.criterion = ClassificationLoss(
-            loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                 'use_class_weights' in hparams and hparams.use_class_weights else None,
-            pos_weight=dataset.pos_weight if hasattr(dataset, "pos_weight") and
-                                             'use_pos_weights' in hparams and hparams.use_pos_weights else None,
+            loss_type=hparams.loss_type,
+            n_classes=dataset.n_classes,
+            class_weight=dataset.class_weight
+            if hasattr(dataset, "class_weight") and "use_class_weights" in hparams and hparams.use_class_weights
+            else None,
+            pos_weight=dataset.pos_weight
+            if hasattr(dataset, "pos_weight") and "use_pos_weights" in hparams and hparams.use_pos_weights
+            else None,
             multilabel=dataset.multilabel,
-            reduction="mean" if "reduction" not in hparams else hparams.reduction)
+            reduction="mean" if "reduction" not in hparams else hparams.reduction,
+        )
 
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
@@ -95,7 +104,7 @@ class LATTENodeClf(NodeClfTrainer):
         self.reset_parameters()
 
     def reset_parameters(self):
-        gain = nn.init.calculate_gain('relu')
+        gain = nn.init.calculate_gain("relu")
 
         if hasattr(self, "feature_projection"):
             for ntype in self.feature_projection:
@@ -106,23 +115,26 @@ class LATTENodeClf(NodeClfTrainer):
             self._node_ids = inputs["global_node_index"]
 
         h_out = {}
-        if 'sequences' in inputs and hasattr(self, "seq_encoder"):
-            h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 4)))
+        if "sequences" in inputs and hasattr(self, "seq_encoder"):
+            h_out.update(
+                self.seq_encoder.forward(inputs["sequences"], split_batch_size=math.sqrt(self.hparams.batch_size // 4))
+            )
 
         input_nodes = inputs["global_node_index"][0]
         if len(h_out) < len(input_nodes.keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=input_nodes)
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        h_out, edge_pred_dict = self.embedder.forward(h_out,
-                                                      inputs["edge_index"],
-                                                      inputs["sizes"],
-                                                      inputs["global_node_index"], **kwargs)
+        h_out, edge_pred_dict = self.embedder.forward(
+            h_out, inputs["edge_index"], inputs["sizes"], inputs["global_node_index"], **kwargs
+        )
 
         if isinstance(self.head_node_type, str):
-            logits = self.classifier(h_out[self.head_node_type]) \
-                if hasattr(self, "classifier") else h_out[self.head_node_type]
+            logits = (
+                self.classifier(h_out[self.head_node_type])
+                if hasattr(self, "classifier")
+                else h_out[self.head_node_type]
+            )
 
         elif isinstance(self.head_node_type, Iterable):
             if hasattr(self, "classifier"):
@@ -156,7 +168,8 @@ class LATTENodeClf(NodeClfTrainer):
 
         scores, y_true, weights = stack_tensor_dicts(scores, y_true, weights)
         scores, y_true, weights = filter_samples_weights(y_pred=scores, y_true=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
+        if y_true.size(0) == 0:
+            return torch.tensor(0.0, requires_grad=True)
 
         loss = self.criterion.forward(scores, y_true, weights=weights)
         self.update_node_clf_metrics(self.train_metrics, scores, y_true, weights)
@@ -177,7 +190,8 @@ class LATTENodeClf(NodeClfTrainer):
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
+        if y_true.size(0) == 0:
+            return torch.tensor(0.0, requires_grad=True)
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
@@ -192,7 +206,8 @@ class LATTENodeClf(NodeClfTrainer):
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
+        if y_true.size(0) == 0:
+            return torch.tensor(0.0, requires_grad=True)
 
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 
@@ -216,8 +231,9 @@ class LATTENodeClf(NodeClfTrainer):
         return predict_loss
 
     @torch.no_grad()
-    def predict(self, dataloader: DataLoader, node_names: pd.Index = None, save_betas=False, **kwargs) \
-            -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, np.ndarray]]:
+    def predict(
+            self, dataloader: DataLoader, node_names: pd.Index = None, save_betas=False, **kwargs
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, np.ndarray]]:
         """
 
         Args:
@@ -236,28 +252,29 @@ class LATTENodeClf(NodeClfTrainer):
         embs = []
         nids = []
 
-        for batch in tqdm.tqdm(dataloader, desc='Predict dataloader'):
-            X, y_true, weights = to_device(batch, device=self.device)
-            h_dict, logits = self.forward(X, save_betas=save_betas, return_embeddings=True)
-            y_pred = activation(logits, loss_type=self.hparams['loss_type'])
+        for batch in tqdm.tqdm(dataloader, desc="Predict dataloader"):
+    X, y_true, weights = to_device(batch, device=self.device)
+    h_dict, logits = self.forward(X, save_betas=save_betas, return_embeddings=True)
+    y_pred = activation(logits, loss_type=self.hparams["loss_type"])
 
-            y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-            y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
-            mask = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
+    y_pred, y_true, weights = concat_dict_batch(X["batch_size"], y_pred, y_true, weights)
+    y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
+    mask = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
 
-            y_true = y_true[mask]
-            y_pred = y_pred[mask]
-            emb: Tensor = h_dict[self.head_node_type][mask]
+    y_true = y_true[mask]
+    y_pred = y_pred[mask]
+    emb: Tensor = h_dict[self.head_node_type][mask]
 
-            global_node_index = X["global_node_index"][-1] \
-                if isinstance(X["global_node_index"], (list, tuple)) else X["global_node_index"]
-            nid = global_node_index[self.head_node_type][mask]
+    global_node_index = (
+        X["global_node_index"][-1] if isinstance(X["global_node_index"], (list, tuple)) else X["global_node_index"]
+    )
+    nid = global_node_index[self.head_node_type][mask]
 
-            # Convert all to CPU device
-            y_trues.append(y_true.cpu().numpy())
-            y_preds.append(y_pred.cpu().numpy())
-            embs.append(emb.cpu().numpy())
-            nids.append(nid.cpu().numpy())
+    # Convert all to CPU device
+    y_trues.append(y_true.cpu().numpy())
+    y_preds.append(y_pred.cpu().numpy())
+    embs.append(emb.cpu().numpy())
+    nids.append(nid.cpu().numpy())
 
         targets = np.concatenate(y_trues, axis=0)
         scores = np.concatenate(y_preds, axis=0)
@@ -296,12 +313,19 @@ class LATTENodeClf(NodeClfTrainer):
                             split_samples = None
                             title = f"{namespace}_PR_Curve"
 
-                        self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
-                                           split_samples=split_samples, title=title)
+                        self.plot_pr_curve(
+                            targets=y_true_dict[namespace],
+                            scores=y_pred_dict[namespace],
+                            split_samples=split_samples,
+                            title=title,
+                        )
 
-                self.plot_embeddings_tsne(global_node_index=global_node_index,
-                                          embeddings={self.head_node_type: embeddings},
-                                          targets=y_true, y_pred=scores)
+                self.plot_embeddings_tsne(
+                    global_node_index=global_node_index,
+                    embeddings={self.head_node_type: embeddings},
+                    targets=y_true,
+                    y_pred=scores,
+                )
                 self.cleanup_artifacts()
 
         except Exception as e:
@@ -326,7 +350,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         self.collate_fn = collate_fn
 
         # Node attr input
-        if hasattr(dataset, 'seq_tokenizer'):
+        if hasattr(dataset, "seq_tokenizer"):
             self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
         if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.node_types):
@@ -335,21 +359,23 @@ class LATTEFlatNodeClf(LATTENodeClf):
         if dataset.pred_ntypes is not None:
             hparams.pred_ntypes = dataset.pred_ntypes
 
-        self.embedder = LATTE_Flat(n_layers=hparams.n_layers,
-                                   t_order=hparams.t_order,
-                                   embedding_dim=hparams.embedding_dim,
-                                   num_nodes_dict=dataset.num_nodes_dict,
-                                   metapaths=dataset.get_metapaths(),
-                                   layer_pooling=hparams.layer_pooling,
-                                   activation=hparams.activation,
-                                   attn_heads=hparams.attn_heads,
-                                   attn_activation=hparams.attn_activation,
-                                   attn_dropout=hparams.attn_dropout,
-                                   edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
-                                   hparams=hparams)
+        self.embedder = LATTE_Flat(
+            n_layers=hparams.n_layers,
+            t_order=hparams.t_order,
+            embedding_dim=hparams.embedding_dim,
+            num_nodes_dict=dataset.num_nodes_dict,
+            metapaths=dataset.get_metapaths(),
+            layer_pooling=hparams.layer_pooling,
+            activation=hparams.activation,
+            attn_heads=hparams.attn_heads,
+            attn_activation=hparams.attn_activation,
+            attn_dropout=hparams.attn_dropout,
+            edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
+            hparams=hparams,
+        )
 
         # Output layer
-        if self.embedder.layer_pooling == 'concat':
+        if self.embedder.layer_pooling == "concat":
             hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
         if "cls_graph" in hparams and hparams.cls_graph is not None:
             self.classifier = LabelGraphNodeClassifier(dataset, hparams)
@@ -359,13 +385,17 @@ class LATTEFlatNodeClf(LATTENodeClf):
             self.classifier = DenseClassification(hparams)
 
         self.criterion = ClassificationLoss(
-            loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                 'use_class_weights' in hparams and hparams.use_class_weights else None,
-            pos_weight=dataset.pos_weight if hasattr(dataset, "pos_weight") and
-                                             'use_pos_weights' in hparams and hparams.use_pos_weights else None,
+            loss_type=hparams.loss_type,
+            n_classes=dataset.n_classes,
+            class_weight=dataset.class_weight
+            if hasattr(dataset, "class_weight") and "use_class_weights" in hparams and hparams.use_class_weights
+            else None,
+            pos_weight=dataset.pos_weight
+            if hasattr(dataset, "pos_weight") and "use_pos_weights" in hparams and hparams.use_pos_weights
+            else None,
             multilabel=dataset.multilabel,
-            reduction=hparams.reduction if "reduction" in hparams else "mean")
+            reduction=hparams.reduction if "reduction" in hparams else "mean",
+        )
 
     def configure_sharded_model(self):
         # modules are sharded across processes
@@ -379,30 +409,37 @@ class LATTEFlatNodeClf(LATTENodeClf):
         if hasattr(self, "encoder"):
             self.encoder = auto_wrap(self.encoder)
 
-    def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]],
-                return_embeddings=False, **kwargs) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+    def forward(
+            self,
+            inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]],
+            return_embeddings=False,
+            **kwargs,
+    ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
         h_out = {}
-        if 'sequences' in inputs and hasattr(self, "seq_encoder"):
-            h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 4)))
+        if "sequences" in inputs and hasattr(self, "seq_encoder"):
+            h_out.update(
+                self.seq_encoder.forward(inputs["sequences"], split_batch_size=math.sqrt(self.hparams.batch_size // 4))
+            )
 
         if len(h_out) < len(inputs["global_node_index"].keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        h_out = self.embedder.forward(h_out,
-                                      edge_index_dict=inputs["edge_index_dict"],
-                                      global_node_index=inputs["global_node_index"],
-                                      batch_sizes=inputs["batch_size"],
-                                      **kwargs)
+        h_out = self.embedder.forward(
+            h_out,
+            edge_index_dict=inputs["edge_index_dict"],
+            global_node_index=inputs["global_node_index"],
+            batch_sizes=inputs["batch_size"],
+            **kwargs,
+        )
 
         if hasattr(self, "classifier"):
             head_ntype_embeddings = h_out[self.head_node_type]
             if "batch_size" in inputs and self.head_node_type in inputs["batch_size"]:
-                head_ntype_embeddings = head_ntype_embeddings[:inputs["batch_size"][self.head_node_type]]
+                head_ntype_embeddings = head_ntype_embeddings[: inputs["batch_size"][self.head_node_type]]
 
             logits = self.classifier.forward(head_ntype_embeddings, h_dict=h_out)
         else:
@@ -417,7 +454,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         X, y_true, weights = batch
         y_pred = self.forward(X)
 
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X["batch_size"], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
@@ -434,7 +471,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         X, y_true, weights = batch
         y_pred = self.forward(X)
 
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X["batch_size"], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
@@ -443,7 +480,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
 
-        self.log("val_loss", val_loss, )
+        self.log("val_loss", val_loss)
 
         return val_loss
 
@@ -451,7 +488,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         X, y_true, weights = batch
         y_pred = self.forward(X, save_betas=batch_nb == 0)
 
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X["batch_size"], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
@@ -498,11 +535,17 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
         num_nodes_dict = dataset.get_num_nodes_dict(dataset.edge_index_dict)
 
-        super(MetaPath2Vec, self).__init__(edge_index_dict=edge_index_dict, embedding_dim=embedding_dim,
-                                           metapath=metapaths, walk_length=walk_length, context_size=context_size,
-                                           walks_per_node=walks_per_node,
-                                           num_negative_samples=num_negative_samples, num_nodes_dict=num_nodes_dict,
-                                           sparse=hparams.sparse)
+        super(MetaPath2Vec, self).__init__(
+            edge_index_dict=edge_index_dict,
+            embedding_dim=embedding_dim,
+            metapath=metapaths,
+            walk_length=walk_length,
+            context_size=context_size,
+            walks_per_node=walks_per_node,
+            num_negative_samples=num_negative_samples,
+            num_nodes_dict=num_nodes_dict,
+            sparse=hparams.sparse,
+        )
 
         hparams.name = self.name()
         hparams.n_params = self.get_n_params()
@@ -569,18 +612,17 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         self.log_dict(logs, prog_bar=True)
         return None
 
-    def sample(self, src: torch_sparse.SparseTensor, num_neighbors: int,
-               subset=None) -> torch.Tensor:
+    def sample(self, src: torch_sparse.SparseTensor, num_neighbors: int, subset=None) -> torch.Tensor:
 
-        rowptr, col, _ = src.csr()
-        rowcount = src.storage.rowcount()
+    rowptr, col, _ = src.csr()
+    rowcount = src.storage.rowcount()
 
-        if subset is not None:
-            rowcount = rowcount[subset]
-            rowptr = rowptr[subset]
+    if subset is not None:
+        rowcount = rowcount[subset]
+        rowptr = rowptr[subset]
 
-        rand = torch.rand((rowcount.size(0), num_neighbors), device=col.device)
-        rand.mul_(rowcount.to(rand.dtype).view(-1, 1))
+    rand = torch.rand((rowcount.size(0), num_neighbors), device=col.device)
+    rand.mul_(rowcount.to(rand.dtype).view(-1, 1))
         rand = rand.to(torch.long)
         rand.add_(rowptr.view(-1, 1))
 
@@ -604,8 +646,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         walks = []
         num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
         for j in range(num_walks_per_rw):
-            walks.append(rw[:, j:j + self.context_size])
-        return torch.cat(walks, dim=0)
+            walks.append(rw[:, j : j + self.context_size])return torch.cat(walks, dim=0)
 
     def neg_sample(self, batch):
         batch = batch.repeat(self.walks_per_node * self.num_negative_samples)
@@ -613,8 +654,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         rws = [batch]
         for i in range(self.walk_length):
             keys = self.metapath[i % len(self.metapath)]
-            batch = torch.randint(0, self.num_nodes_dict[keys[-1]],
-                                  (batch.size(0),), dtype=torch.long)
+            batch = torch.randint(0, self.num_nodes_dict[keys[-1]], (batch.size(0),), dtype=torch.long)
             rws.append(batch)
 
         rw = torch.stack(rws, dim=-1)
@@ -623,7 +663,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         walks = []
         num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
         for j in range(num_walks_per_rw):
-            walks.append(rw[:, j:j + self.context_size])
+            walks.append(rw[:, j: j + self.context_size])
         return torch.cat(walks, dim=0)
 
     def collate_fn(self, batch):
@@ -631,36 +671,43 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             batch = torch.tensor(batch)
         return self.pos_sample(batch), self.neg_sample(batch)
 
-    def train_dataloader(self, ):
-        loader = torch.utils.data.DataLoader(range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
-                                             batch_size=self.hparams.batch_size,
-                                             shuffle=True, num_workers=0,
-                                             collate_fn=self.collate_fn,
-                                             )
+    def train_dataloader(self):
+        loader = torch.utils.data.DataLoader(
+            range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
+            batch_size=self.hparams.batch_size,
+            shuffle=True,
+            num_workers=0,
+            collate_fn=self.collate_fn,
+        )
         return loader
 
-    def val_dataloader(self, ):
-        loader = torch.utils.data.DataLoader(self.dataset.validation_idx,
-                                             batch_size=self.hparams.batch_size,
-                                             shuffle=False, num_workers=0,
-                                             collate_fn=self.collate_fn, )
+    def val_dataloader(self):
+        loader = torch.utils.data.DataLoader(
+            self.dataset.validation_idx,
+            batch_size=self.hparams.batch_size,
+            shuffle=False,
+            num_workers=0,
+            collate_fn=self.collate_fn,
+        )
         return loader
 
-    def test_dataloader(self, ):
-        loader = torch.utils.data.DataLoader(self.dataset.testing_idx,
-                                             batch_size=self.hparams.batch_size,
-                                             shuffle=False, num_workers=0,
-                                             collate_fn=self.collate_fn, )
+    def test_dataloader(self):
+        loader = torch.utils.data.DataLoader(
+            self.dataset.testing_idx,
+            batch_size=self.hparams.batch_size,
+            shuffle=False,
+            num_workers=0,
+            collate_fn=self.collate_fn,
+        )
         return loader
 
     def classification_results(self, training=True, testing=False):
         if training:
-            z = self.forward(self.head_node_type,
-                             batch=self.dataset.training_idx)
+            z = self.forward(self.head_node_type, batch=self.dataset.training_idx)
             y = self.dataset.y_dict[self.head_node_type][self.dataset.training_idx]
 
             perm = torch.randperm(z.size(0))
-            train_perm = perm[:int(z.size(0) * self.dataset.train_ratio)]
+            train_perm = perm[: int(z.size(0) * self.dataset.train_ratio)]
             test_perm = perm[int(z.size(0) * self.dataset.train_ratio):]
 
             if y.dim() > 1 and y.size(1) > 1:
@@ -670,20 +717,20 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
                 multilabel = False
                 clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150)
 
-            clf.fit(z[train_perm].detach().cpu().numpy(),
-                    y[train_perm].detach().cpu().numpy())
+            clf.fit(z[train_perm].detach().cpu().numpy(), y[train_perm].detach().cpu().numpy())
 
             y_pred = clf.predict(z[test_perm].detach().cpu().numpy())
             y_test = y[test_perm].detach().cpu().numpy()
         else:
-            z_train = self.forward(self.head_node_type,
-                                   batch=self.dataset.training_idx)
+            z_train = self.forward(self.head_node_type, batch=self.dataset.training_idx)
             y_train = self.dataset.y_dict[self.head_node_type][self.dataset.training_idx]
 
-            z = self.forward(self.head_node_type,
-                             batch=self.dataset.validation_idx if not testing else self.dataset.testing_idx)
+            z = self.forward(
+                self.head_node_type, batch=self.dataset.validation_idx if not testing else self.dataset.testing_idx
+            )
             y = self.dataset.y_dict[self.head_node_type][
-                self.dataset.validation_idx if not testing else self.dataset.testing_idx]
+                self.dataset.validation_idx if not testing else self.dataset.testing_idx
+            ]
 
             if y_train.dim() > 1 and y_train.size(1) > 1:
                 multilabel = True
@@ -696,8 +743,9 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             y_pred = clf.predict(z.detach().cpu().numpy())
             y_test = y.detach().cpu().numpy()
 
-        result = dict(zip(["precision", "recall", "f1"],
-                          precision_recall_fscore_support(y_test, y_pred, average="micro")))
+        result = dict(
+            zip(["precision", "recall", "f1"], precision_recall_fscore_support(y_test, y_pred, average="micro"))
+        )
         result["acc" if not multilabel else "accuracy"] = result["precision"]
         return result
 
@@ -709,15 +757,19 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
 
-        return {"optimizer": optimizer,
-                "lr_scheduler": scheduler,
-                "monitor": "val_loss"}
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
 class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
     dataset: HeteroNodeClfDataset
-    def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset,
-                 metrics: Dict[str, List[str]] = ["obgn-mag"], collate_fn=None) -> None:
+
+    def __init__(
+            self,
+            hparams: Namespace,
+            dataset: HeteroNodeClfDataset,
+            metrics: Dict[str, List[str]] = ["obgn-mag"],
+            collate_fn=None,
+    ) -> None:
         dataset.pred_metapaths = [("_N", "_E", "_N")]
         dataset.go_ntype = "GO_term"
         super().__init__(hparams, dataset, metrics, collate_fn)
@@ -733,9 +785,10 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
         y_pred = self.forward(X)
 
         # y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X["batch_size"], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+        if y_true.size(0) == 0:
+            return torch.tensor(0.0, requires_grad=False)
 
         loss = self.criterion.forward(y_pred, y_true, neg_edges=weights)
 
@@ -749,7 +802,7 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
         X, y_true, weights = batch
         y_pred = self.forward(X)
 
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X["batch_size"], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
@@ -757,7 +810,7 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
         val_loss = self.criterion.forward(y_pred, y_true, neg_edges=weights)
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
 
-        self.log("val_loss", val_loss, )
+        self.log("val_loss", val_loss)
 
         return val_loss
 
@@ -765,9 +818,10 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
         X, y_true, weights = batch
         y_pred = self.forward(X, save_betas=False)
 
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X["batch_size"], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+        if y_true.size(0) == 0:
+            return torch.tensor(0.0, requires_grad=False)
 
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 
@@ -780,16 +834,23 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
 
         return test_loss
 
-    def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                y_pred: Tensor, y_true: Tensor, weights: Tensor):
+    def update_node_clf_metrics(
+            self, metrics: Union[Metrics, Dict[str, Metrics]], y_pred: Tensor, y_true: Tensor, weights: Tensor
+    ):
         if isinstance(metrics, dict):
             y_pred_dict = self.dataset.split_array_by_namespace(y_pred)
             y_true_dict = self.dataset.split_array_by_namespace(y_true)
 
             for namespace in y_true_dict.keys():
-                go_type = "BPO" if namespace == 'biological_process' else \
-                    "CCO" if namespace == 'cellular_component' else \
-                        "MFO" if namespace == 'molecular_function' else namespace
+                go_type = (
+                    "BPO"
+                    if namespace == "biological_process"
+                    else "CCO"
+                    if namespace == "cellular_component"
+                    else "MFO"
+                    if namespace == "molecular_function"
+                    else namespace
+                )
                 metrics[go_type].update_metrics(y_pred_dict[namespace], y_true_dict[namespace], weights=weights)
 
         else:
@@ -826,15 +887,19 @@ class HGTNodeClf(LATTEFlatNodeClf):
         self._name = f"HGT-{hparams.n_layers}"
         self.collate_fn = collate_fn
         # Node attr input
-        if hasattr(dataset, 'seq_tokenizer'):
+        if hasattr(dataset, "seq_tokenizer"):
             self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
         if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(dataset.node_types):
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
-        self.embedder = HGT(embedding_dim=hparams.embedding_dim, num_layers=hparams.n_layers,
-                            num_heads=hparams.attn_heads,
-                            node_types=dataset.G.node_types, metadata=dataset.G.metadata())
+        self.embedder = HGT(
+            embedding_dim=hparams.embedding_dim,
+            num_layers=hparams.n_layers,
+            num_heads=hparams.attn_heads,
+            node_types=dataset.G.node_types,
+            metadata=dataset.G.metadata(),
+        )
 
         # Output layer
         if "cls_graph" in hparams and hparams.cls_graph is not None:
@@ -849,11 +914,13 @@ class HGTNodeClf(LATTEFlatNodeClf):
         else:
             assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
 
-        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                                                 hparams.use_class_weights else None,
-                                            multilabel=dataset.multilabel,
-                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
+        self.criterion = ClassificationLoss(
+            loss_type=hparams.loss_type,
+            n_classes=dataset.n_classes,
+            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and hparams.use_class_weights else None,
+            multilabel=dataset.multilabel,
+            reduction="mean" if "reduction" not in hparams else hparams.reduction,
+        )
 
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr

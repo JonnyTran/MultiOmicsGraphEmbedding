@@ -64,8 +64,7 @@ class ClusteringEvaluator(LightningModule):
             return
 
         if module.__name__ in ["classifier"]:
-            logging.info(
-                f"save_pred @ {module.__name__}, output {tensor_sizes(outputs)}")
+            logging.info(f"save_pred @ {module.__name__}, output {tensor_sizes(outputs)}")
 
             if isinstance(outputs, (list, tuple)):
                 self._y_pred = outputs[0]
@@ -73,7 +72,7 @@ class ClusteringEvaluator(LightningModule):
                 self._y_pred = outputs
 
     def trainvalidtest_dataloader(self):
-        return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
+        return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn)
 
     def clustering_metrics(self, n_runs=10, compare_node_types=True):
         loader = self.trainvalidtest_dataloader()
@@ -86,29 +85,31 @@ class ClusteringEvaluator(LightningModule):
         embeddings_all, types_all, y_true = self.get_embeddings_labels(self._embeddings, self._node_ids)
 
         # Record metrics for each run in a list of dict's
-        res = [{}, ] * n_runs
+        res = [{}] * n_runs
         for i in range(n_runs):
             y_pred = self.predict_cluster(n_clusters=len(y_true.unique()), seed=i)
 
             if compare_node_types and len(self.dataset.node_types) > 1:
-                res[i].update(clustering_metrics(y_true=types_all,
-                                                 # Match y_pred to type_all's index
-                                                 y_pred=types_all.index.map(lambda idx: y_pred.get(idx, "")),
-                                                 metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
+                res[i].update(
+                    clustering_metrics(
+                        y_true=types_all,
+                        # Match y_pred to type_all's index
+                        y_pred=types_all.index.map(lambda idx: y_pred.get(idx, "")),
+                        metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"],
+                    )
+                )
 
             if y_pred.shape[0] != y_true.shape[0]:
                 y_pred = y_pred.loc[y_true.index]
-            res[i].update(clustering_metrics(y_true,
-                                             y_pred,
-                                             metrics=["homogeneity", "completeness", "nmi"]))
+            res[i].update(clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi"]))
 
         res_df = pd.DataFrame(res)
         metrics = res_df.mean(0).to_dict()
         return metrics
 
-    def get_embeddings_labels(self, embeddings: Dict[str, Tensor], global_node_index: Dict[str, Tensor],
-                              cache: bool = True) \
-            -> Tuple[DataFrame, Series, Series]:
+    def get_embeddings_labels(
+            self, embeddings: Dict[str, Tensor], global_node_index: Dict[str, Tensor], cache: bool = True
+    ) -> Tuple[DataFrame, Series, Series]:
         if cache and hasattr(self, "_embeddings") and hasattr(self, "_node_types") and hasattr(self, "_labels"):
             return self._embeddings, self._node_types, self._labels
 
@@ -133,7 +134,8 @@ class ClusteringEvaluator(LightningModule):
             labels = pd.Series(
                 self.dataset.y_dict[target_ntype][global_node_index[target_ntype]].squeeze(-1).numpy(),
                 index=emb_df_list[0].index,
-                dtype=str)
+                dtype=str,
+            )
         else:
             labels = None
 
@@ -163,11 +165,16 @@ class NodeEmbeddingEvaluator(LightningModule):
         self.score_avg_table_name = "score_avgs"
         self.beta_degree_corr_table_name = "beta_degree_correlation"
 
-    def plot_embeddings_tsne(self, global_node_index: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
-                             embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
-                             targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
-                             columns=["node", "ntype", "gene_name", "species_id", "pos1", "pos2", "loss"],
-                             n_samples: int = 1000) -> DataFrame:
+    def plot_embeddings_tsne(
+            self,
+            global_node_index: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
+            embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
+            targets: Any = None,
+            y_pred: Any = None,
+            weights: Dict[str, Tensor] = None,
+            columns=["node", "ntype", "gene_name", "species_id", "pos1", "pos2", "loss"],
+            n_samples: int = 1000,
+    ) -> DataFrame:
         """
 
         Args:
@@ -182,7 +189,8 @@ class NodeEmbeddingEvaluator(LightningModule):
         Returns:
 
         """
-        if self.wandb_experiment is not None and self.wandb_experiment.sweep_id is not None: return
+        if self.wandb_experiment is not None and self.wandb_experiment.sweep_id is not None:
+            return
 
         node_losses = self.get_node_loss(targets, y_pred, global_node_index=global_node_index)
         df = self.dataset.get_node_metadata(global_node_index, embeddings, weights=weights, losses=node_losses)
@@ -198,8 +206,12 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         return df
 
-    def get_node_loss(self, targets: Union[Tensor, Dict[Any, Any]], y_pred: Union[Tensor, Dict[Any, Any]],
-                      global_node_index: Dict[str, Tensor]) -> DataFrame:
+    def get_node_loss(
+            self,
+            targets: Union[Tensor, Dict[Any, Any]],
+            y_pred: Union[Tensor, Dict[Any, Any]],
+            global_node_index: Dict[str, Tensor],
+    ) -> DataFrame:
         """
         Compute the loss for each nodes given targets and predicted values for either node_clf or link_pred tasks.
         Args:
@@ -209,53 +221,64 @@ class NodeEmbeddingEvaluator(LightningModule):
         """
         raise NotImplementedError
 
-    def plot_pr_curve(self, targets: Union[Tensor, pd.DataFrame], scores: Union[Tensor, pd.DataFrame],
-                      split_samples: Union[pd.Series, np.ndarray] = None, n_thresholds=200, title="PR_Curve",
-                      xaxis_title="recall_micro", yaxis_title="precision_micro", scores_thresh=1e-2) \
-            -> None:
+    def plot_pr_curve(
+            self,
+            targets: Union[Tensor, pd.DataFrame],
+            scores: Union[Tensor, pd.DataFrame],
+            split_samples: Union[pd.Series, np.ndarray] = None,
+            n_thresholds=200,
+            title="PR_Curve",
+            xaxis_title="recall_micro",
+            yaxis_title="precision_micro",
+            scores_thresh=1e-2,
+    ) -> None:
         if self.wandb_experiment is None:
             return
         elif self.wandb_experiment.sweep_id is not None:
             return
 
-        preds = (scores.values if isinstance(scores, pd.DataFrame) else scores)
-        targets = (targets.values if isinstance(targets, pd.DataFrame) else targets)
+        preds = scores.values if isinstance(scores, pd.DataFrame) else scores
+        targets = targets.values if isinstance(targets, pd.DataFrame) else targets
 
         if split_samples is not None:
             if isinstance(split_samples, pd.Series):
                 split_samples = split_samples.fillna("")
                 stroke = split_samples.name
             else:
-                stroke = 'sample'
+                stroke = "sample"
 
             dfs = {}
-            splits_prog = tqdm.tqdm(split_samples.value_counts().head(15).index,
-                                    desc=f"Plotting PR Curve for {stroke} splits")
+            splits_prog = tqdm.tqdm(
+                split_samples.value_counts().head(15).index, desc=f"Plotting PR Curve for {stroke} splits"
+            )
             for split in splits_prog:
                 splits_prog.set_description(f"Plotting PR Curve for {stroke} splits {split}")
-                if split == '' or split is None: continue
+                if split == "" or split is None:
+                    continue
                 mask = split_samples == split
-                if mask.sum() < 10: continue
+                if mask.sum() < 10:
+                    continue
 
                 pred = preds[mask]
                 target = targets[mask]
                 row, col = (np.absolute(pred + target) > scores_thresh).nonzero()
-                precisions, recalls, _ = precision_recall_curve(y_true=target[row, col], y_pred=pred[row, col],
-                                                                n_thresholds=n_thresholds // 2, average='micro')
+                precisions, recalls, _ = precision_recall_curve(
+                    y_true=target[row, col], y_pred=pred[row, col], n_thresholds=n_thresholds // 2, average="micro"
+                )
                 dfs[split] = pd.DataFrame({xaxis_title: recalls, yaxis_title: precisions})
 
             df = pd.concat(dfs, names=[stroke, None], axis=0).reset_index(level=0)
 
         else:
             row, col = (np.absolute(preds + targets) > scores_thresh).nonzero()
-            precisions, recalls, _ = precision_recall_curve(y_true=targets[row, col], y_pred=preds[row, col],
-                                                            n_thresholds=n_thresholds, average='micro')
+            precisions, recalls, _ = precision_recall_curve(
+                y_true=targets[row, col], y_pred=preds[row, col], n_thresholds=n_thresholds, average="micro"
+            )
             df = pd.DataFrame({xaxis_title: recalls, yaxis_title: precisions})
             stroke = None
 
         table = wandb.Table(dataframe=df, columns=df.columns)
-        lineplot = wandb.plot.line(table, x=xaxis_title, y=yaxis_title, stroke=stroke,
-                                   title=title.replace("_", " "))
+        lineplot = wandb.plot.line(table, x=xaxis_title, y=yaxis_title, stroke=stroke, title=title.replace("_", " "))
         wandb.log({title: lineplot})
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
@@ -265,8 +288,8 @@ class NodeEmbeddingEvaluator(LightningModule):
             return
 
         self.embedder.layers: List[RelationAttention]
-        if hasattr(self.embedder, 'get_sankey_flow'):
-            nodes, links = self.embedder.get_sankey_flow(node_types=None, self_loop=False)
+        if hasattr(self.embedder, "get_sankey_flow"):
+    nodes, links = self.embedder.get_sankey_flow(node_types=None, self_loop=False)
         else:
             nodes, links = self.embedder.layers[-1].get_sankey_flow(node_types=None, self_loop=True)
         if nodes is None:
@@ -279,14 +302,16 @@ class NodeEmbeddingEvaluator(LightningModule):
         run_id = self.wandb_experiment.id
 
         path_to_plotly_html = f"./wandb_fig_run_{run_id}_layer_{len(self.embedder.layers)}.html"
-        fig.write_html(path_to_plotly_html, auto_play=False, include_plotlyjs=True, full_html=True,
-                       config=dict(displayModeBar=False))
+        fig.write_html(
+            path_to_plotly_html, auto_play=False, include_plotlyjs=True, full_html=True, config=dict(displayModeBar=False)
+        )
         plotly_htmls.append(wandb.Html(path_to_plotly_html))
 
         # Add Plotly figure as HTML file into Table
         node_types = list(self.embedder.layers[layer]._betas.keys())
-        table = wandb.Table(columns=[f"Layer{layer + 1 if layer >= 0 else len(self.embedder.layers)}_{ntype}" \
-                                     for ntype in node_types])
+        table = wandb.Table(
+            columns=[f"Layer{layer + 1 if layer >= 0 else len(self.embedder.layers)}_{ntype}" for ntype in node_types]
+        )
         table.add_data(*plotly_htmls)
 
         # Log Table
@@ -296,15 +321,26 @@ class NodeEmbeddingEvaluator(LightningModule):
 
     def log_score_averages(self, edge_scores_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> DataFrame:
         if isinstance(edge_scores_dict, dict) and isinstance(list(edge_scores_dict.keys())[0], str):
-            score_avgs = pd.DataFrame({key: {metapath: f"{values.mean().item():.4f} ± {values.std().item():.2f}" \
-                                             for metapath, values in edge_index_dict.items()} \
-                                       for key, edge_index_dict in edge_scores_dict.items()})
+    score_avgs = pd.DataFrame(
+        {
+            key: {
+                metapath: f"{values.mean().item():.4f} ± {values.std().item():.2f}"
+                for metapath, values in edge_index_dict.items()
+            }
+            for key, edge_index_dict in edge_scores_dict.items()
+        }
+    )
 
-            score_avgs.index.names = ("head", "relation", "tail")
+    score_avgs.index.names = ("head", "relation", "tail")
 
         elif isinstance(edge_scores_dict, dict) and isinstance(list(edge_scores_dict.keys())[0], tuple):
-            score_avgs = pd.DataFrame.from_dict({m: f"{values.mean().item():.4f} ± {values.std().item():.2f}"
-                                                 for m, values in edge_scores_dict.items()}, orient="index")
+            score_avgs = pd.DataFrame.from_dict(
+                {
+                    m: f"{values.mean().item():.4f} ± {values.std().item():.2f}"
+                    for m, values in edge_scores_dict.items()
+                },
+                orient="index",
+            )
             score_avgs.columns = ["score"]
             score_avgs.index = pd.MultiIndex.from_tuples(score_avgs.index, names=("head", "relation", "tail"))
 
@@ -318,26 +354,25 @@ class NodeEmbeddingEvaluator(LightningModule):
         finally:
             return score_avgs
 
-    def log_beta_degree_correlation(self, global_node_index: Dict[str, Tensor],
-                                    batch_size: Dict[str, int] = None) -> DataFrame:
-        nodes_index = {ntype: nids.numpy() \
-                       for ntype, nids in global_node_index.items()}
+    def log_beta_degree_correlation(
+            self, global_node_index: Dict[str, Tensor], batch_size: Dict[str, int] = None
+    ) -> DataFrame:
+        nodes_index = {ntype: nids.numpy() for ntype, nids in global_node_index.items()}
         if batch_size:
-            nodes_index = {ntype: nids[: batch_size[ntype]] \
-                           for ntype, nids in nodes_index.items() if ntype in batch_size}
+            nodes_index = {
+                ntype: nids[: batch_size[ntype]] for ntype, nids in nodes_index.items() if ntype in batch_size
+            }
 
         nodes_index = pd.MultiIndex.from_tuples(
-            ((ntype, nid) for ntype, nids in nodes_index.items() for nid in nids),
-            names=["ntype", "nid"])
+            ((ntype, nid) for ntype, nids in nodes_index.items() for nid in nids), names=["ntype", "nid"]
+        )
 
         nodes_degree = self.dataset.get_node_degrees().loc[nodes_index].fillna(0)
 
         layers_corr = {}
         for layer, betas in enumerate(self.betas):
             nodes_betas = pd.concat(betas, names=["ntype", "nid"]).loc[nodes_index].fillna(0)
-            nodes_corr = nodes_betas.corrwith(nodes_degree, axis=1, drop=True) \
-                .groupby("ntype") \
-                .mean()
+            nodes_corr = nodes_betas.corrwith(nodes_degree, axis=1, drop=True).groupby("ntype").mean()
 
             layers_corr[layer + 1] = nodes_corr
 
@@ -390,26 +425,57 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         if isinstance(metrics, dict):
             self.train_metrics = {
-                subtype: Metrics(prefix="" + subtype + "_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                 multilabel=dataset.multilabel, metrics=keywords) \
-                for subtype, keywords in metrics.items()}
+    subtype: Metrics(
+        prefix="" + subtype + "_",
+        loss_type=hparams.loss_type,
+        n_classes=dataset.n_classes,
+        multilabel=dataset.multilabel,
+        metrics=keywords,
+    )
+    for subtype, keywords in metrics.items()
+}
             self.valid_metrics = {
-                subtype: Metrics(prefix="val_" + subtype + "_", loss_type=hparams.loss_type,
-                                 n_classes=dataset.n_classes,
-                                 multilabel=dataset.multilabel, metrics=keywords) \
-                for subtype, keywords in metrics.items()}
+    subtype: Metrics(
+        prefix="val_" + subtype + "_",
+        loss_type=hparams.loss_type,
+        n_classes=dataset.n_classes,
+        multilabel=dataset.multilabel,
+        metrics=keywords,
+    )
+    for subtype, keywords in metrics.items()
+}
             self.test_metrics = {
-                subtype: Metrics(prefix="test_" + subtype + "_", loss_type=hparams.loss_type,
-                                 n_classes=dataset.n_classes,
-                                 multilabel=dataset.multilabel, metrics=keywords) \
-                for subtype, keywords in metrics.items()}
+    subtype: Metrics(
+        prefix="test_" + subtype + "_",
+        loss_type=hparams.loss_type,
+        n_classes=dataset.n_classes,
+        multilabel=dataset.multilabel,
+        metrics=keywords,
+    )
+    for subtype, keywords in metrics.items()
+}
         else:
-            self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                         multilabel=dataset.multilabel, metrics=metrics)
-            self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                         multilabel=dataset.multilabel, metrics=metrics)
-            self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                        multilabel=dataset.multilabel, metrics=metrics)
+            self.train_metrics = Metrics(
+                prefix="",
+                loss_type=hparams.loss_type,
+                n_classes=dataset.n_classes,
+                multilabel=dataset.multilabel,
+                metrics=metrics,
+            )
+            self.valid_metrics = Metrics(
+                prefix="val_",
+                loss_type=hparams.loss_type,
+                n_classes=dataset.n_classes,
+                multilabel=dataset.multilabel,
+                metrics=metrics,
+            )
+            self.test_metrics = Metrics(
+                prefix="test_",
+                loss_type=hparams.loss_type,
+                n_classes=dataset.n_classes,
+                multilabel=dataset.multilabel,
+                metrics=metrics,
+            )
 
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
@@ -429,8 +495,9 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             metrics_dict = self.train_metrics.compute_metrics()
             self.train_metrics.reset_metrics()
         elif isinstance(self.train_metrics, dict):
-            metrics_dict = {k: v for subtype, metrics in self.train_metrics.items() \
-                            for k, v in metrics.compute_metrics().items()}
+            metrics_dict = {
+                k: v for subtype, metrics in self.train_metrics.items() for k, v in metrics.compute_metrics().items()
+            }
 
             for subtype, metrics in self.train_metrics.items():
                 metrics.reset_metrics()
@@ -446,8 +513,9 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             self.valid_metrics.reset_metrics()
 
         elif isinstance(self.valid_metrics, dict):
-            metrics_dict = {k: v for subtype, metrics in self.valid_metrics.items() \
-                            for k, v in metrics.compute_metrics().items()}
+            metrics_dict = {
+                k: v for subtype, metrics in self.valid_metrics.items() for k, v in metrics.compute_metrics().items()
+            }
 
             for subtype, metrics in self.valid_metrics.items():
                 metrics.reset_metrics()
@@ -463,8 +531,9 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             self.test_metrics.reset_metrics()
 
         elif isinstance(self.test_metrics, dict):
-            metrics_dict = {k: v for subtype, metrics in self.test_metrics.items() \
-                            for k, v in metrics.compute_metrics().items()}
+            metrics_dict = {
+                k: v for subtype, metrics in self.test_metrics.items() for k, v in metrics.compute_metrics().items()
+            }
 
             for subtype, metrics in self.test_metrics.items():
                 metrics.reset_metrics()
@@ -472,26 +541,39 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         self.log_dict(metrics_dict, prog_bar=True)
         return None
 
-    def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                y_pred: Tensor, y_true: Tensor, weights: Optional[Tensor] = None, subset=None,
-                                global_node_index: Dict[str, Tensor] = None):
+    def update_node_clf_metrics(
+            self,
+            metrics: Union[Metrics, Dict[str, Metrics]],
+            y_pred: Tensor,
+            y_true: Tensor,
+            weights: Optional[Tensor] = None,
+            subset=None,
+            global_node_index: Dict[str, Tensor] = None,
+    ):
         if hasattr(self.dataset, "nodes_namespace"):
             y_pred_dict = self.dataset.split_array_by_namespace(y_pred, axis=1, nids=self.dataset.classes)
             y_true_dict = self.dataset.split_array_by_namespace(y_true, axis=1, nids=self.dataset.classes)
 
             for pred_ntype in y_true_dict.keys():
-                metrics.update_metrics(y_pred_dict[pred_ntype], y_true_dict[pred_ntype],
-                                       weights=weights, subset=pred_ntype)
+                metrics.update_metrics(
+                    y_pred_dict[pred_ntype], y_true_dict[pred_ntype], weights=weights, subset=pred_ntype
+                )
 
         else:
             metrics.update_metrics(y_pred, y_true, weights=weights, subset=subset)
 
     @torch.no_grad()
     def get_node_loss(self, targets: Tensor, y_pred: Tensor, global_node_index: Dict[str, Tensor] = None):
-        y_pred = torch.from_numpy(y_pred.values if isinstance(y_pred, pd.DataFrame) else y_pred) \
-            if not isinstance(y_pred, Tensor) else y_pred
-        target = torch.from_numpy(targets.values if isinstance(targets, pd.DataFrame) else targets) \
-            if not isinstance(targets, Tensor) else targets
+        y_pred = (
+            torch.from_numpy(y_pred.values if isinstance(y_pred, pd.DataFrame) else y_pred)
+            if not isinstance(y_pred, Tensor)
+            else y_pred
+        )
+        target = (
+            torch.from_numpy(targets.values if isinstance(targets, pd.DataFrame) else targets)
+            if not isinstance(targets, Tensor)
+            else targets
+        )
 
         losses = F.binary_cross_entropy(y_pred, target=target.float(), reduce=False).mean(dim=1).numpy()
 
@@ -500,34 +582,39 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         return losses
 
     def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
-        dataset = self.dataset.train_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
-                                                batch_size=batch_size if batch_size else self.hparams.batch_size,
-                                                num_workers=num_workers,
-                                                **kwargs)
-        return dataset
+    dataset = self.dataset.train_dataloader(
+        collate_fn=self.collate_fn if hasattr(self, "collate_fn") else None,
+        batch_size=batch_size if batch_size else self.hparams.batch_size,
+        num_workers=num_workers,
+        **kwargs,
+    )
+    return dataset
 
     def val_dataloader(self, batch_size=None, num_workers=0, **kwargs):
-        dataset = self.dataset.valid_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
-                                                batch_size=batch_size if batch_size else self.hparams.batch_size,
-                                                num_workers=num_workers,
-                                                **kwargs)
+    dataset = self.dataset.valid_dataloader(
+        collate_fn=self.collate_fn if hasattr(self, "collate_fn") else None,
+        batch_size=batch_size if batch_size else self.hparams.batch_size,
+        num_workers=num_workers,
+        **kwargs,
+    )
 
-        return dataset
+    return dataset
 
     def test_dataloader(self, batch_size=None, num_workers=0, **kwargs):
 
-        dataset = self.dataset.test_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
-                                               batch_size=batch_size if batch_size else self.hparams.batch_size,
-                                               num_workers=num_workers,
-                                               **kwargs)
-        return dataset
+    dataset = self.dataset.test_dataloader(
+        collate_fn=self.collate_fn if hasattr(self, "collate_fn") else None,
+        batch_size=batch_size if batch_size else self.hparams.batch_size,
+        num_workers=num_workers,
+        **kwargs,
+    )
+    return dataset
 
     def get_n_params(self):
-        model_parameters = filter(lambda tup: tup[1].requires_grad and "embedding" not in tup[0],
-                                  self.named_parameters())
+    model_parameters = filter(lambda tup: tup[1].requires_grad and "embedding" not in tup[0], self.named_parameters())
 
-        params = sum([np.prod(p.size()) for name, p in model_parameters])
-        return params
+    params = sum([np.prod(p.size()) for name, p in model_parameters])
+    return params
 
     @property
     def num_training_steps(self) -> int:
@@ -559,42 +646,50 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embeddings",
-                    'LayerNorm.bias', 'LayerNorm.weight', 'BatchNorm.bias', 'BatchNorm.weight']
+        no_decay = [
+            "bias",
+            "alpha_activation",
+            "batchnorm",
+            "layernorm",
+            "activation",
+            "embeddings",
+            "LayerNorm.bias",
+            "LayerNorm.weight",
+            "BatchNorm.bias",
+            "BatchNorm.weight",
+        ]
         lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
-        weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
+        weight_decay = self.hparams.weight_decay if "weight_decay" in self.hparams else 0.0
 
         optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer \
-                        if not any(key in name for key in no_decay) \
-                        and "embeddings" not in name],
-             'weight_decay': weight_decay},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
-             'weight_decay': 0.0},
+            {
+                "params": [
+                    p
+                    for name, p in param_optimizer
+                    if not any(key in name for key in no_decay) and "embeddings" not in name
+                ],
+                "weight_decay": weight_decay,
+            },
+            {"params": [p for name, p in param_optimizer if any(key in name for key in no_decay)], "weight_decay": 0.0},
         ]
 
         optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=self.lr)
 
         extra = {}
         if lr_annealing == "cosine":
-            scheduler = lr_scheduler.CosineAnnealingLR(optimizer,
-                                                       T_max=self.num_training_steps,
-                                                       eta_min=self.lr / 100
-                                                       )
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps, eta_min=self.lr / 100)
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
-            logger.info(f"Using CosineAnnealingLR {scheduler.state_dict()}", )
+            logger.info(f"Using CosineAnnealingLR {scheduler.state_dict()}")
 
         elif lr_annealing == "restart":
-            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                 T_0=50, T_mult=1,
-                                                                 eta_min=self.lr / 100)
+            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50, T_mult=1, eta_min=self.lr / 100)
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
-            logger.info(f"Using CosineAnnealingWarmRestarts {scheduler.state_dict()}", )
+            logger.info(f"Using CosineAnnealingWarmRestarts {scheduler.state_dict()}")
 
         elif lr_annealing == "reduce":
             scheduler = lr_scheduler.ReduceLROnPlateau(optimizer)
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
-            logger.info(f"Using ReduceLROnPlateau {scheduler.state_dict()}", )
+            logger.info(f"Using ReduceLROnPlateau {scheduler.state_dict()}")
 
         return {"optimizer": optimizer, **extra}
 
@@ -603,12 +698,12 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
-    def get_node_loss(self,
-                      edge_pred: Union[
-                          Dict[Tuple[str, str, str], Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]],
-                      edge_true: Union[
-                          Dict[Tuple[str, str, str], Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]],
-                      global_node_index: Optional[Dict[str, Tensor]] = None) -> Dict[str, Tensor]:
+    def get_node_loss(
+            self,
+            edge_pred: Union[Dict[Tuple[str, str, str], Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]],
+            edge_true: Union[Dict[Tuple[str, str, str], Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]],
+            global_node_index: Optional[Dict[str, Tensor]] = None,
+    ) -> Dict[str, Tensor]:
         edge_index_loss = self.get_edge_index_loss(edge_pred, edge_true, global_node_index)
 
         adj_losses = edge_index_to_adjs(edge_index_loss, nodes=self.dataset.nodes)
@@ -625,42 +720,55 @@ class LinkPredTrainer(NodeClfTrainer):
             ntype_counts[head_type] += 1
             ntype_counts[tail_type] += 1
 
-        ntype_losses = {ntype: loss[global_node_index[ntype]] / ntype_counts[ntype] \
-                        for ntype, loss in ntype_losses.items()}
+        ntype_losses = {
+            ntype: loss[global_node_index[ntype]] / ntype_counts[ntype] for ntype, loss in ntype_losses.items()
+        }
 
         return ntype_losses
 
     def train_dataloader(self, **kwargs):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size, **kwargs)
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size, **kwargs)
 
     def val_dataloader(self, **kwargs):
         if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
             batch_size = self.test_batch_size
         else:
             batch_size = self.hparams.batch_size
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=batch_size, **kwargs)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=batch_size, **kwargs)
 
     def test_dataloader(self, **kwargs):
         if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
             batch_size = self.test_batch_size
         else:
             batch_size = self.hparams.batch_size
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=batch_size, **kwargs)
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=batch_size, **kwargs)
 
 
 class GraphClfTrainer(LightningModule):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
+        self.train_metrics = Metrics(
+            prefix="",
+            loss_type=hparams.loss_type,
+            n_classes=dataset.n_classes,
+            multilabel=dataset.multilabel,
+            metrics=metrics,
+        )
+        self.valid_metrics = Metrics(
+            prefix="val_",
+            loss_type=hparams.loss_type,
+            n_classes=dataset.n_classes,
+            multilabel=dataset.multilabel,
+            metrics=metrics,
+        )
+        self.test_metrics = Metrics(
+            prefix="test_",
+            loss_type=hparams.loss_type,
+            n_classes=dataset.n_classes,
+            multilabel=dataset.multilabel,
+            metrics=metrics,
+        )
 
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
@@ -708,20 +816,17 @@ class GraphClfTrainer(LightningModule):
         return None
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size)
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
 
 @torch.no_grad()
 def print_pred_class_counts(y_pred, y_true, multilabel, n_top_class=8):
@@ -732,14 +837,22 @@ def print_pred_class_counts(y_pred, y_true, multilabel, n_top_class=8):
     if multilabel:
         y_pred_dict = pd.Series(y_pred.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
         y_true_dict = pd.Series(y_true.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-        print(f"y_pred {len(y_pred_dict)} classes",
-              {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-        print(f"y_true {len(y_true_dict)} classes",
-              {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+        print(
+            f"y_pred {len(y_pred_dict)} classes",
+            {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)},
+        )
+        print(
+            f"y_true {len(y_true_dict)} classes",
+            {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)},
+        )
     else:
         y_pred_dict = pd.Series(y_pred.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
         y_true_dict = pd.Series(y_true.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-        print(f"y_pred {len(y_pred_dict)} classes",
-              {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-        print(f"y_true {len(y_true_dict)} classes",
-              {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+        print(
+            f"y_pred {len(y_pred_dict)} classes",
+            {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)},
+        )
+        print(
+            f"y_true {len(y_true_dict)} classes",
+            {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)},
+        )
