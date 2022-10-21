@@ -68,7 +68,7 @@ class Metrics(torch.nn.Module):
 
             elif "fmax" in name:
                 if "test" in prefix:
-                    self.metrics[name] = FMax_Slow()
+    self.metrics[name] = FMax_Slow()
 
             elif "auroc" in name:
                 self.metrics[name] = AUROC(num_classes=n_classes, average="micro")
@@ -83,18 +83,9 @@ class Metrics(torch.nn.Module):
                 self.metrics[name] = Accuracy(top_k=top_k, subset_accuracy=multilabel)
 
             elif "ogbn" in name or any("ogbn" in s for s in name):
-                self.metrics[name] = OGBNodeClfMetrics(
-                    NodeEvaluator(name[0] if isinstance(name, (list, tuple)) else name)
-                )
-            elif "ogbl" in name or any("ogbl" in s for s in name):
-                self.metrics[name] = OGBLinkPredMetrics(
-                    LinkEvaluator(name[0] if isinstance(name, (list, tuple)) else name)
-                )
-            elif "ogbg" in name or any("ogbg" in s for s in name):
-                self.metrics[name] = OGBNodeClfMetrics(
-                    GraphEvaluator(name[0] if isinstance(name, (list, tuple)) else name)
-                )
-            else:
+                self.metrics[name] = OGBNodeClfMetrics(NodeEvaluator(name[0] if isinstance(name, (list, tuple)) else name))elif "ogbl" in name or any("ogbl" in s for s in name):
+                self.metrics[name] = OGBLinkPredMetrics(LinkEvaluator(name[0] if isinstance(name, (list, tuple)) else name))elif "ogbg" in name or any("ogbg" in s for s in name):
+                self.metrics[name] = OGBNodeClfMetrics(GraphEvaluator(name[0] if isinstance(name, (list, tuple)) else name))else:
                 logger.warn(
                     f"metric name {name} not supported. Must containing a substring in "
                     f"['precision', 'recall', 'top_k', 'macro_f1', 'micro_f1', 'fmax', 'mse', "
@@ -201,7 +192,10 @@ class Metrics(torch.nn.Module):
                     logs.update(self.metrics[metric].compute(prefix=prefix))
 
                 elif isinstance(self.metrics[metric], TopKCategoricalAccuracy):
-                    metric_name = (str(metric) if prefix is None else prefix + str(metric)) + f"@{self.metrics[metric]._k}"logs[metric_name] = self.metrics[metric].compute()
+                    metric_name = (
+                                      str(metric) if prefix is None else prefix + str(metric)
+                                  ) + f"@{self.metrics[metric]._k}"
+                    logs[metric_name] = self.metrics[metric].compute()
 
                 else:
                     metric_name = str(metric) if prefix is None else prefix + str(metric)
@@ -395,16 +389,16 @@ class AveragePrecisionPairwise(BinnedAveragePrecision):
 
 class FMax_Micro(BinnedPrecisionRecallCurve):
     def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100, **kwargs: Any) -> None:
-        super(BinnedPrecisionRecallCurve, self).__init__(**kwargs)
+    super(BinnedPrecisionRecallCurve, self).__init__(**kwargs)
 
-        self.num_classes = num_classes
-        if isinstance(thresholds, int):
-            self.num_thresholds = thresholds
-            self.thresholds = torch.linspace(0, 1.0, thresholds)
+    self.num_classes = num_classes
+    if isinstance(thresholds, int):
+        self.num_thresholds = thresholds
+        self.thresholds = torch.linspace(0, 1.0, thresholds)
 
-        elif thresholds is not None:
-            if not isinstance(thresholds, (list, Tensor)):
-                raise ValueError("Expected argument `thresholds` to either be an integer, list of floats or a tensor")
+    elif thresholds is not None:
+        if not isinstance(thresholds, (list, Tensor)):
+            raise ValueError("Expected argument `thresholds` to either be an integer, list of floats or a tensor")
             self.thresholds = torch.tensor(thresholds) if isinstance(thresholds, list) else thresholds
             self.num_thresholds = self.thresholds.numel()
 
