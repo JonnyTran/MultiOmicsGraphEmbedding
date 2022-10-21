@@ -365,7 +365,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Get TSNE 2d position from embeddings
         try:
-
             from umap import UMAP
             tsne = UMAP(n_components=2, n_jobs=-1)
         except Exception as e:

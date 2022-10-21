@@ -13,18 +13,23 @@ from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from torch import Tensor
 from torch_sparse import SparseTensor
-from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, BinnedPrecisionRecallCurve, \
-    BinnedAveragePrecision
+from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, BinnedPrecisionRecallCurve, BinnedAveragePrecision
 from torchmetrics.utilities.data import METRIC_EPS, to_onehot
 
 from .utils import filter_samples, tensor_sizes, activation
 
 
 class Metrics(torch.nn.Module):
-    def __init__(self, prefix: str, loss_type: str, threshold: float = 0.5,
-                 top_k: List[int] = [5, 10, 50], n_classes: int = None,
-                 multilabel: bool = None,
-                 metrics: List[Union[str, Tuple[str]]] = ["precision", "recall", "top_k", "accuracy"]):
+    def __init__(
+        self,
+        prefix: str,
+        loss_type: str,
+        threshold: float = 0.5,
+        top_k: List[int] = [5, 10, 50],
+        n_classes: int = None,
+        multilabel: bool = None,
+        metrics: List[Union[str, Tuple[str]]] = ["precision", "recall", "top_k", "accuracy"],
+    ):
         super().__init__()
 
         self.loss_type = loss_type.upper()
@@ -53,22 +58,23 @@ class Metrics(torch.nn.Module):
                 if multilabel:
                     self.metrics[name] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
-                    self.metrics[name] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
-                                                                 output_transform=None)
+                    self.metrics[name] = TopKCategoricalAccuracy(
+                        k=max(int(np.log(n_classes)), 1), output_transform=None
+                    )
             elif "macro_f1" in name:
-                self.metrics[name] = F1Score(num_classes=n_classes, average="macro", top_k=top_k, )
+                self.metrics[name] = F1Score(num_classes=n_classes, average="macro", top_k=top_k)
             elif "micro_f1" in name:
-                self.metrics[name] = F1Score(num_classes=n_classes, average="micro", top_k=top_k, )
+                self.metrics[name] = F1Score(num_classes=n_classes, average="micro", top_k=top_k)
 
             elif "fmax" in name:
-                if 'test' in prefix:
-                    self.metrics[name] = FMax_Slow()
+                if "test" in prefix:
+    self.metrics[name] = FMax_Slow()
 
             elif "auroc" in name:
                 self.metrics[name] = AUROC(num_classes=n_classes, average="micro")
             elif "aupr" in name:
                 # self.metrics[name] = AveragePrecision_(average="pairwise")
-                self.metrics[name] = AveragePrecisionPairwise(average='none')
+                self.metrics[name] = AveragePrecisionPairwise(average="none")
 
             elif "mse" in name:
                 self.metrics[name] = MeanSquaredError()
@@ -77,18 +83,14 @@ class Metrics(torch.nn.Module):
                 self.metrics[name] = Accuracy(top_k=top_k, subset_accuracy=multilabel)
 
             elif "ogbn" in name or any("ogbn" in s for s in name):
-                self.metrics[name] = OGBNodeClfMetrics(
-                    NodeEvaluator(name[0] if isinstance(name, (list, tuple)) else name))
-            elif "ogbl" in name or any("ogbl" in s for s in name):
-                self.metrics[name] = OGBLinkPredMetrics(
-                    LinkEvaluator(name[0] if isinstance(name, (list, tuple)) else name))
-            elif "ogbg" in name or any("ogbg" in s for s in name):
-                self.metrics[name] = OGBNodeClfMetrics(
-                    GraphEvaluator(name[0] if isinstance(name, (list, tuple)) else name))
-            else:
-                logger.warn(f"metric name {name} not supported. Must containing a substring in "
-                            f"['precision', 'recall', 'top_k', 'macro_f1', 'micro_f1', 'fmax', 'mse', "
-                            f"'auroc', 'aupr', 'acc', 'ogbn', 'ogbl', 'ogbg', ]")
+                self.metrics[name] = OGBNodeClfMetrics(NodeEvaluator(name[0] if isinstance(name, (list, tuple)) else name))elif "ogbl" in name or any("ogbl" in s for s in name):
+                self.metrics[name] = OGBLinkPredMetrics(LinkEvaluator(name[0] if isinstance(name, (list, tuple)) else name))elif "ogbg" in name or any("ogbg" in s for s in name):
+                self.metrics[name] = OGBNodeClfMetrics(GraphEvaluator(name[0] if isinstance(name, (list, tuple)) else name))else:
+                logger.warn(
+                    f"metric name {name} not supported. Must containing a substring in "
+                    f"['precision', 'recall', 'top_k', 'macro_f1', 'micro_f1', 'fmax', 'mse', "
+                    f"'auroc', 'aupr', 'acc', 'ogbn', 'ogbl', 'ogbg', ]"
+                )
                 continue
 
             # Needed to add the torchmetrics as Modules, so they'll be on the correct CUDA device during training
@@ -105,8 +107,9 @@ class Metrics(torch.nn.Module):
             return labels
 
     @torch.no_grad()
-    def update_metrics(self, y_pred: Tensor, y_true: Tensor,
-                       weights=Optional[Tensor], subset: Union[List[str], str] = None):
+    def update_metrics(
+            self, y_pred: Tensor, y_true: Tensor, weights=Optional[Tensor], subset: Union[List[str], str] = None
+    ):
         """
         Args:
             y_pred (Tensor): Predicted scores that can be logits. It'll have an activation internally corresponding to the loss function.
@@ -133,8 +136,9 @@ class Metrics(torch.nn.Module):
             # Torch ignite metrics
             if "precision" in name or "recall" in name or "accuracy" in name:
                 if not self.multilabel and y_true.dim() == 1:
-                    self.metrics[name].update((self.hot_encode(y_pred_act.argmax(1, keepdim=False), type_as=y_true),
-                                               self.hot_encode(y_true, type_as=y_pred)))
+    self.metrics[name].update(
+        (self.hot_encode(y_pred_act.argmax(1, keepdim=False), type_as=y_true), self.hot_encode(y_true, type_as=y_pred))
+    )
                 elif name in self.metrics:
                     self.metrics[name].update(((y_pred_act > self.threshold).type_as(y_true), y_true))
 
@@ -188,8 +192,9 @@ class Metrics(torch.nn.Module):
                     logs.update(self.metrics[metric].compute(prefix=prefix))
 
                 elif isinstance(self.metrics[metric], TopKCategoricalAccuracy):
-                    metric_name = (str(metric) if prefix is None else prefix + str(metric)) + \
-                                  f"@{self.metrics[metric]._k}"
+                    metric_name = (
+                                      str(metric) if prefix is None else prefix + str(metric)
+                                  ) + f"@{self.metrics[metric]._k}"
                     logs[metric_name] = self.metrics[metric].compute()
 
                 else:
@@ -201,7 +206,7 @@ class Metrics(torch.nn.Module):
                 pass
 
             except ValueError as ve:
-                logger.warn(ve) if 'No samples to concatenate' in ve.__str__() else None
+                logger.warn(ve) if "No samples to concatenate" in ve.__str__() else None
                 pass
 
             except Exception as e:
@@ -209,8 +214,7 @@ class Metrics(torch.nn.Module):
                 traceback.print_exc()
 
         # Needed for Precision(average=False) metrics
-        logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v \
-                for k, v in logs.items()}
+        logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v for k, v in logs.items()}
 
         return logs
 
@@ -220,8 +224,14 @@ class Metrics(torch.nn.Module):
 
 
 class OGBNodeClfMetrics(torchmetrics.Metric):
-    def __init__(self, evaluator, compute_on_step: bool = True, dist_sync_on_step: bool = False,
-                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
+    def __init__(
+            self,
+            evaluator,
+            compute_on_step: bool = True,
+            dist_sync_on_step: bool = False,
+            process_group: Optional[Any] = None,
+            dist_sync_fn: Callable = None,
+    ):
         super().__init__()
         self.evaluator = evaluator
         self.y_pred = []
@@ -247,20 +257,17 @@ class OGBNodeClfMetrics(torchmetrics.Metric):
 
     def compute(self, prefix=None):
         if isinstance(self.evaluator, NodeEvaluator):
-            output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
-                                          "y_true": torch.cat(self.y_true, dim=0)})
+    output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0), "y_true": torch.cat(self.y_true, dim=0)})
 
         elif isinstance(self.evaluator, LinkEvaluator):
             y_pred_pos = torch.cat(self.y_pred, dim=0).squeeze(-1)
             y_pred_neg = torch.cat(self.y_true, dim=0)
 
-            output = self.evaluator.eval({"y_pred_pos": y_pred_pos,
-                                          "y_pred_neg": y_pred_neg})
+            output = self.evaluator.eval({"y_pred_pos": y_pred_pos, "y_pred_neg": y_pred_neg})
             output = {k.strip("_list"): v.mean().item() for k, v in output.items()}
 
         elif isinstance(self.evaluator, GraphEvaluator):
-            input_shape = {"y_true": torch.cat(self.y_pred, dim=0),
-                           "y_pred": torch.cat(self.y_true, dim=0)}
+            input_shape = {"y_true": torch.cat(self.y_pred, dim=0), "y_pred": torch.cat(self.y_true, dim=0)}
             output = self.evaluator.eval(input_shape)
         else:
             raise Exception(f"implement eval for {self.evaluator}")
@@ -284,8 +291,7 @@ class OGBLinkPredMetrics(torchmetrics.Metric):
         if e_pred_pos.dim() > 1:
             e_pred_pos = e_pred_pos.squeeze(-1)
 
-        output = self.evaluator.eval({"y_pred_pos": e_pred_pos,
-                                      "y_pred_neg": e_pred_neg})
+        output = self.evaluator.eval({"y_pred_pos": e_pred_pos, "y_pred_neg": e_pred_neg})
         for k, v in output.items():
             if isinstance(v, float):
                 score = torch.tensor([v])
@@ -331,8 +337,9 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
 
     def compute(self, prefix=None) -> dict:
         if self._num_examples == 0:
-            raise NotComputableError("TopKCategoricalAccuracy must have at"
-                                     "least one example before it can be computed.")
+            raise NotComputableError(
+                "TopKCategoricalAccuracy must have at" "least one example before it can be computed."
+            )
         if prefix is None:
             return {f"top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
         else:
@@ -376,24 +383,22 @@ class AveragePrecisionPairwise(BinnedAveragePrecision):
 
     def compute(self) -> Union[List[Tensor], Tensor]:
         if self.num_samples == 0:
-            raise NotComputableError("AveragePrecisionPairwise must have at"
-                                     "least one example before it can be computed.")
+    raise NotComputableError("AveragePrecisionPairwise must have at" "least one example before it can be computed.")
         return super().compute()
 
 
 class FMax_Micro(BinnedPrecisionRecallCurve):
-    def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100,
-                 **kwargs: Any) -> None:
-        super(BinnedPrecisionRecallCurve, self).__init__(**kwargs)
+    def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100, **kwargs: Any) -> None:
+    super(BinnedPrecisionRecallCurve, self).__init__(**kwargs)
 
-        self.num_classes = num_classes
-        if isinstance(thresholds, int):
-            self.num_thresholds = thresholds
-            self.thresholds = torch.linspace(0, 1.0, thresholds)
+    self.num_classes = num_classes
+    if isinstance(thresholds, int):
+        self.num_thresholds = thresholds
+        self.thresholds = torch.linspace(0, 1.0, thresholds)
 
-        elif thresholds is not None:
-            if not isinstance(thresholds, (list, Tensor)):
-                raise ValueError("Expected argument `thresholds` to either be an integer, list of floats or a tensor")
+    elif thresholds is not None:
+        if not isinstance(thresholds, (list, Tensor)):
+            raise ValueError("Expected argument `thresholds` to either be an integer, list of floats or a tensor")
             self.thresholds = torch.tensor(thresholds) if isinstance(thresholds, list) else thresholds
             self.num_thresholds = self.thresholds.numel()
 
@@ -441,8 +446,7 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
     def compute(self) -> Tensor:
         """Returns a float scalar."""
         if not hasattr(self, "TPs") or len(self.TPs[0]) == 0:
-            raise NotComputableError("FMax must have at"
-                                     "least one example before it can be computed.")
+            raise NotComputableError("FMax must have at" "least one example before it can be computed.")
 
         TPs = torch.stack([torch.cat(li) for li in self.TPs])
         FPs = torch.stack([torch.cat(li) for li in self.FPs])
@@ -486,10 +490,10 @@ class FMax_Slow(torchmetrics.Metric):
             if isinstance(targets, SparseTensor):
                 targets = targets.to_scipy()
             elif targets.layout == torch.sparse_csr:
-                targets = ssp.csr_matrix((targets.values().numpy(),
-                                          targets.col_indices().numpy(),
-                                          targets.crow_indices().numpy()),
-                                         shape=targets.shape)
+                targets = ssp.csr_matrix(
+                    (targets.values().numpy(), targets.col_indices().numpy(), targets.crow_indices().numpy()),
+                    shape=targets.shape,
+                )
             elif isinstance(targets, Tensor):
                 targets = targets.cpu().numpy()
 
@@ -499,8 +503,12 @@ class FMax_Slow(torchmetrics.Metric):
         self._threshs.append(thresh)
         self._n_samples.append(n_samples)
 
-    def get_fmax(self, scores: Union[np.ndarray, ssp.csr_matrix], targets: Union[np.ndarray, ssp.csr_matrix],
-                 thresholds: np.ndarray) -> Tuple[float, float]:
+    def get_fmax(
+            self,
+            scores: Union[np.ndarray, ssp.csr_matrix],
+            targets: Union[np.ndarray, ssp.csr_matrix],
+            thresholds: np.ndarray,
+    ) -> Tuple[float, float]:
         fmax_t = 0.0, 0.0
 
         if not isinstance(targets, ssp.csr_matrix):
@@ -524,16 +532,15 @@ class FMax_Slow(torchmetrics.Metric):
 
     def compute(self, prefix=None) -> Union[float, Dict[str, float]]:
         if len(self._scores) == 0:
-            raise NotComputableError("AveragePrecision must have at"
-                                     "least one example before it can be computed.")
+            raise NotComputableError("AveragePrecision must have at" "least one example before it can be computed.")
 
         weighted_avg_score = np.average(self._scores, weights=self._n_samples)
         return weighted_avg_score
 
 
 @torch.no_grad()
-def precision_recall_curve(y_true: Tensor, y_pred: Tensor, n_thresholds=100, average='micro'):
-    assert average == 'micro'
+def precision_recall_curve(y_true: Tensor, y_pred: Tensor, n_thresholds=100, average="micro"):
+    assert average == "micro"
     if not isinstance(y_true, Tensor):
         targets = torch.from_numpy(y_true)
     else:
