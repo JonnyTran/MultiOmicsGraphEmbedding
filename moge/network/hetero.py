@@ -820,4 +820,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         else:
             train_nodes_idx = valid_nodes_idx = test_nodes_idx = None
 
+        # for ntype, valid_nids in valid_nodes_idx.items():
+
         return hetero, classes, self.nodes[node_types], train_nodes_idx, valid_nodes_idx, test_nodes_idx

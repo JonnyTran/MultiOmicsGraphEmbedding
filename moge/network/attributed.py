@@ -138,8 +138,8 @@ class AttributedNetwork(Network):
                     transformers[col].classes_ = np.delete(transformers[col].classes_,
                                                            np.where(transformers[col].classes_ == "")[0])
             except Exception as e:
-                print(e)
-                traceback.print_exc()
+                logger.error(f"`{col}` dtypes: {values.map(type).unique()}, {e.__class__}: {e}")
+                print(traceback.format_exc())
                 continue
 
         return transformers

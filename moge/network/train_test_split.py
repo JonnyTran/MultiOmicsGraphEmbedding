@@ -10,9 +10,10 @@ import pandas as pd
 import tqdm
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 from logzero import logger
-from moge.model.utils import tensor_sizes
 from networkx.classes.reportviews import EdgeView
 from sklearn.preprocessing import MultiLabelBinarizer
+
+from moge.model.utils import tensor_sizes
 
 
 def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):
@@ -220,6 +221,16 @@ class TrainTestSplit():
             valid_nodes = self.valid_nodes
         if test_nodes is None:
             test_nodes = self.test_nodes
+
+        for ntype in set(train_nodes.keys()).intersection(set(valid_nodes.keys())).intersection(set(test_nodes.keys())):
+            test_overlap_train = test_nodes[ntype].intersection(train_nodes[ntype])
+            valid_overlap_train = valid_nodes[ntype].intersection(train_nodes[ntype])
+            if any(test_overlap_train):
+                logger.warn(f"{ntype} test ({len(test_nodes[ntype])}) overlap train ({len(train_nodes[ntype])}): "
+                            f" {len(test_overlap_train)}")
+            if any(valid_overlap_train):
+                logger.warn(f"{ntype} valid ({len(valid_nodes[ntype])}) overlap train ({len(train_nodes[ntype])}): "
+                            f"{len(valid_overlap_train)}")
 
         # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
         etypes_networks_prog = tqdm.tqdm(self.networks.items(), desc=f"Set train/valid/test_mask on edge types")

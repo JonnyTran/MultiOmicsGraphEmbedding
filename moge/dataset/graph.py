@@ -317,6 +317,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                 f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
         assert hasattr(self, "num_nodes_dict")
 
+    @property
     def name(self) -> str:
         if hasattr(self, "_name") and self._name:
             return self._name

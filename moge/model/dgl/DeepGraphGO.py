@@ -2,6 +2,7 @@ import os.path
 import warnings
 from argparse import Namespace
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 from typing import List, Dict, Tuple
 
@@ -19,7 +20,6 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
-from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
@@ -27,6 +27,8 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -560,6 +562,12 @@ def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFra
         with open(pid_list_file) as fp:
             return [line.split()[0] for line in fp]
 
+    if not any(name in ['mf', 'bp', 'cc'] for name in namespaces):
+        rename_dict = {'molecular_function': 'mf', 'biological_process': 'bp', 'cellular_component': 'cc',
+                       'mf': 'mf', 'bp': 'bp', 'cc': 'cc'}
+        namespaces = [rename_dict[name] for name in namespaces]
+        logger.info(f'DGG namespaces: {namespaces}')
+
     net_pid_list = get_pid_list(os.path.join(path, 'ppi_pid_list.txt'))
     # dgl_graph: dgl.DGLGraph = dgl.data.utils.load_graphs(f'{path}/ppi_dgl_top_100')[0][0]
     # self_loop = torch.zeros_like(dgl_graph.edata['ppi'])
@@ -614,6 +622,7 @@ def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFra
         uniprot_go_id.loc[test_pid_list, "go_id"] = uniprot_go_id.loc[test_pid_list, "go_id"] + \
                                                     pd.Series(test_go_labels, index=test_pid_list)
 
+        # Set train/valid/test protein ids from False to True
         uniprot_go_id.loc[train_pid_list, "train_mask"] = True
         uniprot_go_id.loc[valid_pid_list, "valid_mask"] = True
         uniprot_go_id.loc[test_pid_list, "test_mask"] = True
@@ -623,9 +632,11 @@ def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFra
         uniprot_go_id.loc[test_pid_list, "sequence"] = test_seqs
 
     # If node not in either train/valid/test, then set mask to True on all train/valid/test
-    uniprot_go_id[['train_mask', 'valid_mask', 'test_mask']] = uniprot_go_id[
-        ['train_mask', 'valid_mask', 'test_mask']].apply(lambda x: ~x if not x.any() else x, axis=1)
-    uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(
-        lambda li: None if isinstance(li, list) and len(li) == 0 else li)
+    mask_cols = ['train_mask', 'valid_mask', 'test_mask']
+    uniprot_go_id.loc[~uniprot_go_id[mask_cols].any(axis=1), mask_cols].replace({'train_mask': {False: True}},
+                                                                                inplace=True)
+    # uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(
+    #     lambda li: None if isinstance(li, list) and len(li) == 0 else li)
+    uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(lambda d: d if isinstance(d, Iterable) else [])
 
     return uniprot_go_id

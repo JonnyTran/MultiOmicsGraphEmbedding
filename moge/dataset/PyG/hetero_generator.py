@@ -159,6 +159,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if isinstance(path, str) and '~' in path:
             path = os.path.expanduser(path)
 
+        if path.endswith("/"):
+            path = path.rstrip('/')
+
+        # add slug to dataset directory
+        slug = self.get_slug()
+        path = path.rstrip('_') + '_' + slug
+        logger.info(f"Saving {self.__class__.__name__} to .../{os.path.basename(path)}/")
+
         if not os.path.exists(path):
             os.makedirs(path)
 
@@ -177,7 +185,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         attrs = get_attrs(self, exclude={'x_dict', 'y_dict', 'edge_index_dict', 'global_node_index',
                                          'nodes', 'node_attr_shape', 'node_attr_sparse', 'num_nodes_dict',
                                          'node_degrees', 'node_mask_counts', 'node_metadata', 'class_indices'})
-        logger.info(f"saving attrs: {list(attrs.keys())}")
         with open(join(path, 'metadata.pickle'), 'wb') as f:
             pickle.dump(attrs, f)
 
@@ -200,6 +207,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Writing to metadata.json
         with open(join(path, "metadata.json"), "w") as outfile:
             outfile.write(metadata)
+
+    def get_slug(self):
+        ntypes = ''.join(s.capitalize()[0] for s in self.node_types if s not in self.pred_ntypes)
+        pntypes = ''.join(s[0] for s in self.pred_ntypes)
+        slug = f'{ntypes}-{pntypes}_{len(self.metapaths)}'
+        return slug
 
     @property
     def class_indices(self) -> Optional[Dict[str, Tensor]]:
