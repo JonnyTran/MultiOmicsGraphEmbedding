@@ -7,7 +7,8 @@ import pandas as pd
 
 
 def get_attrs(obj, exclude: Iterable = None,
-              dtypes=(str, dict, int, float, pd.Series, pd.DataFrame, Namespace, np.ndarray)) -> Dict[str, Any]:
+              dtypes=(str, dict, int, list, tuple, float, bool,
+                      pd.Index, pd.Series, pd.DataFrame, Namespace, np.ndarray)) -> Dict[str, Any]:
     if isinstance(dtypes, Iterable) and not isinstance(dtypes, tuple):
         dtypes = tuple(dtypes)
 

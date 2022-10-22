@@ -533,7 +533,7 @@ class LATTE(nn.Module):
                     for ntype in set(current_dst_ntypes).difference(last_src_nids.keys()):
                         nid = nodes.query(f'(level == {nodes["level"].min()}) and (label == "{ntype}")').index[0]
 
-                        selfloop_weight = 1 - links.query(f'target == {nid}')['mean'].sum() + 1e-4
+                        selfloop_weight = 1 - links.query(f'target == {nid}')['mean'].sum() + 1e-3
                         selfloop_link = pd.Series({
                             'source': nid, 'target': nid, 'label': ntype, 'color': nodes.loc[nid, 'color'],
                             'mean': selfloop_weight, 'std': 0.0, 'layer': latte.layer},

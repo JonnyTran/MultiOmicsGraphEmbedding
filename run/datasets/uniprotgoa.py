@@ -77,7 +77,8 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
 
     # Add GOA's from DeepGraphGO to UniProtGOA
     annot_df = network.annotations[head_node_type]
-    annot_df['go_id'] = annot_df['go_id'].map(lambda d: d if isinstance(d, (list, np.ndarray)) else [])
+    annot_df['go_id'] = annot_df['go_id'].map(lambda d: d if isinstance(d,
+                                                                        (list, np.ndarray)) else [])
 
     dgg_go_id = load_protein_dataset(hparams.deepgraphgo_data, namespaces=['mf', 'bp', 'cc'])
     annot_df = annot_df.join(dgg_go_id[['train_mask', 'valid_mask', 'test_mask']], on='protein_id')

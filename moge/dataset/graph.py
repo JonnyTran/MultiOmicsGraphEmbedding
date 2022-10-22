@@ -157,6 +157,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
     def __init__(self, dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
                                       DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
+                 nodes_namespace: Dict[str, pd.Series] = None,
                  pred_ntypes=None,
                  classes=None,
                  edge_dir: str = "in", add_reverse_metapaths: bool = True, inductive: bool = False,
@@ -168,6 +169,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         self.head_node_type: str = head_node_type
         self.inductive = inductive
         self.pred_ntypes = pred_ntypes
+        self.nodes_namespace = nodes_namespace
         self.classes = classes
         if name:
             self._name = name

@@ -13,6 +13,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from logzero import logger
 from pandas import DataFrame, Series, Index
 from torch import Tensor
 from torch.utils.data import DataLoader
@@ -161,11 +162,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if not os.path.exists(path):
             os.makedirs(path)
 
-        if isinstance(self.network.nodes, (pd.Index, pd.Series)):
-            self.network.nodes.to_pickle(join(path, 'nodes.pickle'))
-        elif isinstance(self.network.nodes, dict):
+        nodes = self.nodes if hasattr(self, "nodes") and self.nodes != None else self.network.nodes
+        if isinstance(nodes, (pd.Index, pd.Series)):
+            nodes.to_pickle(join(path, 'nodes.pickle'))
+        elif isinstance(nodes, dict):
             with open(join(path, 'nodes.pickle'), 'wb') as f:
-                pickle.dump(self.network.nodes, f)
+                pickle.dump(nodes, f)
 
         for ntype, df in self.network.annotations.items():
             df.to_pickle(join(path, f'{ntype}.pickle'))
@@ -175,6 +177,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         attrs = get_attrs(self, exclude={'x_dict', 'y_dict', 'edge_index_dict', 'global_node_index',
                                          'nodes', 'node_attr_shape', 'node_attr_sparse', 'num_nodes_dict',
                                          'node_degrees', 'node_mask_counts', 'node_metadata', 'class_indices'})
+        logger.info(f"saving attrs: {list(attrs.keys())}")
         with open(join(path, 'metadata.pickle'), 'wb') as f:
             pickle.dump(attrs, f)
 
@@ -185,7 +188,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     return obj.toJSON()
                 elif isinstance(obj, np.ndarray):
                     return obj.shape
-                elif isinstance(obj, (pd.Series, pd.Index, pd.DataFrame)):
+                elif isinstance(obj, (pd.Series, pd.Index)):
+                    return obj.shape
+                elif isinstance(obj, pd.DataFrame):
                     return obj.shape
             except:
                 return obj.__dict__
