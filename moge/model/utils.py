@@ -1,3 +1,4 @@
+from argparse import Namespace
 from collections import OrderedDict
 from collections.abc import MutableMapping
 from typing import Dict, Tuple, Optional, Union, List
@@ -61,6 +62,9 @@ def tensor_sizes(input=None, **kwargs) -> ...:
     if isinstance(input, (dict, MutableMapping)):
         return {key: tensor_sizes(v) \
                 for key, v in input.items()}
+    if isinstance(input, Namespace):
+        return {key: tensor_sizes(v) \
+                for key, v in input.__dict__.items()}
 
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)

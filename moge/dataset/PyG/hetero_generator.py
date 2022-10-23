@@ -497,7 +497,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Select only train nodes with at least 1 label
         node_mask = graph[head_ntype].train_mask & graph[head_ntype].y.sum(1).type(torch.bool)
-        logger.info(f'Num training idx: {node_mask.sum()}')
+        logger.info(f'train_dataloader size: {node_mask.sum()}')
 
         dataset = self.create_graph_sampler(graph, batch_size, node_type=head_ntype, node_mask=node_mask,
                                             transform_fn=self.transform, num_workers=num_workers,
@@ -511,6 +511,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Select only valid nodes with at least 1 label
         node_mask = graph[head_ntype].valid_mask & graph[head_ntype].y.sum(1).type(torch.bool)
+        logger.info(f'valid_dataloader size: {node_mask.sum()}')
 
         num_train_overlap = (graph[head_ntype].valid_mask & (graph[head_ntype].train_mask == True)).sum()
         assert num_train_overlap == 0, f"num_train_overlap: {num_train_overlap}"
@@ -527,6 +528,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Select only test nodes with at least 1 label
         node_mask = graph[head_ntype].test_mask & graph[head_ntype].y.sum(1).type(torch.bool)
+        logger.info(f'test_dataloader size: {node_mask.sum()}')
 
         num_train_overlap = (graph[head_ntype].test_mask & (graph[head_ntype].train_mask == True)).sum()
         assert num_train_overlap == 0, f"num_train_overlap: {num_train_overlap}"

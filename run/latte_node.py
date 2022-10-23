@@ -17,7 +17,8 @@ from run.utils import parse_yaml_config, select_empty_gpus
 def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = True  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 100
+    MAX_EPOCHS = 500
+    MIN_EPOCHS = None if 'min_epochs' not in hparams else hparams.min_epochs
     seed_everything(seed=hparams.seed)
 
     hparams.neighbor_sizes = [hparams.n_neighbors, ] * hparams.n_layers
@@ -66,6 +67,7 @@ def train(hparams: Namespace):
         # auto_scale_batch_size=True if hparams.n_layers > 2 else False,
         log_every_n_steps=1,
         max_epochs=MAX_EPOCHS,
+        min_epochs=MIN_EPOCHS,
         callbacks=callbacks,
         logger=logger,
         # max_time=datetime.timedelta(hours=hparams.hours) \

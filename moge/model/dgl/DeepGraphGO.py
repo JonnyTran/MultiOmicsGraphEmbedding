@@ -261,6 +261,7 @@ class DeepGraphGO(LightningModule):
         self.dropout = nn.Dropout(hparams.dropout)
 
         self.model = GcnNet(**hparams.__dict__)
+
         self.n_classes = hparams.n_classes
         self.classifier = nn.Linear(hparams.hidden_size, self.n_classes)
         logger.info(
@@ -427,10 +428,9 @@ class DeepGraphGO(LightningModule):
     def configure_optimizers(self):
         weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
         lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
+        lr = self.hparams.lr if 'lr' in self.hparams else None
 
-        optimizer = torch.optim.AdamW(self.model.parameters(),
-                                      # lr=self.hparams.lr
-                                      )
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
 
         return {"optimizer": optimizer}
 
@@ -635,8 +635,8 @@ def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFra
 
     # If node not in either train/valid/test, then set mask to True on all train/valid/test
     mask_cols = ['train_mask', 'valid_mask', 'test_mask']
-    uniprot_go_id.loc[~uniprot_go_id[mask_cols].any(axis=1), mask_cols].replace({'train_mask': {False: True}},
-                                                                                inplace=True)
+    uniprot_go_id.loc[~uniprot_go_id[mask_cols].any(axis=1), mask_cols] = uniprot_go_id.loc[
+        ~uniprot_go_id[mask_cols].any(axis=1), mask_cols].replace({'train_mask': {False: True}})
     # uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(
     #     lambda li: None if isinstance(li, list) and len(li) == 0 else li)
     uniprot_go_id['go_id'] = uniprot_go_id['go_id'].map(lambda d: d if isinstance(d, Iterable) else [])

@@ -1,12 +1,49 @@
+import warnings
 from typing import Dict, Tuple, List, Any, Union
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as ssp
 from sklearn import svm
 from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
 from sklearn.model_selection import cross_validate
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
+
+
+def fmax(targets: ssp.csr_matrix, scores: np.ndarray) -> Tuple[float, float]:
+    if not isinstance(targets, ssp.csr_matrix):
+        targets = ssp.csr_matrix(targets)
+
+    fmax_ = 0.0, 0.0
+    for thresh in (c / 100 for c in range(101)):
+        cut_sc = ssp.csr_matrix((scores >= thresh).astype(np.int32))
+        correct = cut_sc.multiply(targets).sum(axis=1)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            p, r = correct / cut_sc.sum(axis=1), correct / targets.sum(axis=1)
+            p, r = np.average(p[np.invert(np.isnan(p))]), np.average(r)
+        if np.isnan(p):
+            continue
+
+        try:
+            fmax_ = max(fmax_, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
+        except ZeroDivisionError:
+            pass
+    return fmax_
+
+
+def pair_aupr(targets: np.ndarray, scores: np.ndarray, top=200):
+    if isinstance(targets, ssp.csr_matrix):
+        targets = targets.toarray()
+
+    rows = np.arange(scores.shape[0])[:, None]
+    top_k_cols = scores.argpartition(scores.shape[1] - top)[:, :-top]
+    scores[rows, top_k_cols] = 0  # -1e100
+
+    # scores = np.nan_to_num(scores, neginf=0)
+    return average_precision_score(targets.flatten(), scores.flatten())
 
 
 def evaluate_classification(embedding, network, cv=5, node_label="Family", multilabel=False, classifier=None,

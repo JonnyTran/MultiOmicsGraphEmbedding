@@ -16,18 +16,18 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
-from pandas import Series, Index, DataFrame
-from scipy.sparse import csr_matrix
-from torch import Tensor
-from torch_geometric.data import HeteroData
-from torch_sparse import SparseTensor
-
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
+from pandas import Series, Index, DataFrame
+from scipy.sparse import csr_matrix
+from torch import Tensor
+from torch_geometric.data import HeteroData
+from torch_sparse import SparseTensor
+
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
 
@@ -240,6 +240,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         if isinstance(edgelist, Iterable):
             self.networks[etype].add_edges_from(edgelist, source=src_type, target=dst_type, database=database, **kwargs)
+
         elif isinstance(edgelist, nx.Graph):
             self.networks[etype].add_edges_from(edgelist.edges.data(), source=src_type, target=dst_type,
                                                 database=database,

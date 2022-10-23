@@ -30,5 +30,6 @@ loss_type: "BCE_WITH_LOGITS"
 max_epochs: 300
 sweep: true
 lr: 0.01
+min_epochs:
 #hours: 3
 early_stopping: 8
