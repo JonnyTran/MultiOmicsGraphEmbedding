@@ -14,12 +14,6 @@ import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from logzero import logger
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.io import get_attrs
@@ -29,6 +23,11 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -494,9 +493,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
-        node_mask = graph[self.head_node_type].train_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
+        head_ntype = self.head_node_type
 
-        dataset = self.create_graph_sampler(graph, batch_size, node_type=self.head_node_type, node_mask=node_mask,
+        # Select only train nodes with at least 1 label
+        node_mask = graph[head_ntype].train_mask & graph[head_ntype].y.sum(1).type(torch.bool)
+
+        dataset = self.create_graph_sampler(graph, batch_size, node_type=head_ntype, node_mask=node_mask,
                                             transform_fn=self.transform, num_workers=num_workers,
                                             shuffle=True)
 
@@ -504,9 +506,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
-        node_mask = graph[self.head_node_type].valid_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
+        head_ntype = self.head_node_type
 
-        dataset = self.create_graph_sampler(self.G, batch_size, node_type=self.head_node_type, node_mask=node_mask,
+        # Select only valid nodes with at least 1 label
+        node_mask = graph[head_ntype].valid_mask & graph[head_ntype].y.sum(1).type(torch.bool)
+
+        num_train_overlap = (graph[head_ntype].valid_mask & (graph[head_ntype].train_mask == True)).sum()
+        assert num_train_overlap == 0, f"num_train_overlap: {num_train_overlap}"
+
+        dataset = self.create_graph_sampler(self.G, batch_size, node_type=head_ntype, node_mask=node_mask,
                                             transform_fn=self.transform, num_workers=num_workers,
                                             shuffle=False)
 
@@ -514,9 +522,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
-        node_mask = graph[self.head_node_type].test_mask & graph[self.head_node_type].y.sum(1).type(torch.bool)
+        head_ntype = self.head_node_type
 
-        dataset = self.create_graph_sampler(self.G, batch_size, node_type=self.head_node_type, node_mask=node_mask,
+        # Select only test nodes with at least 1 label
+        node_mask = graph[head_ntype].test_mask & graph[head_ntype].y.sum(1).type(torch.bool)
+
+        num_train_overlap = (graph[head_ntype].test_mask & (graph[head_ntype].train_mask == True)).sum()
+        assert num_train_overlap == 0, f"num_train_overlap: {num_train_overlap}"
+
+        dataset = self.create_graph_sampler(self.G, batch_size, node_type=head_ntype, node_mask=node_mask,
                                             transform_fn=self.transform, num_workers=num_workers,
                                             shuffle=False)
 

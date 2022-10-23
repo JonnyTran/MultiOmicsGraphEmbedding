@@ -67,14 +67,14 @@ class Metrics(torch.nn.Module):
                 self.metrics[name] = F1Score(num_classes=n_classes, average="micro", top_k=top_k)
 
             elif "fmax" in name:
-                if "test" in prefix:
+                if prefix != '':
                     self.metrics[name] = FMax_Slow()
 
             elif "auroc" in name:
                 self.metrics[name] = AUROC(num_classes=n_classes, average="micro")
             elif "aupr" in name:
                 # self.metrics[name] = AveragePrecision_(average="pairwise")
-                self.metrics[name] = AveragePrecisionPairwise(average="none")
+                self.metrics[name] = AveragePrecisionPairwise(average="none", shrink=1e-2 if prefix == '' else None)
 
             elif "mse" in name:
                 self.metrics[name] = MeanSquaredError()
@@ -204,9 +204,7 @@ class Metrics(torch.nn.Module):
                     logs.update(self.metrics[metric].compute(prefix=prefix))
 
                 elif isinstance(self.metrics[metric], TopKCategoricalAccuracy):
-                    metric_name = (
-                                      str(metric) if prefix is None else prefix + str(metric)
-                                  ) + f"@{self.metrics[metric]._k}"
+                    metric_name = f"{metric if prefix is None else prefix + str(metric)}@{self.metrics[metric]._k}"
                     logs[metric_name] = self.metrics[metric].compute()
 
                 else:
@@ -361,10 +359,12 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
 
 
 class AveragePrecisionPairwise(BinnedAveragePrecision):
-    def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100, **kwargs: Any) -> None:
+    def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100, shrink=1e-2,
+                 **kwargs: Any) -> None:
         super().__init__(num_classes, thresholds, **kwargs)
 
-        self.shrink = torch.nn.Hardshrink(lambd=1e-2)
+        if shrink:
+            self.shrink = torch.nn.Hardshrink(lambd=shrink)
         self.reset()
 
     def reset(self) -> None:
@@ -374,9 +374,13 @@ class AveragePrecisionPairwise(BinnedAveragePrecision):
     @torch.no_grad()
     def update(self, preds: Tensor, target: Tensor) -> None:
         # assume values in [0, 1] range
-        row, col = (self.shrink(preds) + target).nonzero().T
-        preds = preds[row, col]
-        target = target[row, col]
+        if hasattr(self, 'shrink') and self.shrink is not None:
+            row, col = (self.shrink(preds) + target).nonzero().T
+            preds = preds[row, col]
+            target = target[row, col]
+        else:
+            preds = preds.ravel()
+            target = target.ravel()
 
         if len(preds.shape) == len(target.shape) == 1:
             preds = preds.reshape(-1, 1)
@@ -398,7 +402,7 @@ class AveragePrecisionPairwise(BinnedAveragePrecision):
     def compute(self) -> Union[List[Tensor], Tensor]:
         if self.num_samples == 0:
             raise NotComputableError(
-                "AveragePrecisionPairwise must have at" "least one example before it can be computed."
+                "AveragePrecisionPairwise must have at least one example before it can be computed."
             )
         return super().compute()
 

@@ -11,13 +11,6 @@ import torch.nn.functional as F
 import tqdm
 import wandb
 from logzero import logger
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
-
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -27,6 +20,12 @@ from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -189,7 +188,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log_table
         df_filter = df.reset_index().filter(columns, axis="columns")
-        if n_samples:
+        if n_samples and df_filter.index.size > n_samples:
             df_filter = df_filter.sample(n_samples)
 
         table = wandb.Table(data=df_filter)
@@ -211,7 +210,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
     def plot_pr_curve(self, targets: Union[Tensor, pd.DataFrame], scores: Union[Tensor, pd.DataFrame],
                       split_samples: Union[pd.Series, np.ndarray] = None, n_thresholds=200, title="PR_Curve",
-                      xaxis_title="recall_micro", yaxis_title="precision_micro", scores_thresh=1e-2) \
+                      xaxis_title="recall_micro", yaxis_title="precision_micro", scores_thresh=1e-3) \
             -> None:
         if self.wandb_experiment is None:
             return
@@ -239,15 +238,16 @@ class NodeEmbeddingEvaluator(LightningModule):
 
                 pred = preds[mask]
                 target = targets[mask]
-                row, col = (np.absolute(pred + target) > scores_thresh).nonzero()
-                precisions, recalls, _ = precision_recall_curve(y_true=target[row, col], y_pred=pred[row, col],
-                                                                n_thresholds=n_thresholds // 2, average='micro')
+                # row, col = ((pred + target) > scores_thresh).nonzero()
+                precisions, recalls, _ = precision_recall_curve(  # y_true=target[row, col], y_pred=pred[row, col],
+                    y_true=target.ravel(), y_pred=pred.ravel(),
+                    n_thresholds=n_thresholds // 2, average='micro')
                 dfs[split] = pd.DataFrame({xaxis_title: recalls, yaxis_title: precisions})
 
             df = pd.concat(dfs, names=[stroke, None], axis=0).reset_index(level=0)
 
         else:
-            row, col = (np.absolute(preds + targets) > scores_thresh).nonzero()
+            row, col = ((preds + targets) > scores_thresh).nonzero()
             precisions, recalls, _ = precision_recall_curve(y_true=targets[row, col], y_pred=preds[row, col],
                                                             n_thresholds=n_thresholds, average='micro')
             df = pd.DataFrame({xaxis_title: recalls, yaxis_title: precisions})
