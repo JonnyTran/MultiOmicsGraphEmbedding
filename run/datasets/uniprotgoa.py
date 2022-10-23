@@ -7,12 +7,12 @@ from collections.abc import Iterable
 import dgl
 import numpy as np
 import pandas as pd
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index_dict
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.network.hetero import HeteroNetwork
+from moge.network.utils import to_list_of_strs
 from openomics.database.ontology import UniProtGOA
 
 
@@ -77,21 +77,30 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
 
     # Add GOA's from DeepGraphGO to UniProtGOA
     annot_df = network.annotations[head_node_type]
-    annot_df['go_id'] = annot_df['go_id'].map(lambda d: d if isinstance(d,
-                                                                        (list, np.ndarray)) else [])
+    annot_df['go_id'] = annot_df['go_id'].map(to_list_of_strs)
 
-    dgg_go_id = load_protein_dataset(hparams.deepgraphgo_data, namespaces=['mf', 'bp', 'cc'])
-    annot_df = annot_df.join(dgg_go_id[['train_mask', 'valid_mask', 'test_mask']], on='protein_id')
+    dgg_go_id = load_protein_dataset(hparams.deepgraphgo_data, namespaces=hparams.pred_ntypes)
+
+    # Set train/valid/test_mask
+    mask_cols = ['train_mask', 'valid_mask', 'test_mask']
+    annot_df = annot_df.join(dgg_go_id[mask_cols], on='protein_id')
+    annot_df[mask_cols] = annot_df[mask_cols].fillna(False)
+
+    unmarked_nodes = ~annot_df[mask_cols].any(axis=1)
+    annot_df.loc[unmarked_nodes, mask_cols] = \
+        annot_df.loc[unmarked_nodes, mask_cols].replace({'train_mask': {False: True}})
+
     if 'DeepGraphGO' in name:
-        dgg_go_id['go_id'] = dgg_go_id['go_id'].map(
-            lambda d: d if isinstance(d, (list, np.ndarray)) else [])
-        annot_df['go_id'] = annot_df['go_id'].map(list) + dgg_go_id.loc[annot_df.index, 'go_id']
+        dgg_go_id['go_id'] = dgg_go_id['go_id'].map(to_list_of_strs)
+        annot_df['go_id'] = annot_df['go_id'].apply(lambda d: d if isinstance(d, list) else []) + dgg_go_id['go_id']
         annot_df['go_id'] = annot_df['go_id'].map(np.unique).map(list)
 
     # Set train/valid/test split based on DeepGraphGO
     network.train_nodes[head_node_type] = set(annot_df.query('train_mask == True').index)
     network.valid_nodes[head_node_type] = set(annot_df.query('valid_mask == True').index)
     network.test_nodes[head_node_type] = set(annot_df.query('test_mask == True').index)
+
+    network.annotations[head_node_type] = annot_df
     if hparams.inductive:
         network.set_edge_traintest_mask()
 

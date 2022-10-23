@@ -2,15 +2,14 @@ import traceback
 from typing import List, Dict, Union
 
 import numpy as np
+import openomics
 import pandas as pd
 from logzero import logger
-from sklearn import preprocessing
-
-import openomics
 from moge.network.base import Network
 from moge.network.base import SEQUENCE_COL
-from moge.network.utils import select_labels
+from moge.network.utils import select_labels, to_list_of_strs
 from openomics.transforms.agg import concat_uniques
+from sklearn import preprocessing
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
@@ -129,7 +128,8 @@ class AttributedNetwork(Network):
                 else:
                     logger.info("Label {} is transformed by MultiLabelBinarizer".format(col)) if verbose else None
                     transformers[col] = preprocessing.MultiLabelBinarizer()
-                    values = values[~values.map(type).isin({str, float, int, bool, type(None)})]
+                    values = values.map(to_list_of_strs)
+
                     transformers[col].fit(values)
 
                 if hasattr(transformers[col], 'classes_') and \

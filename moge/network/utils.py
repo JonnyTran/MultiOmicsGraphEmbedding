@@ -1,10 +1,22 @@
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import Union
 
 import numpy as np
 import pandas as pd
 from numpy import ndarray
 from pandas import Index
+
+
+def to_list_of_strs(li):
+    if isinstance(li, str) and li:
+        return [li]
+
+    elif isinstance(li, Iterable):
+        return [x for x in li if isinstance(x, str) and x]
+
+    else:
+        return None
 
 
 def parse_labels(y_str: pd.Series, min_count: int = None, max_count: int = None,
