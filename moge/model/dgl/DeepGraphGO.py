@@ -20,6 +20,7 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
+from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
@@ -27,8 +28,6 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -178,8 +177,11 @@ def pair_aupr(targets: np.ndarray, scores: np.ndarray, top=200):
     if isinstance(targets, ssp.csr_matrix):
         targets = targets.toarray()
 
-    scores[np.arange(scores.shape[0])[:, None],
-           scores.argpartition(scores.shape[1] - top)[:, :-top]] = -1e100
+    rows = np.arange(scores.shape[0])[:, None]
+    top_k_cols = scores.argpartition(scores.shape[1] - top)[:, :-top]
+    scores[rows, top_k_cols] = 0  # -1e100
+
+    # scores = np.nan_to_num(scores, neginf=0)
     return average_precision_score(targets.flatten(), scores.flatten())
 
 

@@ -497,6 +497,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Select only train nodes with at least 1 label
         node_mask = graph[head_ntype].train_mask & graph[head_ntype].y.sum(1).type(torch.bool)
+        logger.info(f'Num training idx: {node_mask.sum()}')
 
         dataset = self.create_graph_sampler(graph, batch_size, node_type=head_ntype, node_mask=node_mask,
                                             transform_fn=self.transform, num_workers=num_workers,

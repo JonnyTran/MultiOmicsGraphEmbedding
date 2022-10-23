@@ -39,7 +39,7 @@ class Metrics(torch.nn.Module):
         self.top_ks = top_k
         self.prefix = prefix if isinstance(prefix, str) else ""
 
-        self.metrics = torch.nn.ModuleDict()
+        self.metrics = {}
         if metrics is None:
             metrics = []
 
@@ -69,6 +69,8 @@ class Metrics(torch.nn.Module):
             elif "fmax" in name:
                 if prefix != '':
                     self.metrics[name] = FMax_Slow()
+                else:
+                    continue
 
             elif "auroc" in name:
                 self.metrics[name] = AUROC(num_classes=n_classes, average="micro")
@@ -103,8 +105,8 @@ class Metrics(torch.nn.Module):
                 continue
 
             # Needed to add the torchmetrics as Modules, so they'll be on the correct CUDA device during training
-            # if isinstance(self.metrics[name], torchmetrics.metric.Metric):
-            #     setattr(self, str(name), self.metrics[name])
+            if name in self.metrics and isinstance(self.metrics[name], torchmetrics.metric.Metric):
+                setattr(self, str(name), self.metrics[name])
 
         self.reset_metrics()
 
