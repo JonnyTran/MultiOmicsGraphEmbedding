@@ -22,7 +22,7 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
     use_reverse = hparams.use_reverse
     head_node_type = hparams.head_node_type
 
-    # Set ntypes to include
+    # Set arguments
     if 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, str):
         hparams.ntype_subset = hparams.ntype_subset.split(" ")
     elif 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, Iterable):
@@ -53,7 +53,7 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
     all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
     go_nodes = np.array(list(all_go))
 
-    # Load HeteroNetwork from pickle
+    # Load HeteroNetwork
     with open(dataset_path, "rb") as file:
         network: HeteroNetwork = pickle.load(file)
         if not hasattr(network, 'train_nodes'):
@@ -61,44 +61,30 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
             network.valid_nodes = defaultdict(set)
             network.test_nodes = defaultdict(set)
 
-    # Add GO interactions
+    # Add GO ontology interactions
     network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=hparams.etype_subset)
 
+    # Add Protein-GO annotations
     for dst_ntype in set(['biological_process', 'molecular_function', 'cellular_component']).difference(
             hparams.pred_ntypes):
-        train_date = '2018-01-01'
-        valid_date = (pd.to_datetime(train_date) + pd.to_timedelta(26, "W")).date().strftime("%Y-%m-%d")
-        test_date = '2021-04-01'
         network.add_edges_from_annotations(geneontology, filter_dst_nodes=network.nodes[dst_ntype],
                                            src_ntype=head_node_type, dst_ntype=dst_ntype,
                                            src_node_col='protein_id',
-                                           train_date=train_date, valid_date=valid_date, test_date=test_date,
+                                           train_date=hparams.train_date,
+                                           valid_date=hparams.valid_date,
+                                           test_date=hparams.test_date,
                                            use_neg_annotations=False)
 
-    # Add GOA's from DeepGraphGO to UniProtGOA
-    annot_df = network.annotations[head_node_type]
-    annot_df['go_id'] = annot_df['go_id'].map(to_list_of_strs)
-
-    dgg_go_id = load_protein_dataset(hparams.deepgraphgo_data, namespaces=hparams.pred_ntypes)
-
-    # Set train/valid/test_mask
-    mask_cols = ['train_mask', 'valid_mask', 'test_mask']
-    annot_df = annot_df.join(dgg_go_id[mask_cols], on='protein_id')
-    annot_df[mask_cols] = annot_df[mask_cols].fillna(False)
-
-    unmarked_nodes = ~annot_df[mask_cols].any(axis=1)
-    annot_df.loc[unmarked_nodes, mask_cols] = \
-        annot_df.loc[unmarked_nodes, mask_cols].replace({'train_mask': {False: True}})
-
+    # Set train/valid/test node split
     if 'DeepGraphGO' in name:
-        dgg_go_id['go_id'] = dgg_go_id['go_id'].map(to_list_of_strs)
-        annot_df['go_id'] = annot_df['go_id'].apply(lambda d: d if isinstance(d, list) else []) + dgg_go_id['go_id']
-        annot_df['go_id'] = annot_df['go_id'].map(np.unique).map(list)
+        annot_df, train_nodes, valid_nodes, test_nodes = get_DeepGraphGO_split(network.annotations[head_node_type],
+                                                                               hparams.deepgraphgo_data)
+    else:
+        raise Exception('`name` must contain DeepGraphGO or UniProtGOA to specify split')
 
-    # Set train/valid/test split based on DeepGraphGO
-    network.train_nodes[head_node_type] = set(annot_df.query('train_mask == True').index)
-    network.valid_nodes[head_node_type] = set(annot_df.query('valid_mask == True').index)
-    network.test_nodes[head_node_type] = set(annot_df.query('test_mask == True').index)
+    network.train_nodes[head_node_type] = train_nodes
+    network.valid_nodes[head_node_type] = valid_nodes
+    network.test_nodes[head_node_type] = test_nodes
 
     network.annotations[head_node_type] = annot_df
     if hparams.inductive:
@@ -139,7 +125,6 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
         neighbor_loader=hparams.neighbor_loader,
         neighbor_sizes=hparams.neighbor_sizes,
         split_namespace=True,
-        go_ntype="GO_term",
         seq_tokenizer=sequence_tokenizers,
         inductive=hparams.inductive,
         pred_ntypes=hparams.pred_ntypes,
@@ -158,3 +143,28 @@ def load_uniprotgoa(name: str, dataset_path: str, hparams: Namespace,
         hparams.cls_graph = None
 
     return dataset
+
+
+def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str):
+    # Add GOA's from DeepGraphGO to UniProtGOA
+    annot_df['go_id'] = annot_df['go_id'].map(to_list_of_strs)
+
+    dgg_go_id = load_protein_dataset(deepgraphgo_data, namespaces=['cc', 'bp', 'mf'])
+    # Set train/valid/test_mask
+    mask_cols = ['train_mask', 'valid_mask', 'test_mask']
+    annot_df = annot_df.join(dgg_go_id[mask_cols], on='protein_id')
+    annot_df[mask_cols] = annot_df[mask_cols].fillna(False)
+    unmarked_nodes = ~annot_df[mask_cols].any(axis=1)
+    annot_df.loc[unmarked_nodes, mask_cols] = \
+        annot_df.loc[unmarked_nodes, mask_cols].replace({'train_mask': {False: True}})
+
+    dgg_go_id['go_id'] = dgg_go_id['go_id'].map(to_list_of_strs)
+    annot_df['go_id'] = annot_df['go_id'].apply(lambda d: d if isinstance(d, list) else []) + dgg_go_id['go_id']
+    annot_df['go_id'] = annot_df['go_id'].map(np.unique).map(list)
+
+    # Set train/valid/test split based on DeepGraphGO
+    train_nodes = set(annot_df.query('train_mask == True').index)
+    valid_nodes = set(annot_df.query('valid_mask == True').index)
+    test_nodes = set(annot_df.query('test_mask == True').index)
+
+    return annot_df, train_nodes, valid_nodes, test_nodes

@@ -85,7 +85,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            ntype_subset: Optional[List[str]] = None,
                            add_reverse_metapaths=True,
                            split_namespace=False,
-                           go_ntype=None,
                            exclude_etypes: List[Union[str, Tuple]] = None,
                            pred_ntypes: List[str] = None,
                            train_test_split="node_mask", **kwargs):
@@ -105,10 +104,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.pred_metapaths = network.pred_metapaths if hasattr(network, 'pred_metapaths') else []
         self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, 'neg_pred_metapaths') else []
 
-        self.go_ntype = go_ntype
         self.split_namespace = split_namespace
         if split_namespace:
-            assert self.go_ntype is not None
             self.nodes_namespace = {}
             self.ntype_mapping = {}
             for ntype, df in network.annotations.items():
@@ -163,7 +160,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # add slug to dataset directory
         slug = self.get_slug()
-        path = path.rstrip('_') + '_' + slug
+        path = path.rstrip('_.') + '.' + slug
         logger.info(f"Saving {self.__class__.__name__} to .../{os.path.basename(path)}/")
 
         if not os.path.exists(path):
@@ -586,6 +583,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                           exclude_etypes=network.pred_metapaths,
                                           add_reverse_metapaths=add_reverse_metapaths, split_namespace=split_namespace,
                                           **kwargs)
+        assert 'go_ntype' in kwargs
 
         # Train/valid/test positive annotations
         self.triples, self.training_idx, self.validation_idx, self.testing_idx = \
@@ -678,10 +676,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         query_nodes = gather_node_dict(query_edges)
 
         # Add random GO term nodes for negative sampling
-        go_nodes_proba = 1 - F.one_hot(query_nodes[self.go_ntype], num_classes=self.num_nodes_dict[self.go_ntype]) \
+        go_ntype = self.pred_ntypes[0]
+        go_nodes_proba = 1 - F.one_hot(query_nodes[go_ntype], num_classes=self.num_nodes_dict[go_ntype]) \
             .sum(axis=0).to(torch.float)
         go_nids = torch.multinomial(go_nodes_proba, num_samples=self.negative_sampling_size, replacement=False)
-        query_nodes[self.go_ntype] = torch.cat([query_nodes[self.go_ntype], go_nids])
+        query_nodes[go_ntype] = torch.cat([query_nodes[go_ntype], go_nids])
 
         # Get subgraph induced by neighborhood hopping from the query nodes
         X, _, _ = self.graph_sampler.transform_fn(self.graph_sampler.collate_fn(query_nodes))
@@ -770,13 +769,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         sampling_size = self.get_neg_sampling_size(edge_pos, global_node_index=global_node_index,
                                                    max_samples=max_negative_sampling_size, mode=mode)
+        go_ntype = self.pred_ntypes[0]
 
         # Perform negative sampling
         for metapath, edge_index in edge_pos.items():
             head_type, tail_type = metapath[0], metapath[-1]
             adj: SparseTensor = self.triples_adj[metapath] \
                 if metapath in self.triples_adj \
-                else self.triples_adj[metapath[:-1] + (self.go_ntype,)]
+                else self.triples_adj[metapath[:-1] + (go_ntype,)]
 
             # head noise distribution
             head_neg_nodes = global_node_index[head_type]
@@ -785,7 +785,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=sampling_size, replacement=True)
 
             # Tail noise distribution
-            tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype]
+            tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else go_ntype]
             tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
 
             # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
