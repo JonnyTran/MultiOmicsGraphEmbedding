@@ -1,23 +1,47 @@
 program: run/latte_node.py
-method: random
+method: grid
 
 metric:
   goal: maximize
-  name: "val_MFO_aupr"
+  name: "val_aupr"
 
 parameters:
   dataset:
-    values: [ 'UniProtGOA_HUMAN', 'UniProtGOA_HUMAN DeepGraphGO' ]
-  feature:
+    values: [ 'UniProt' ]
+  root_path:
+    values:
+      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_genelevel.network.pickle'
+  labels_dataset:
+    values:
+      - 'DGG'
+      - 'GOA'
+  add_parents:
     values: [ true, false ]
   pred_ntypes:
     values:
       - 'molecular_function'
-  etype_subset:
+      - 'biological_process'
+      - 'cellular_component'
+  go_etypes:
     values:
+      - 'is_a'
       - 'is_a part_of'
       - 'is_a part_of has_part'
-      - ''
+      - null
+  exclude_etypes:
+    values:
+      - 'Protein.protein-protein.Protein'
+      - null
+  feature:
+    values: [ true, false ]
+  ntype_subset:
+    values:
+      - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'
+      - 'Protein MessengerRNA MicroRNA LncRNA'
+      - 'Protein MessengerRNA MicroRNA'
+      - 'Protein MessengerRNA'
+      - 'Protein'
   embedding_dim:
     values: [ 256 ]
   layer_pooling:
@@ -27,18 +51,7 @@ parameters:
   n_layers:
     values: [ 2 ]
   neighbor_loader:
-    values: [ 'HGTLoader', 'NeighborLoader' ]
-  ntype_subset:
-    values:
-      - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'
-      - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component'
-      - 'Protein MessengerRNA MicroRNA LncRNA biological_process'
-      - 'Protein MessengerRNA MicroRNA LncRNA'
-      - 'Protein MessengerRNA MicroRNA'
-      - 'Protein MessengerRNA'
-      - 'Protein'
-  cls_graph:
-    values: [ true, false ]
+    values: [ 'HGTLoader' ]
   n_neighbors:
     values: [ 1024 ]
   attn_heads:

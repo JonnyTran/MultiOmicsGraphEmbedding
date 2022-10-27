@@ -299,6 +299,8 @@ class LATTENodeClf(NodeClfTrainer):
                         self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
                                            split_samples=split_samples, title=title)
 
+                self.plot_sankey_flow()
+
                 self.plot_embeddings_tsne(global_node_index=global_node_index,
                                           embeddings={self.head_node_type: embeddings},
                                           targets=y_true, y_pred=scores)

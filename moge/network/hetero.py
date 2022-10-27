@@ -16,18 +16,18 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
-from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
-    untag_negative_metapath
-from moge.network.attributed import AttributedNetwork
-from moge.network.base import SEQUENCE_COL
-from moge.network.train_test_split import TrainTestSplit
-from moge.network.utils import parse_labels
 from pandas import Series, Index, DataFrame
 from scipy.sparse import csr_matrix
 from torch import Tensor
 from torch_geometric.data import HeteroData
 from torch_sparse import SparseTensor
 
+from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
+    untag_negative_metapath
+from moge.network.attributed import AttributedNetwork
+from moge.network.base import SEQUENCE_COL
+from moge.network.train_test_split import TrainTestSplit
+from moge.network.utils import parse_labels
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
 
@@ -366,6 +366,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             pos_edge_list_dict = get_edge_index_dict(pos_graph, nodes=self.nodes,
                                                      metapaths=metapaths.intersection(pred_metapaths), format="nx")
 
+            # Label the edges as either train/valid/test, and add them to the networks
             for etype, edges in pos_edge_list_dict.items():
                 if etype not in pred_metapaths or len(edges) == 0: continue
 
@@ -388,6 +389,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     metapaths = set(pred_metapaths)
                 neg_edge_list_dict = get_edge_index_dict(neg_graph, nodes=self.nodes,
                                                          metapaths=metapaths.intersection(pred_metapaths), format="nx")
+
+                # Label the negative edges as either train/valid/test, and add them to the networks
                 for etype, edges in neg_edge_list_dict.items():
                     if etype not in pred_metapaths or len(edges) == 0: continue
                     neg_etype = tag_negative_metapath(etype)
@@ -769,8 +772,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             for ntype in hetero.node_types:
                 if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
                 y_label = parse_labels(self.annotations[ntype].loc[self.nodes[ntype], target],
-                                       min_count=None, labels_subset=None,
-                                       dropna=False, delimiter=self.delimiter)
+                                       min_count=None, labels_subset=None, dropna=False, delimiter=self.delimiter)
+                if y_label.sum() == 0:
+                    continue
 
                 labels = self.feature_transformer[target].transform(y_label)
                 if isinstance(labels, np.ndarray):

@@ -1,6 +1,7 @@
 #dataset: "UniProtGOA_HUMAN"
 deepgraphgo_data: '../DeepGraphGO/data'
-root_path: "../Multiplex-Graph-Embedding/data/heteronetwork/HUMAN_gtex_uniprot_MirTarBase_LncBase_lncRNA2Target_STRING_mRNAprotein_network.pickle"
+uniprotgoa_path: '~/Bioinformatics_ExternalData/UniProtGOA/goa_uniprot_all.processed.parquet'
+#root_path: "../Multiplex-Graph-Embedding/data/heteronetwork/HUMAN_gtex_uniprot_MirTarBase_LncBase_lncRNA2Target_STRING_mRNAprotein_network.pickle"
 
 sequence: false
 
@@ -27,9 +28,9 @@ input_dropout: false
 batch_size: 1024
 
 loss_type: "BCE_WITH_LOGITS"
-max_epochs: 300
+max_epochs: 500
 sweep: true
 lr: 0.01
-min_epochs:
+min_epochs: 60
 #hours: 3
 early_stopping: 8

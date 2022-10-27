@@ -105,10 +105,18 @@ if __name__ == "__main__":
     parser.add_argument('--freeze_embeddings', type=bool, default=True)
     parser.add_argument('--feature', type=bool, default=True)
     parser.add_argument('--ntype_subset', type=str, default=None)
+    parser.add_argument('--exclude_etypes', type=str, default=None)
+
+    # UniProt dataset sweep
+    parser.add_argument('--uniprotgoa_path', type=str,
+                        default='~/Bioinformatics_ExternalData/UniProtGOA/goa_uniprot_all.processed.parquet')
+    parser.add_argument('--labels_dataset', type=str, default='GOA')
+    parser.add_argument('--add_parents', type=bool, default=True)
+    parser.add_argument('--dataset_path', type=str, default='')
 
     parser.add_argument('--head_node_type', type=str, default='Protein')
     parser.add_argument('--pred_ntypes', type=str, default='molecular_function')
-    parser.add_argument('--etype_subset', type=str, default='is_a part_of')
+    parser.add_argument('--go_etypes', type=str, default='is_a part_of')
     parser.add_argument('--train_date', type=str, default='2018-01-01')
     parser.add_argument('--valid_date', type=str, default='2018-07-01')
     parser.add_argument('--test_date', type=str, default='2021-04-01')

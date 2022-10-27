@@ -11,6 +11,13 @@ import torch.nn.functional as F
 import tqdm
 import wandb
 from logzero import logger
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
+
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -20,12 +27,6 @@ from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -258,7 +259,7 @@ class NodeEmbeddingEvaluator(LightningModule):
                                    title=title.replace("_", " "))
         wandb.log({title: lineplot})
 
-    def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
+    def plot_sankey_flow(self, width=800, height=600):
         if self.wandb_experiment is None:
             return
         elif self.wandb_experiment.sweep_id is not None:
@@ -266,7 +267,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         self.embedder.layers: List[RelationAttention]
         if hasattr(self.embedder, 'get_sankey_flow'):
-            nodes, links = self.embedder.get_sankey_flow(node_types=None, self_loop=False)
+            nodes, links = self.embedder.get_sankey_flow(node_types=None, self_loop=True)
         else:
             nodes, links = self.embedder.layers[-1].get_sankey_flow(node_types=None, self_loop=True)
         if nodes is None:
@@ -284,9 +285,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         plotly_htmls.append(wandb.Html(path_to_plotly_html))
 
         # Add Plotly figure as HTML file into Table
-        node_types = list(self.embedder.layers[layer]._betas.keys())
-        table = wandb.Table(columns=[f"Layer{layer + 1 if layer >= 0 else len(self.embedder.layers)}_{ntype}" \
-                                     for ntype in node_types])
+        table = wandb.Table(columns=[self.attn_plot_name])
         table.add_data(*plotly_htmls)
 
         # Log Table
@@ -451,6 +450,10 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
             for subtype, metrics in self.valid_metrics.items():
                 metrics.reset_metrics()
+
+        if 'val_aupr' not in metrics_dict and any('aupr' in key for key in metrics_dict):
+            metrics_dict['val_aupr'] = next((val for key, val in metrics_dict.items() \
+                                             if 'aupr' in key), None)
 
         self.log_dict(metrics_dict, prog_bar=True)
 

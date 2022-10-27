@@ -20,7 +20,6 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
-from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
@@ -28,6 +27,8 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -249,12 +250,13 @@ class DeepGraphGO(LightningModule):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__()
-        self.train_metrics = Metrics(prefix="", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
-                                     multilabel=True, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
-                                     multilabel=True, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
-                                    multilabel=True, metrics=metrics)
+        if metrics:
+            self.train_metrics = Metrics(prefix="", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
+                                         multilabel=True, metrics=metrics)
+            self.valid_metrics = Metrics(prefix="val_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
+                                         multilabel=True, metrics=metrics)
+            self.test_metrics = Metrics(prefix="test_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
+                                        multilabel=True, metrics=metrics)
 
         self.input = nn.EmbeddingBag(hparams.input_size, hparams.hidden_size, mode='sum', include_last_offset=True)
         self.input_bias = nn.Parameter(torch.zeros(hparams.hidden_size))
@@ -381,54 +383,60 @@ class DeepGraphGO(LightningModule):
         return torch.sigmoid(self.forward(blocks)).cpu().numpy()
 
     def training_epoch_end(self, outputs):
-        metrics_dict = self.train_metrics.compute_metrics()
-        self.train_metrics.reset_metrics()
-        self.log_dict(metrics_dict, prog_bar=True)
+        super().training_epoch_end(outputs)
+        if hasattr(self, 'train_metrics'):
+            metrics_dict = self.train_metrics.compute_metrics()
+            self.train_metrics.reset_metrics()
+            self.log_dict(metrics_dict, prog_bar=True)
 
     def validation_epoch_end(self, outputs):
-        metrics_dict = self.valid_metrics.compute_metrics()
-        self.valid_metrics.reset_metrics()
-        self.log_dict(metrics_dict, prog_bar=True)
+        super().validation_epoch_end(outputs)
+        if hasattr(self, 'valid_metrics'):
+            metrics_dict = self.valid_metrics.compute_metrics()
+            self.valid_metrics.reset_metrics()
+            self.log_dict(metrics_dict, prog_bar=True)
 
     def test_epoch_end(self, outputs):
-        metrics_dict = self.test_metrics.compute_metrics()
-        self.test_metrics.reset_metrics()
-        self.log_dict(metrics_dict, prog_bar=True)
+        super().test_epoch_end(outputs)
+        if hasattr(self, 'test_metrics'):
+            metrics_dict = self.test_metrics.compute_metrics()
+            self.test_metrics.reset_metrics()
+            self.log_dict(metrics_dict, prog_bar=True)
 
-    def train_dataloader(self, batch_size=None, num_workers=0):
+    def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
 
-        collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.training_idx,
-                                                graph_sampler=neighbor_sampler)
+        collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.training_idx, graph_sampler=neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size if batch_size else self.batch_size, shuffle=True, drop_last=False,
-                                num_workers=num_workers)
+                                num_workers=num_workers, **kwargs)
         return dataloader
 
-    def val_dataloader(self, batch_size=None, num_workers=0):
+    def val_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
 
         collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.validation_idx,
                                                 graph_sampler=neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=batch_size if batch_size else self.batch_size, shuffle=True, drop_last=False,
-                                num_workers=num_workers)
+                                batch_size=batch_size if batch_size else self.batch_size, shuffle=False,
+                                drop_last=False,
+                                num_workers=num_workers, **kwargs)
         return dataloader
 
-    def test_dataloader(self, batch_size=None, num_workers=0):
+    def test_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
 
-        collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.testing_idx,
-                                                graph_sampler=neighbor_sampler)
+        collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.testing_idx, graph_sampler=neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=batch_size if batch_size else self.batch_size, shuffle=True, drop_last=False,
-                                num_workers=num_workers)
+                                batch_size=batch_size if batch_size else self.batch_size, shuffle=False,
+                                drop_last=False,
+                                num_workers=num_workers, **kwargs)
         return dataloader
 
     def configure_optimizers(self):
         weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
         lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
-        lr = self.hparams.lr if 'lr' in self.hparams else None
+        lr = self.hparams.lr if 'lr' in self.hparams else 1e-3
 
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
 
@@ -532,6 +540,7 @@ def load_dgl_graph(data_cnf, model_cnf, model_id=None, subset_pid: List[str] = N
         net_pid_map = {pid: i for i, pid in enumerate(subset_pid)}
         net_pid_list = subset_pid
 
+    assert dgl_graph.num_nodes() == len(net_pid_list), f"{dgl_graph.num_nodes()} != {len(net_pid_list)}"
     logger.info(F'{dgl_graph}')
 
     # Get train/valid/test split of node lists

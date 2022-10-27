@@ -288,13 +288,13 @@ def get_edge_index_values(nx_graph: nx.MultiGraph, nodes_A: Union[List[str], np.
                           nodes_B: Union[List[str], np.array], edge_attrs: List[str] = None, format="pyg") \
         -> Tuple[Union[torch.LongTensor, Tuple[Tensor]], Optional[Dict[str, Tensor]]]:
     """
-    Convert an nx.MultiGraph into hetero edge_index_dict
+    Convert a nx.MultiGraph into an edge_index with edge_values tensors.
 
     Args:
         nx_graph ():
-        nodes_A ():
-        nodes_B ():
-        edge_attrs ():
+        nodes_A (): row order
+        nodes_B (): column order
+        edge_attrs (): a list of attribute names for for
         format ():
 
     Returns:
@@ -314,12 +314,14 @@ def get_edge_index_values(nx_graph: nx.MultiGraph, nodes_A: Union[List[str], np.
 
     if format == "pyg":
         import torch
-        edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long), torch.tensor(biadj.col, dtype=torch.long)])
+        edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long),
+                                  torch.tensor(biadj.col, dtype=torch.long)])
         edge_values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in edge_values.items()}
 
     elif format == "dgl":
         import torch
-        edge_index = (torch.tensor(biadj.row, dtype=torch.int64), torch.tensor(biadj.col, dtype=torch.int64))
+        edge_index = (torch.tensor(biadj.row, dtype=torch.int64),
+                      torch.tensor(biadj.col, dtype=torch.int64))
         edge_values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in edge_values.items()}
 
     return edge_index, edge_values

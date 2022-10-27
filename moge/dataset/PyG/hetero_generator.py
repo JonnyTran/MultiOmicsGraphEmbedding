@@ -14,6 +14,12 @@ import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from logzero import logger
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.io import get_attrs
@@ -23,11 +29,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -151,24 +152,26 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.nodes = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
         return self
 
-    def save(self, path):
+    def save(self, path, add_slug=False):
         if isinstance(path, str) and '~' in path:
             path = os.path.expanduser(path)
 
-        if path.endswith("/"):
-            path = path.rstrip('/')
+        if add_slug:
+            if path.endswith("/"):
+                path = path.rstrip('/')
+            if not path.endswith('.'):
+                path = path + '.'
+            # add slug to dataset directory
+            path = path + self.name
 
-        # add slug to dataset directory
-        slug = self.get_slug()
-        path = path.rstrip('_.') + '.' + slug
         logger.info(f"Saving {self.__class__.__name__} to .../{os.path.basename(path)}/")
-
         if not os.path.exists(path):
             os.makedirs(path)
 
         nodes = self.nodes if hasattr(self, "nodes") and self.nodes != None else self.network.nodes
         if isinstance(nodes, (pd.Index, pd.Series)):
             nodes.to_pickle(join(path, 'nodes.pickle'))
+
         elif isinstance(nodes, dict):
             with open(join(path, 'nodes.pickle'), 'wb') as f:
                 pickle.dump(nodes, f)
@@ -204,11 +207,13 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         with open(join(path, "metadata.json"), "w") as outfile:
             outfile.write(metadata)
 
-    def get_slug(self):
+    @property
+    def name(self) -> str:
         ntypes = ''.join(s.capitalize()[0] for s in self.node_types if s not in self.pred_ntypes)
         pntypes = ''.join(s[0] for s in self.pred_ntypes)
-        slug = f'{ntypes}-{pntypes}_{len(self.metapaths)}'
-        return slug
+        slug = f'{ntypes}{len(self.metapaths)}-{pntypes}'
+
+        return '.'.join([self._name, slug])
 
     @property
     def class_indices(self) -> Optional[Dict[str, Tensor]]:
@@ -488,17 +493,96 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return H
 
+    def remove_nodes(self, G: HeteroData, nodes: Dict[str, Union[torch.BoolTensor, np.ndarray, pd.Index]]) \
+            -> HeteroData:
+        """
+        Given a set of nodes to remove, drop all edges incident to those nodes (but keeping the node set intact)
+
+        Args:
+            G (Data or HeteroData):
+            nodes (): A dict of ntype to either a boolean mask vector, a node ids integer vector, or a list of node
+                name strings.
+
+        Returns:
+            HeteroData
+        """
+        data = G.__copy__()
+        # Gather all nodes
+        n_id_dict = {ntype: torch.arange(data[ntype].num_nodes) for ntype in data.node_types}
+
+        for ntype, drop_ids in nodes.items():
+            element = drop_ids[0]
+            if isinstance(element, str):
+                drop_ids = self.nodes[ntype].get_indexer_for(drop_ids)
+            elif isinstance(element.dtype, (type(torch.bool), type(np.bool))):
+                assert len(drop_ids) == len(n_id_dict[ntype]) == data[ntype].num_nodes, \
+                    f'{len(drop_ids)} != {len(n_id_dict[ntype])} != {data[ntype].num_nodes}'
+                drop_ids = drop_ids.nonzero().ravel()
+
+            element = drop_ids[0]
+            assert isinstance(element, int) or isinstance(element.dtype, (type(torch.int), type(np.int))), \
+                f"value {element} must be a int"
+            mask = np.isin(n_id_dict[ntype], drop_ids, assume_unique=True, invert=True)
+            n_id_dict[ntype] = n_id_dict[ntype][mask]
+
+        logger.info(f'Removed {data.num_nodes - sum(len(nids) for nids in n_id_dict.values())} nodes')
+
+        for store in data.edge_stores:
+            if 'edge_index' not in store:
+                continue
+
+            if store._key is None:
+                src = dst = None
+            else:
+                src, _, dst = store._key
+
+            row_mask = np.isin(store.edge_index[0], n_id_dict[src], assume_unique=False)
+            col_mask = np.isin(store.edge_index[1], n_id_dict[dst], assume_unique=False)
+            mask = row_mask & col_mask
+
+            for key, value in store.items():
+                if key == 'edge_index':
+                    store.edge_index = store.edge_index[:, mask]
+                else:
+                    store[key] = value[key][mask]
+
+        return data
+
+    def remove_edges(self, G: HeteroData, edge_masks: Dict[str, torch.BoolTensor]):
+        data = G.__copy__()
+        #     assert len(drop_ids) == data[etype].num_edges, f'{len(drop_ids)} != {data[etype].num_edges}'
+
+        for store in data.edge_stores:
+            if 'edge_index' not in store:
+                continue
+
+            if store._key is None:
+                src = dst = None
+            else:
+                src, _, dst = store._key
+
+            if store._key in edge_masks:
+                mask = edge_masks[store._key]
+                for key, value in store.items():
+                    if key == 'edge_index':
+                        store.edge_index = store.edge_index[:, mask]
+                    else:
+                        store[key] = value[key][mask]
+
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
         head_ntype = self.head_node_type
+
+        if self.inductive:
+            valid_test_nodes = {head_ntype: graph[head_ntype].valid_mask | graph[head_ntype].test_mask}
+            graph = self.remove_nodes(graph, nodes=valid_test_nodes)
 
         # Select only train nodes with at least 1 label
         node_mask = graph[head_ntype].train_mask & graph[head_ntype].y.sum(1).type(torch.bool)
         logger.info(f'train_dataloader size: {node_mask.sum()}')
 
         dataset = self.create_graph_sampler(graph, batch_size, node_type=head_ntype, node_mask=node_mask,
-                                            transform_fn=self.transform, num_workers=num_workers,
-                                            shuffle=True)
+                                            transform_fn=self.transform, num_workers=num_workers, shuffle=True)
 
         return dataset
 
@@ -514,8 +598,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         assert num_train_overlap == 0, f"num_train_overlap: {num_train_overlap}"
 
         dataset = self.create_graph_sampler(self.G, batch_size, node_type=head_ntype, node_mask=node_mask,
-                                            transform_fn=self.transform, num_workers=num_workers,
-                                            shuffle=False)
+                                            transform_fn=self.transform, num_workers=num_workers, shuffle=False)
 
         return dataset
 
@@ -531,8 +614,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         assert num_train_overlap == 0, f"num_train_overlap: {num_train_overlap}"
 
         dataset = self.create_graph_sampler(self.G, batch_size, node_type=head_ntype, node_mask=node_mask,
-                                            transform_fn=self.transform, num_workers=num_workers,
-                                            shuffle=False)
+                                            transform_fn=self.transform, num_workers=num_workers, shuffle=False)
 
         return dataset
 

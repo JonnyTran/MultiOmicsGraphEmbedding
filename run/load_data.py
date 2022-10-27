@@ -20,8 +20,9 @@ from moge.dataset.dgl.graph_generator import DGLGraphSampler
 from moge.dataset.dgl.node_generator import HeteroNeighborGenerator, DGLNodeGenerator
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
+from moge.network.hetero import HeteroNetwork
 from openomics.database.ontology import GeneOntology
-from run.datasets.uniprotgoa import load_uniprotgoa
+from run.datasets.uniprotgoa import build_uniprot_dataset
 from run.utils import add_node_embeddings
 
 
@@ -143,8 +144,9 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                           head_node_type="user", resample_train=train_ratio,
                                           inductive=hparams.inductive)
 
-    elif 'UniProt' in name and ".pickle" in dataset_path:
-        dataset = load_uniprotgoa(name, dataset_path, hparams)
+    elif 'uniprot' in name.lower() and (
+            isinstance(dataset_path, HeteroNetwork) or (isinstance(dataset_path, str) and ".pickle" in dataset_path)):
+        dataset = build_uniprot_dataset(name, dataset_path=dataset_path, hparams=hparams)
 
     else:
         raise Exception(f"dataset {name} not found")
