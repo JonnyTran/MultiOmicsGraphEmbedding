@@ -3,17 +3,15 @@ import traceback
 from argparse import Namespace
 from typing import List, Dict, Tuple, Union
 
-import pandas as pd
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
+from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
-
-from moge.model.PyG.relations import RelationAttention, reindex_contiguous
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
 
 
 class LATTEConv(MessagePassing, RelationAttention):
@@ -369,7 +367,7 @@ class LATTEConv(MessagePassing, RelationAttention):
             return alpha
 
 
-class LATTE(nn.Module):
+class LATTE(nn.Module, RelationMultiLayerAgg):
     def __init__(self, n_layers: int, t_order: int,
                  embedding_dim: int,
                  num_nodes_dict: Dict[str, int],
@@ -481,95 +479,3 @@ class LATTE(nn.Module):
 
     def __getitem__(self, item) -> LATTEConv:
         return self.layers[item]
-
-    def get_sankey_flow(self, node_types=None, self_loop=True, agg="median"):
-        """
-        Concatenate multiple layer's sankey flow.
-        Args:
-            node_types (): for compability, ignored.
-            self_loop ():
-            agg ():
-
-        Returns:
-
-        """
-        nid_offset = 0
-        eid_offset = 0
-        layer_nodes = []
-        layer_links = []
-        last_src_nids = {}
-
-        for latte in reversed(self.layers):
-            layer_self_loop = self_loop if latte.layer + 1 <= len(self.layers) else False
-            nodes, links = latte.get_sankey_flow(node_types=node_types, self_loop=layer_self_loop, agg=agg)
-            nodes['layer'] = latte.layer
-            links['layer'] = latte.layer
-
-            if nid_offset:
-                nodes.index = nodes.index + nid_offset
-                links['source'] += nid_offset
-                links['target'] += nid_offset
-                links.index = links.index + eid_offset
-
-            if len(layer_nodes) > 0:
-                # Remove last layer's level=1 nodes, and replace current layer's level>1 node ids with last layer's level=1 nodes
-                current_dst_ntypes = nodes.loc[nodes['level'] == 1]['label'].unique()
-
-                for ntype, prev_src_id in last_src_nids.items():
-                    if ntype not in current_dst_ntypes: continue
-
-                    dst_nodes = nodes[(nodes['label'] == ntype) & (nodes['metapath'] == ntype) & nodes['level'] == 1]
-                    dst_id = dst_nodes.index[0].item()
-                    assert isinstance(dst_id, int) and dst_nodes.index.size == 1, dst_nodes
-
-                    # Overwrite last layer's src node to current layer's dst node
-                    nodes.drop(index=dst_id, inplace=True)
-
-                    links['source'].replace(dst_id, prev_src_id, inplace=True)
-                    links['target'].replace(dst_id, prev_src_id, inplace=True)
-
-                if True:
-                    # Ensure dst ntypes in non-last-layers have correct positioning by adding a self loop.
-                    for ntype in set(current_dst_ntypes).difference(last_src_nids.keys()):
-                        nid = nodes.query(f'(level == {nodes["level"].min()}) and (label == "{ntype}")').index[0]
-
-                        selfloop_weight = 1 - links.query(f'target == {nid}')['mean'].sum() + 1e-3
-                        selfloop_link = pd.Series({
-                            'source': nid, 'target': nid, 'label': ntype, 'color': nodes.loc[nid, 'color'],
-                            'mean': selfloop_weight, 'std': 0.0, 'layer': latte.layer},
-                            name=links.index.max() + 1)
-                        links = links.append(selfloop_link)
-
-                nodes['level'] += layer_nodes[-1]['level'].max() - 1
-
-            # Update last_src_nids to contain the src nodes from current layers
-            last_src_nids = {}
-            for id, node in nodes.loc[nodes['level'] == nodes['level'].max()].iterrows():
-                last_src_nids[node['label']] = id  # Get the index value
-
-            layer_nodes.append(nodes)
-            layer_links.append(links)
-
-            nid_offset += nodes.index.size
-            eid_offset += links.index.size
-
-        layer_nodes = pd.concat(layer_nodes, axis=0)
-        layer_links = pd.concat(layer_links, axis=0).sort_values(by=['mean', 'target'], ascending=False)
-        layer_nodes = layer_nodes.drop(columns=['metapath'])
-
-        if len(layer_nodes) > 1:
-            # Ensure node index is contiguous
-            layer_nodes, layer_links = reindex_contiguous(layer_nodes, layer_links)
-
-        if not layer_links['source'].isin(layer_nodes.index).all():
-            print('layer_links[source] not in layer_nodes.index:',
-                  pd.Index(layer_links['source']).difference(layer_nodes.index).values)
-        if not layer_links['target'].isin(layer_nodes.index).all():
-            print('layer_links[target] not in layer_nodes.index:',
-                  pd.Index(layer_links['target']).difference(layer_nodes.index).values)
-        assert not layer_nodes.index.duplicated().any(), \
-            f"layer_nodes.index.duplicated(): \n{layer_nodes[layer_nodes.index.duplicated(keep=False)]}"
-        assert not layer_links.index.duplicated().any(), \
-            f"layer_links.index.duplicated(): \n{layer_links[layer_links.index.duplicated(keep=False)]}"
-
-        return layer_nodes, layer_links

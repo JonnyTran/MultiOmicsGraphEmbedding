@@ -11,13 +11,6 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -31,6 +24,12 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -136,18 +135,21 @@ class LATTENodeClf(NodeClfTrainer):
             return logits
 
     def on_validation_epoch_start(self) -> None:
-        for l in range(self.embedder.n_layers):
-            self.embedder.layers[l].reset()
+        for l, layer in enumerate(self.embedder.layers):
+            if isinstance(layer, RelationAttention):
+                layer.reset()
         super().on_validation_epoch_start()
 
     def on_test_epoch_start(self) -> None:
-        for l in range(self.embedder.n_layers):
-            self.embedder.layers[l].reset()
+        for l, layer in enumerate(self.embedder.layers):
+            if isinstance(layer, RelationAttention):
+                layer.reset()
         super().on_test_epoch_start()
 
     def on_predict_epoch_start(self) -> None:
-        for l in range(self.embedder.n_layers):
-            self.embedder.layers[l].reset()
+        for l, layer in enumerate(self.embedder.layers):
+            if isinstance(layer, RelationAttention):
+                layer.reset()
         super().on_predict_epoch_start()
 
     def training_step(self, batch, batch_nb):
@@ -166,7 +168,7 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             logs = {}
 
-        self.log("loss", loss, logger=True, on_step=True)
+        self.log("loss", loss, on_step=True)
         self.log_dict(logs, prog_bar=True, logger=True)
 
         return loss
@@ -188,7 +190,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X, save_betas=True)
+        y_pred = self.forward(X, save_betas=batch_nb == 0)
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
@@ -276,6 +278,11 @@ class LATTENodeClf(NodeClfTrainer):
 
         return targets, scores, embeddings, ntype_nids
 
+    def on_validation_end(self) -> None:
+        super().on_validation_end()
+
+        self.log_relation_atten_values()
+
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
@@ -299,7 +306,7 @@ class LATTENodeClf(NodeClfTrainer):
                         self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
                                            split_samples=split_samples, title=title)
 
-                self.plot_sankey_flow()
+                self.log_relation_atten_values()
 
                 self.plot_embeddings_tsne(global_node_index=global_node_index,
                                           embeddings={self.head_node_type: embeddings},
@@ -434,7 +441,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X)
+        y_pred = self.forward(X, save_betas=batch_nb == 0)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)

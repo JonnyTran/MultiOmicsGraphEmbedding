@@ -12,86 +12,60 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from logzero import logger
-from sklearn.preprocessing import MultiLabelBinarizer
-from torch_geometric.utils import to_undirected
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index_dict
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.network.hetero import HeteroNetwork
 from moge.network.utils import to_list_of_strs
+from sklearn.preprocessing import MultiLabelBinarizer
+from torch_geometric.utils import to_undirected
+
 from openomics.database.ontology import UniProtGOA, get_predecessor_terms
+
+
+def get_load_path(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes, exclude_etypes,
+                  feature,
+                  save_path):
+    node_types = ['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein', 'biological_process', 'molecular_function',
+                  'cellular_component']
+    if ntype_subset:
+        node_types = [ntype for ntype in node_types if ntype in ntype_subset]
+
+    ntypes = ''.join(s.capitalize()[0] for s in node_types if s not in pred_ntypes)
+    options = f"{hparams.MicroRNA}.{labels_dataset}.{'parents' if add_parents else 'child'}." \
+              f"{'feature' if feature else 'nofeature'}"
+
+    metapaths = ''.join([e[0] for e in go_etypes] if go_etypes else ['']) + ''.join(
+        d.lower()[0] for s, e, d in exclude_etypes)
+    pntypes = ''.join(s[0] for s in pred_ntypes)
+
+    slug = f'{ntypes}-{metapaths}-{pntypes}'
+
+    load_path = join(save_path, '.'.join([name, options, slug]))
+    load_path = os.path.expanduser(load_path)
+
+    return load_path
 
 
 def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
                           save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True) \
         -> HeteroNodeClfDataset:
-    # Set arguments
-    use_reverse = hparams.use_reverse
-    head_ntype = hparams.head_node_type
-    add_parents = hparams.add_parents
-    feature = hparams.feature
-    assert isinstance(feature, bool)
+    add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
+    pred_ntypes, uniprotgoa_path, use_reverse = parse_options(hparams, dataset_path)
 
-    uniprotgoa_path = hparams.uniprotgoa_path
-    deepgraphgo_path = hparams.deepgraphgo_data
+    load_path = get_load_path(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
+                              exclude_etypes,
+                              feature, save_path)
 
-    labels_dataset = hparams.labels_dataset
-    if isinstance(dataset_path, str) and 'transcript' in dataset_path:
-        hparams.MicroRNA = 'transcript'
-    elif isinstance(dataset_path, str) and 'gene' in dataset_path:
-        hparams.MicroRNA = 'gene'
-    elif isinstance(dataset_path, HeteroNetwork):
-        hparams.MicroRNA = 'gene' if dataset_path.annotations['MicroRNA'].index.name == 'mirbase_name' else 'transcript'
-
-    # Set arguments
-    if isinstance(hparams.ntype_subset, str):
-        assert len(hparams.ntype_subset)
-        ntype_subset = hparams.ntype_subset.split(" ")
-    elif isinstance(hparams.ntype_subset, Iterable):
-        ntype_subset = hparams.ntype_subset
-    else:
-        ntype_subset = None
-
-    if 'pred_ntypes' in hparams and isinstance(hparams.pred_ntypes, str):
-        assert len(hparams.pred_ntypes)
-        pred_ntypes = hparams.pred_ntypes.split(" ")
-    elif 'pred_ntypes' in hparams and isinstance(hparams.pred_ntypes, Iterable):
-        pred_ntypes = hparams.pred_ntypes
-    else:
-        raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
-
-    exclude_etypes = [(head_ntype, 'associated', go_ntype) for go_ntype in pred_ntypes]
-    if 'exclude_etypes' in hparams and hparams.exclude_etypes:
-        exclude_etypes_ = [etype.split(".") if isinstance(etype, str) else etype \
-                           for etype in (hparams.exclude_etypes.split(" ") \
-                                             if isinstance(hparams.exclude_etypes, str) \
-                                             else hparams.exclude_etypes)]
-        exclude_etypes.extend(exclude_etypes_)
-
-    # Set etypes to include
-    if isinstance(hparams.go_etypes, str):
-        go_etypes = hparams.go_etypes.split(" ") if len(hparams.go_etypes) else []
-    elif isinstance(hparams.go_etypes, Iterable):
-        go_etypes = hparams.go_etypes
-    else:
-        go_etypes = None
-
-    # Check if illegal config
-    if ntype_subset and not {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
-            ntype_subset):
-        if go_etypes != None:
-            raise Exception()
-
-    load_path = get_load_path(name, hparams, labels_dataset, ntype_subset, add_parents, go_etypes, exclude_etypes,
-                              feature,
-                              save_path)
-
-    if os.path.exists(load_path):
+    if os.path.exists(os.path.expanduser(load_path)):
         logger.info(f'Loading saved HeteroNodeClfDataset at {load_path}')
-        dataset = HeteroNetwork.load(load_path)
+        dataset = HeteroNodeClfDataset.load(load_path, **hparams.__dict__)
+
         return dataset
+    else:
+        print(load_path, "is exist", os.path.exists(load_path))
+        print("Building", os.path.basename(load_path))
 
     # Load UniProtGOA ontology
     geneontology = UniProtGOA(path=os.path.dirname(uniprotgoa_path),
@@ -105,7 +79,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # Load HeteroNetwork
     if isinstance(dataset_path, str):
-        with open(dataset_path, "rb") as file:
+        with open(os.path.expanduser(dataset_path), "rb") as file:
             network: HeteroNetwork = pickle.load(file)
             if not hasattr(network, 'train_nodes'):
                 network.train_nodes = defaultdict(set)
@@ -175,8 +149,8 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         network.annotations[head_ntype]['go_id'] = network.annotations[head_ntype]['go_id'] \
             .fillna('').map(list).map(np.unique)
 
-    if hparams.inductive:
-        network.set_edge_traintest_mask()
+    # if hparams.inductive:
+    #     network.set_edge_traintest_mask()
 
     # Set classes
     if labels_dataset == 'GOA':
@@ -234,14 +208,16 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         exclude_etypes=exclude_etypes, )
 
     if use_reverse and ('Protein', 'rev_protein-protein', 'Protein') in dataset.G.edge_types:
-        print("removing 1")
         del dataset.G[('Protein', 'rev_protein-protein', 'Protein')]
-        print("removing 2")
         dataset.G[('Protein', 'protein-protein', 'Protein')].edge_index = to_undirected(
             dataset.G[('Protein', 'protein-protein', 'Protein')].edge_index)
-        print("removing 3")
         dataset.metapaths.pop(dataset.metapaths.index(('Protein', 'rev_protein-protein', 'Protein')))
-        print("removing 4")
+
+    dataset.nodes_namespace = {ntype: df.replace({'biological_process': 'BPO',
+                                                  'cellular_component': 'CCO',
+                                                  'molecular_function': 'MFO'}) \
+                               for ntype, df in dataset.nodes_namespace.items()}
+    dataset.nodes_namespace[dataset.head_node_type] = dataset.network.annotations[dataset.head_node_type]["species_id"]
 
     # Save hparams attr
     hparams.min_count = min_count
@@ -263,26 +239,58 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     return dataset
 
 
-def get_load_path(name, hparams, labels_dataset, ntype_subset, add_parents, go_etypes, exclude_etypes, feature,
-                  save_path):
-    node_types = ['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein', 'biological_process', 'molecular_function',
-                  'cellular_component']
-    if ntype_subset:
-        node_types = [ntype for ntype in node_types if ntype in ntype_subset]
+def parse_options(hparams, dataset_path):
+    # Set arguments
+    use_reverse = hparams.use_reverse
+    head_ntype = hparams.head_node_type
+    add_parents = hparams.add_parents
+    feature = hparams.feature
+    assert isinstance(feature, bool)
+    uniprotgoa_path = hparams.uniprotgoa_path
+    deepgraphgo_path = hparams.deepgraphgo_data
+    labels_dataset = hparams.labels_dataset
+    if isinstance(dataset_path, str) and 'transcript' in dataset_path:
+        hparams.MicroRNA = 'transcript'
+    elif isinstance(dataset_path, str) and 'gene' in dataset_path:
+        hparams.MicroRNA = 'gene'
+    elif isinstance(dataset_path, HeteroNetwork):
+        hparams.MicroRNA = 'gene' if dataset_path.annotations['MicroRNA'].index.name == 'mirbase_name' else 'transcript'
+    # Set arguments
+    if isinstance(hparams.ntype_subset, str):
+        assert len(hparams.ntype_subset)
+        ntype_subset = hparams.ntype_subset.split(" ")
+    elif isinstance(hparams.ntype_subset, Iterable):
+        ntype_subset = hparams.ntype_subset
+    else:
+        ntype_subset = None
+    if 'pred_ntypes' in hparams and isinstance(hparams.pred_ntypes, str):
+        assert len(hparams.pred_ntypes)
+        pred_ntypes = hparams.pred_ntypes.split(" ")
+    elif 'pred_ntypes' in hparams and isinstance(hparams.pred_ntypes, Iterable):
+        pred_ntypes = hparams.pred_ntypes
+    else:
+        raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
+    exclude_etypes = [(head_ntype, 'associated', go_ntype) for go_ntype in pred_ntypes]
+    if 'exclude_etypes' in hparams and hparams.exclude_etypes:
+        exclude_etypes_ = [etype.split(".") if isinstance(etype, str) else etype \
+                           for etype in (hparams.exclude_etypes.split(" ") \
+                                             if isinstance(hparams.exclude_etypes, str) \
+                                             else hparams.exclude_etypes)]
+        exclude_etypes.extend(exclude_etypes_)
+    # Set etypes to include
+    if isinstance(hparams.go_etypes, str):
+        go_etypes = hparams.go_etypes.split(" ") if len(hparams.go_etypes) else []
+    elif isinstance(hparams.go_etypes, Iterable):
+        go_etypes = hparams.go_etypes
+    else:
+        go_etypes = None
+    # Check if illegal config
+    if ntype_subset and not {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
+            ntype_subset):
+        if go_etypes != None:
+            raise Exception('Skip runs with any `go_etype` if no GO ntypes are in the graph')
 
-    ntypes = ''.join(s.capitalize()[0] for s in node_types if s not in hparams.pred_ntypes)
-    options = f"{hparams.MicroRNA}.{labels_dataset}.{'parents' if add_parents else 'child'}." \
-              f"{'feature' if feature else 'nofeature'}"
-
-    metapaths = ''.join([e[0] for e in go_etypes] if go_etypes else ['']) + ''.join(
-        d.lower()[0] for s, e, d in exclude_etypes)
-    pntypes = ''.join(s[0] for s in hparams.pred_ntypes)
-
-    slug = f'{ntypes}-{metapaths}-{pntypes}'
-
-    load_path = join(save_path, '.'.join([name, options, slug]))
-
-    return load_path
+    return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, pred_ntypes, uniprotgoa_path, use_reverse
 
 
 def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str):

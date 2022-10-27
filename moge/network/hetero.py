@@ -1,11 +1,8 @@
-import os
-import pickle
+import pprint
 import pprint
 import warnings
-from argparse import Namespace
 from collections import defaultdict
 from collections.abc import Iterable
-from os.path import join
 from typing import Dict, Tuple, Union, List, Any, Optional, Set
 
 import dask.dataframe as dd
@@ -16,18 +13,18 @@ import pandas as pd
 import torch
 import tqdm
 from logzero import logger
-from pandas import Series, Index, DataFrame
-from scipy.sparse import csr_matrix
-from torch import Tensor
-from torch_geometric.data import HeteroData
-from torch_sparse import SparseTensor
-
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
+from pandas import Series, Index, DataFrame
+from scipy.sparse import csr_matrix
+from torch import Tensor
+from torch_geometric.data import HeteroData
+from torch_sparse import SparseTensor
+
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology, GeneOntology
 
@@ -65,48 +62,48 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             self.multiomics._cohort_name,
             pprint.pformat({'nodes': nodes, 'networks': networks, 'annotations': annotations}, depth=3, width=150))
 
-    @classmethod
-    def load(cls, path):
-        return
-        if isinstance(path, str) and '~' in path:
-            path = os.path.expanduser(path)
-
-        self = cls(multiomics=Namespace(), node_types=None, layers=None)
-
-        for metapath, g in self.networks.items():
-            network_name = "__".join(metapath) if isinstance(metapath, Iterable) else str(metapath)
-            nx.write_gml(g, join(path, f"{network_name}.gml"))
-
-        for ntype, df in self.annotations.items():
-            df.to_pickle(join(path, f'{ntype}.pickle'))
-
-        if isinstance(self.nodes, (pd.Index, pd.Series)):
-            self.nodes.to_pickle(join(path, 'nodes.pickle'))
-        elif isinstance(self.nodes, dict):
-            with open(join(path, 'nodes.pickle'), 'wb') as f:
-                pickle.dump(self.nodes, f)
-
-        return self
-
-    def save(self, path: str):
-        if isinstance(path, str) and '~' in path:
-            path = os.path.expanduser(path)
-
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        for metapath, g in self.networks.items():
-            network_name = "__".join(metapath) if isinstance(metapath, Iterable) else str(metapath)
-            nx.write_gml(g, join(path, f"{network_name}.gml"))
-
-        for ntype, df in self.annotations.items():
-            df.to_pickle(join(path, f'{ntype}.pickle'))
-
-        if isinstance(self.nodes, (pd.Index, pd.Series)):
-            self.nodes.to_pickle(join(path, 'nodes.pickle'))
-        elif isinstance(self.nodes, dict):
-            with open(join(path, 'nodes.pickle'), 'wb') as f:
-                pickle.dump(self.nodes, f)
+    # @classmethod
+    # def load(cls, path):
+    #     return
+    #     if isinstance(path, str) and '~' in path:
+    #         path = os.path.expanduser(path)
+    #
+    #     self = cls(multiomics=Namespace(), node_types=None, layers=None)
+    #
+    #     for metapath, g in self.networks.items():
+    #         network_name = "__".join(metapath) if isinstance(metapath, Iterable) else str(metapath)
+    #         nx.write_gml(g, join(path, f"{network_name}.gml"))
+    #
+    #     for ntype, df in self.annotations.items():
+    #         df.to_pickle(join(path, f'{ntype}.pickle'))
+    #
+    #     if isinstance(self.nodes, (pd.Index, pd.Series)):
+    #         self.nodes.to_pickle(join(path, 'nodes.pickle'))
+    #     elif isinstance(self.nodes, dict):
+    #         with open(join(path, 'nodes.pickle'), 'wb') as f:
+    #             pickle.dump(self.nodes, f)
+    #
+    #     return self
+    #
+    # def save(self, path: str):
+    #     if isinstance(path, str) and '~' in path:
+    #         path = os.path.expanduser(path)
+    #
+    #     if not os.path.exists(path):
+    #         os.makedirs(path)
+    #
+    #     for metapath, g in self.networks.items():
+    #         network_name = "__".join(metapath) if isinstance(metapath, Iterable) else str(metapath)
+    #         nx.write_gml(g, join(path, f"{network_name}.gml"))
+    #
+    #     for ntype, df in self.annotations.items():
+    #         df.to_pickle(join(path, f'{ntype}.pickle'))
+    #
+    #     if isinstance(self.nodes, (pd.Index, pd.Series)):
+    #         self.nodes.to_pickle(join(path, 'nodes.pickle'))
+    #     elif isinstance(self.nodes, dict):
+    #         with open(join(path, 'nodes.pickle'), 'wb') as f:
+    #             pickle.dump(self.nodes, f)
 
     def isolated_nodes(self, ntypes: Set[str] = None) -> Dict[str, Set[str]]:
         """

@@ -13,6 +13,10 @@ from moge.model.PyG.node_clf import LATTEFlatNodeClf
 from run.load_data import load_node_dataset
 from run.utils import parse_yaml_config, select_empty_gpus
 
+import warnings
+
+warnings.filterwarnings("ignore")
+
 
 def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
@@ -29,7 +33,7 @@ def train(hparams: Namespace):
     callbacks = []
     if "GO" in hparams.dataset or 'uniprot' in hparams.dataset.lower():
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
-        early_stopping_args = dict(monitor='val_MFO_aupr', mode='max')
+        early_stopping_args = dict(monitor='val_aupr', mode='max')
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
@@ -96,10 +100,9 @@ if __name__ == "__main__":
     parser = ArgumentParser()
 
     # Dataset
-    parser.add_argument('--dataset', type=str, default="ACM")
-    parser.add_argument('--root_path', type=str, default="/home/jonny/Bioinformatics_ExternalData/OGB/")
-    parser.add_argument('--use_emb', type=str,
-                        default="/home/jonny/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
+    parser.add_argument('--dataset', type=str, default=None)
+    parser.add_argument('--root_path', type=str, default=None)
+    parser.add_argument('--use_emb', type=str, default=None)
     parser.add_argument('--inductive', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
     parser.add_argument('--freeze_embeddings', type=bool, default=True)
@@ -147,6 +150,7 @@ if __name__ == "__main__":
     parser.add_argument('--edge_threshold', type=float, default=0.0)
     parser.add_argument('--edge_sampling', type=bool, default=False)
 
+    parser.add_argument('--sequence', type=bool, default=False)
     parser.add_argument('--cls_graph', type=bool, default=False)
 
     # parser.add_argument('--reduction', type=str, default="none")
@@ -154,7 +158,6 @@ if __name__ == "__main__":
     parser.add_argument('--use_pos_weights', type=bool, default=False)
 
     # Optimizer parameters
-    parser.add_argument('--sparse', type=bool, default=False)
     parser.add_argument('-a', '--accelerator', type=str, default="cuda")
     parser.add_argument('--loss_type', type=str, default="BCE_WITH_LOGITS")
     parser.add_argument('--lr', type=float, default=0.03)

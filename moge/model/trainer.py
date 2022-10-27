@@ -11,13 +11,6 @@ import torch.nn.functional as F
 import tqdm
 import wandb
 from logzero import logger
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
-
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -27,6 +20,12 @@ from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -259,6 +258,12 @@ class NodeEmbeddingEvaluator(LightningModule):
                                    title=title.replace("_", " "))
         wandb.log({title: lineplot})
 
+    def log_relation_atten_values(self):
+        if self.wandb_experiment is not None and hasattr(self.embedder, '_beta_avg'):
+            beta_avg = self.embedder._beta_avg
+            if beta_avg is not None:
+                self.wandb_experiment.config.update({'betas': beta_avg}, allow_val_change=True)
+
     def plot_sankey_flow(self, width=800, height=600):
         if self.wandb_experiment is None:
             return
@@ -436,6 +441,13 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         self.log_dict(metrics_dict, prog_bar=True)
 
+        if 'aupr' not in metrics_dict and any('aupr' in key for key in metrics_dict):
+            metrics_dict['aupr'] = next((val for key, val in metrics_dict.items() \
+                                         if 'aupr' in key), None)
+        if 'fmax' not in metrics_dict and any('fmax' in key for key in metrics_dict):
+            metrics_dict['fmax'] = next((val for key, val in metrics_dict.items() \
+                                         if 'fmax' in key), None)
+
         return None
 
     def validation_epoch_end(self, outputs):
@@ -454,6 +466,9 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         if 'val_aupr' not in metrics_dict and any('aupr' in key for key in metrics_dict):
             metrics_dict['val_aupr'] = next((val for key, val in metrics_dict.items() \
                                              if 'aupr' in key), None)
+        if 'val_fmax' not in metrics_dict and any('fmax' in key for key in metrics_dict):
+            metrics_dict['val_fmax'] = next((val for key, val in metrics_dict.items() \
+                                             if 'fmax' in key), None)
 
         self.log_dict(metrics_dict, prog_bar=True)
 

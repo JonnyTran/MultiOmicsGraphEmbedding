@@ -14,12 +14,6 @@ import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from logzero import logger
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.io import get_attrs
@@ -29,6 +23,11 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -150,6 +149,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         nodes = pd.read_pickle(join(path, 'nodes.pickle'))
         self.nodes = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
+
+        self.nodes_namespace = {ntype: df.replace({'biological_process': 'BPO',
+                                                   'cellular_component': 'CCO',
+                                                   'molecular_function': 'MFO'}) \
+                                for ntype, df in self.nodes_namespace.items()}
+
+        if self.head_node_type in self.network.annotations and \
+                'species_id' in self.network.annotations[self.head_node_type].columns:
+            self.nodes_namespace[self.head_node_type] = self.network.annotations[self.head_node_type]["species_id"]
+
         return self
 
     def save(self, path, add_slug=False):
@@ -546,8 +555,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             for key, value in store.items():
                 if key == 'edge_index':
                     store.edge_index = store.edge_index[:, mask]
-                else:
-                    store[key] = value[key][mask]
+
+                elif value.shape[0] == mask.shape[0]:
+                    store[key] = value[mask]
 
         return data
 
@@ -569,8 +579,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 for key, value in store.items():
                     if key == 'edge_index':
                         store.edge_index = store.edge_index[:, mask]
-                    else:
-                        store[key] = value[key][mask]
+                    elif value.shape[0] == mask.shape[0]:
+                        store[key] = value[mask]
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
