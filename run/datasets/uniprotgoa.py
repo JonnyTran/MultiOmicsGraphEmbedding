@@ -234,10 +234,14 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         exclude_etypes=exclude_etypes, )
 
     if use_reverse and ('Protein', 'rev_protein-protein', 'Protein') in dataset.G.edge_types:
+        print("removing 1")
         del dataset.G[('Protein', 'rev_protein-protein', 'Protein')]
+        print("removing 2")
         dataset.G[('Protein', 'protein-protein', 'Protein')].edge_index = to_undirected(
             dataset.G[('Protein', 'protein-protein', 'Protein')].edge_index)
+        print("removing 3")
         dataset.metapaths.pop(dataset.metapaths.index(('Protein', 'rev_protein-protein', 'Protein')))
+        print("removing 4")
 
     # Save hparams attr
     hparams.min_count = min_count

@@ -42,6 +42,8 @@ parameters:
       - 'Protein MessengerRNA MicroRNA'
       - 'Protein MessengerRNA'
       - 'Protein'
+  inductive:
+    values: [ true, false ]
   embedding_dim:
     values: [ 256 ]
   layer_pooling:
@@ -56,8 +58,6 @@ parameters:
     values: [ 1024 ]
   attn_heads:
     values: [ 4 ]
-  inductive:
-    values: [ false ]
   attn_dropout:
     values: [ 0.2 ]
   dropout:

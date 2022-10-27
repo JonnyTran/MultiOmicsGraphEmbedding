@@ -773,8 +773,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
                 y_label = parse_labels(self.annotations[ntype].loc[self.nodes[ntype], target],
                                        min_count=None, labels_subset=None, dropna=False, delimiter=self.delimiter)
-                if y_label.sum() == 0:
-                    continue
+                # if isinstance(y_label, csr_mtx) and y_label.data:
+                #     continue
 
                 labels = self.feature_transformer[target].transform(y_label)
                 if isinstance(labels, np.ndarray):

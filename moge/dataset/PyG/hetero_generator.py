@@ -209,6 +209,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     @property
     def name(self) -> str:
+        if '-' in self._name and '.' in self._name:
+            return self._name
+
         ntypes = ''.join(s.capitalize()[0] for s in self.node_types if s not in self.pred_ntypes)
         pntypes = ''.join(s[0] for s in self.pred_ntypes)
         slug = f'{ntypes}{len(self.metapaths)}-{pntypes}'
