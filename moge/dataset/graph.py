@@ -9,6 +9,10 @@ import pandas as pd
 import torch
 import torch_sparse
 from logzero import logger
+from moge.dataset.utils import select_mask
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -18,11 +22,6 @@ from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_sparse import SparseTensor
-
-from moge.dataset.utils import select_mask
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
-from moge.network.sequence import BertSequenceTokenizer
 
 
 class Graph:
@@ -323,6 +322,13 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
             return self._name
         else:
             return self.dataset.__class__.__name__
+
+    @property
+    def tags(self) -> List[str]:
+        if hasattr(self, "_name") and isinstance(self._name, str):
+            return self._name.split(".")
+        else:
+            return []
 
     @abstractmethod
     def compute_node_degrees(self, *args, **kwargs):

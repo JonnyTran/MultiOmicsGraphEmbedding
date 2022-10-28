@@ -46,8 +46,10 @@ def train(hparams: Namespace):
     tags = [] + hparams.dataset.split(" ")
     if hasattr(hparams, "namespaces"):
         tags.extend(hparams.namespaces)
+    if hasattr(dataset, 'tags'):
+        tags.extend(dataset.tags)
 
-    logger = WandbLogger(name=model.name(), tags=tags, project="LATTE2GO")
+    logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
     logger.log_hyperparams(hparams)
 
     if hparams.early_stopping:

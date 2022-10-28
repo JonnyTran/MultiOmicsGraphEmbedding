@@ -14,5 +14,5 @@ ln -s ../Multiplex-Graph-Embedding/models models
 ln -s ../Multiplex-Graph-Embedding/data data
 
 wandb artifact cache cleanup 3000000
-wandb agent jonnytran/LATTE2GO/gseba5uv & sleep 120 &&  wandb agent jonnytran/LATTE2GO/gseba5uv & sleep 120 &&  wandb agent jonnytran/LATTE2GO/gseba5uv && echo "done"
+WANDB_AGENT_MAX_INITIAL_FAILURES=20 WANDB_AGENT_DISABLE_FLAPPING=true wandb agent jonnytran/LATTE2GO/gseba5uv & sleep 120 &&  wandb agent jonnytran/LATTE2GO/gseba5uv & sleep 120 &&  wandb agent jonnytran/LATTE2GO/gseba5uv && echo "done"
 exit

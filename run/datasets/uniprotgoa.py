@@ -36,9 +36,9 @@ def get_load_path(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_
     options = f"{hparams.MicroRNA}.{labels_dataset}.{'parents' if add_parents else 'child'}." \
               f"{'feature' if feature else 'nofeature'}"
 
-    metapaths = ''.join([e[0] for e in go_etypes] if go_etypes else ['']) + ''.join(
-        d.lower()[0] for s, e, d in exclude_etypes)
-    pntypes = ''.join(s[0] for s in pred_ntypes)
+    metapaths = ''.join([e[0] for e in go_etypes] if go_etypes else []) + \
+                ''.join(e.lower()[0] for s, e, d in exclude_etypes)
+    pntypes = ''.join(''.join(s[0] for s in ntype.split("_")) for ntype in pred_ntypes)
 
     slug = f'{ntypes}-{metapaths}-{pntypes}'
 
@@ -49,7 +49,7 @@ def get_load_path(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_
 
 
 def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
-                          save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True) \
+                          save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True, rebuild=False) \
         -> HeteroNodeClfDataset:
     add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
     pred_ntypes, uniprotgoa_path, use_reverse = parse_options(hparams, dataset_path)
@@ -58,13 +58,12 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
                               exclude_etypes,
                               feature, save_path)
 
-    if os.path.exists(os.path.expanduser(load_path)):
+    if not rebuild and os.path.exists(os.path.expanduser(load_path)):
         logger.info(f'Loading saved HeteroNodeClfDataset at {load_path}')
         dataset = HeteroNodeClfDataset.load(load_path, **hparams.__dict__)
 
         return dataset
     else:
-        print(load_path, "is exist", os.path.exists(load_path))
         print("Building", os.path.basename(load_path))
 
     # Load UniProtGOA ontology
@@ -116,7 +115,6 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         network.test_nodes[head_ntype] = test_nodes
 
         network.annotations[head_ntype] = annot_df
-        min_count = None
 
     elif labels_dataset == "GOA":
         index_name = network.annotations[head_ntype].index.name
@@ -131,7 +129,6 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
                                                                      (protein_earliest <= hparams.valid_date)])
         network.test_nodes[head_ntype] = set(protein_earliest.index[(protein_earliest > hparams.valid_date) &
                                                                     (protein_earliest <= hparams.test_date)])
-        min_count = 50
     else:
         raise Exception('`labels_dataset` must be "DGG" or "GOA"')
 
@@ -155,6 +152,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     # Set classes
     if labels_dataset == 'GOA':
         go_classes = geneontology.data.index[geneontology.data['namespace'].isin(pred_ntypes)]
+        min_count = None
 
     elif labels_dataset == 'DGG':
         go_classes = []
@@ -165,6 +163,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
             mlb: MultiLabelBinarizer = joblib.load(os.path.join(deepgraphgo_path, f'{namespace}_go.mlb'))
             go_classes.append(mlb.classes_)
         go_classes = np.hstack(go_classes) if len(go_classes) > 1 else go_classes[0]
+        min_count = 50
 
     logger.info(f'Loaded {go_classes.shape} {",".join(pred_ntypes)} classes')
 

@@ -757,8 +757,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Node labels
         if target:
             if labels_subset is not None:
-                self.feature_transformer[target].classes_ = np.intersect1d(
-                    self.feature_transformer[target].classes_, labels_subset, assume_unique=True)
+                self.feature_transformer[target].classes_ = labels_subset \
+                    if isinstance(labels_subset, np.ndarray) else np.array(labels_subset)
 
             classes = self.feature_transformer[target].classes_
 

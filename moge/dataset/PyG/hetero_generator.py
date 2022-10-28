@@ -222,7 +222,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             return self._name
 
         ntypes = ''.join(s.capitalize()[0] for s in self.node_types if s not in self.pred_ntypes)
-        pntypes = ''.join(s[0] for s in self.pred_ntypes)
+        pntypes = ''.join(''.join(s[0] for s in ntype.split("_")) for ntype in self.pred_ntypes)
         slug = f'{ntypes}{len(self.metapaths)}-{pntypes}'
 
         return '.'.join([self._name, slug])
