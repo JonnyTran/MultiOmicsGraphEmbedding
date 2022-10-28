@@ -757,8 +757,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Node labels
         if target:
             if labels_subset is not None:
-                self.feature_transformer[target].classes_ = labels_subset \
-                    if isinstance(labels_subset, np.ndarray) else np.array(labels_subset)
+                self.feature_transformer[target].classes_ = np.intersect1d(
+                    self.feature_transformer[target].classes_, labels_subset, assume_unique=True)
+                # self.feature_transformer[target].classes_ = labels_subset \
+                #     if isinstance(labels_subset, np.ndarray) else np.array(labels_subset)
 
             classes = self.feature_transformer[target].classes_
 
@@ -777,11 +779,13 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 if isinstance(labels, np.ndarray):
                     labels = torch.tensor(labels)
 
-                elif isinstance(labels, csr_matrix):
+                elif isinstance(labels, csr_matrix) and labels.data.size:
                     labels = SparseTensor(rowptr=torch.tensor(labels.indptr, dtype=torch.long),
                                           col=torch.tensor(labels.indices, dtype=torch.long),
                                           value=torch.tensor(labels.data, dtype=torch.float),
                                           sparse_sizes=labels.shape, is_sorted=True, trust_data=True)
+                else:
+                    continue
 
                 hetero[ntype]['y'] = labels
         else:

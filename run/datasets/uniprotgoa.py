@@ -116,6 +116,17 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
         network.annotations[head_ntype] = annot_df
 
+        go_classes = []
+        rename_dict = {'molecular_function': 'mf', 'biological_process': 'bp', 'cellular_component': 'cc',
+                       'mf': 'mf', 'bp': 'bp', 'cc': 'cc'}
+        for pred_ntype in pred_ntypes:
+            namespace = rename_dict[pred_ntype]
+            mlb: MultiLabelBinarizer = joblib.load(os.path.join(deepgraphgo_path, f'{namespace}_go.mlb'))
+            go_classes.append(mlb.classes_)
+        go_classes = np.hstack(go_classes) if len(go_classes) > 1 else go_classes[0]
+        min_count = None
+        labels_subset = go_classes
+
     elif labels_dataset == "GOA":
         index_name = network.annotations[head_ntype].index.name
         network.multiomics[head_ntype].annotate_attributes(geneontology.annotations, on=index_name,
@@ -129,8 +140,15 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
                                                                      (protein_earliest <= hparams.valid_date)])
         network.test_nodes[head_ntype] = set(protein_earliest.index[(protein_earliest > hparams.valid_date) &
                                                                     (protein_earliest <= hparams.test_date)])
+
+        go_classes = geneontology.data.index[geneontology.data['namespace'].isin(pred_ntypes)]
+        min_count = 50
+        labels_subset = geneontology.data.index.intersection(go_classes)
+
     else:
         raise Exception('`labels_dataset` must be "DGG" or "GOA"')
+
+    logger.info(f'Loaded {go_classes.shape} {",".join(pred_ntypes)} classes')
 
     # add parent terms to ['go_id'] column
     if add_parents:
@@ -148,24 +166,6 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # if hparams.inductive:
     #     network.set_edge_traintest_mask()
-
-    # Set classes
-    if labels_dataset == 'GOA':
-        go_classes = geneontology.data.index[geneontology.data['namespace'].isin(pred_ntypes)]
-        min_count = None
-
-    elif labels_dataset == 'DGG':
-        go_classes = []
-        rename_dict = {'molecular_function': 'mf', 'biological_process': 'bp', 'cellular_component': 'cc',
-                       'mf': 'mf', 'bp': 'bp', 'cc': 'cc'}
-        for pred_ntype in pred_ntypes:
-            namespace = rename_dict[pred_ntype]
-            mlb: MultiLabelBinarizer = joblib.load(os.path.join(deepgraphgo_path, f'{namespace}_go.mlb'))
-            go_classes.append(mlb.classes_)
-        go_classes = np.hstack(go_classes) if len(go_classes) > 1 else go_classes[0]
-        min_count = 50
-
-    logger.info(f'Loaded {go_classes.shape} {",".join(pred_ntypes)} classes')
 
     # Neighbor loader
     max_order = max(hparams.n_layers, hparams.t_order if 't_order' in hparams else 0)
@@ -188,10 +188,11 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         sequence_tokenizers = None
 
     # Create dataset
+
     dataset = HeteroNodeClfDataset.from_heteronetwork(
         network,
         target="go_id",
-        labels_subset=geneontology.data.index.intersection(go_classes),
+        labels_subset=labels_subset,
         min_count=min_count,
         expression=feature,
         sequence=True if sequence_tokenizers is not None else False,
@@ -212,10 +213,13 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
             dataset.G[('Protein', 'protein-protein', 'Protein')].edge_index)
         dataset.metapaths.pop(dataset.metapaths.index(('Protein', 'rev_protein-protein', 'Protein')))
 
-    dataset.nodes_namespace = {ntype: df.replace({'biological_process': 'BPO',
-                                                  'cellular_component': 'CCO',
-                                                  'molecular_function': 'MFO'}) \
-                               for ntype, df in dataset.nodes_namespace.items()}
+    dataset.nodes_namespace = {ntype: series.replace({'biological_process': 'BPO',
+                                                      'cellular_component': 'CCO',
+                                                      'molecular_function': 'MFO'}) \
+                               for ntype, series in dataset.nodes_namespace.items()}
+    for ntype, series in dataset.nodes_namespace.items():
+        series.fillna(series.mode()[0], inplace=True)
+
     dataset.nodes_namespace[dataset.head_node_type] = dataset.network.annotations[dataset.head_node_type]["species_id"]
 
     # Save hparams attr
@@ -299,7 +303,8 @@ def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str):
     dgg_go_id = load_protein_dataset(deepgraphgo_data, namespaces=['cc', 'bp', 'mf'])
     # Set train/valid/test_mask
     mask_cols = ['train_mask', 'valid_mask', 'test_mask']
-    annot_df = annot_df.join(dgg_go_id[mask_cols], on='protein_id')
+    if not annot_df.columns.intersection(mask_cols).size:
+        annot_df = annot_df.join(dgg_go_id[mask_cols], on='protein_id')
     annot_df[mask_cols] = annot_df[mask_cols].fillna(False)
     unmarked_nodes = ~annot_df[mask_cols].any(axis=1)
     annot_df.loc[unmarked_nodes, mask_cols] = \

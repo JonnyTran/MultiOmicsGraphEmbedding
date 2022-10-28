@@ -143,8 +143,9 @@ class AttributedNetwork(Network):
                 print(traceback.format_exc())
                 continue
 
-            logger.info(f'get_feature_transformers {col}: '
-                        f'{transformers[col].classes_.shape if hasattr(transformers[col], "classes_") else ""}')
+            logger.info(f'get_feature_transformers `{col}`: '
+                        f'{transformers[col].classes_.shape if hasattr(transformers[col], "classes_") else ""}, '
+                        f'min_count: {min_count}')
 
         return transformers
 
