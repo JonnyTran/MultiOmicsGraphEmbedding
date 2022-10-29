@@ -26,7 +26,6 @@ parameters:
   go_etypes:
     values:
       - 'is_a'
-      - 'is_a part_of'
       - 'is_a part_of has_part'
       - null
   exclude_etypes:

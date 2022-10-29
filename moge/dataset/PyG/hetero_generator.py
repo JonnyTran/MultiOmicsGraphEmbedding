@@ -14,6 +14,12 @@ import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from logzero import logger
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.io import get_attrs
@@ -23,11 +29,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -148,8 +149,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 self.network.annotations[ntype] = pd.read_parquet(join(path, f'{ntype}.parquet'))
 
         nodes = pd.read_pickle(join(path, 'nodes.pickle'))
-        self.nodes = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
+        self.nodes: Dict[str, pd.Index] = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
 
+        # Post-processing to fix some data inconsistencies
+        ## Node namespace
         self.nodes_namespace = {ntype: df.replace({'biological_process': 'BPO',
                                                    'cellular_component': 'CCO',
                                                    'molecular_function': 'MFO'}) \
@@ -159,11 +162,19 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 'species_id' in self.network.annotations[self.head_node_type].columns:
             self.nodes_namespace[self.head_node_type] = self.network.annotations[self.head_node_type]["species_id"]
 
+        ## Missing classes not in .obo
+        for pred_ntype in self.pred_ntypes:
+            extra_classes = pd.Index(self.classes).difference(self.nodes[pred_ntype])
+            if extra_classes.size:
+                self.nodes[pred_ntype] = self.nodes[pred_ntype].append(extra_classes)
+            assert not self.nodes[pred_ntype].duplicated().any()
+
         return self
 
     def save(self, path, add_slug=False):
         if isinstance(path, str) and '~' in path:
             path = os.path.expanduser(path)
+            path = path.rstrip('/')
 
         if add_slug:
             if path.endswith("/"):
@@ -186,7 +197,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 pickle.dump(nodes, f)
 
         for ntype, df in self.network.annotations.items():
-            df.to_pickle(join(path, f'{ntype}.pickle'))
+            prev_dir_node_ann_pickle = join(os.path.dirname(path), f'{ntype}.pickle')
+            node_ann_pickle = join(path, f'{ntype}.pickle')
+
+            if not os.path.exists(node_ann_pickle):
+                if os.path.exists(prev_dir_node_ann_pickle):
+                    os.system(f'ln -s {prev_dir_node_ann_pickle} {node_ann_pickle}')
+                else:
+                    df.to_pickle(node_ann_pickle)
 
         torch.save(self.G, join(path, 'heterodata.pt'))
 
@@ -221,7 +239,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if '-' in self._name and '.' in self._name:
             return self._name
 
-        ntypes = ''.join(s.capitalize()[0] for s in self.node_types if s not in self.pred_ntypes)
+        ntypes = ''.join(s.capitalize()[0] for s in self.node_types)
         pntypes = ''.join(''.join(s[0] for s in ntype.split("_")) for ntype in self.pred_ntypes)
         slug = f'{ntypes}{len(self.metapaths)}-{pntypes}'
 
@@ -233,8 +251,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             return None
         class_indices = {}
         for pred_ntype in self.pred_ntypes:
-            class_indices[pred_ntype] = torch.from_numpy(self.nodes[pred_ntype].get_indexer_for(self.classes))
-            class_indices[pred_ntype] = class_indices[pred_ntype][class_indices[pred_ntype] >= 0]
+            indices = self.nodes[pred_ntype].get_indexer_for(self.classes)
+            assert (not (indices < 0).any()) and indices.size == self.n_classes, \
+                f'{(indices >= 0).sum()} != {self.n_classes}'
+            class_indices[pred_ntype] = torch.from_numpy(indices)
         return class_indices
 
     @property

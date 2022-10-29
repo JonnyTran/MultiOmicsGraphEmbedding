@@ -33,4 +33,4 @@ sweep: true
 lr: 0.001
 min_epochs: 60
 #hours: 3
-early_stopping: 8
+early_stopping: 5

@@ -26,7 +26,7 @@ def parse_yaml_config(parser: ArgumentParser) -> Namespace:
         args = Namespace(**args_dict)
 
         print("Configs:")
-        pprint(args.__dict__)
+        pprint(opt)
         print()
 
     return args

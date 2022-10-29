@@ -100,7 +100,7 @@ class LabelNodeClassifer(nn.Module):
         self.classes = dataset.classes
         self.head_node_type = hparams.head_node_type
 
-        self.pred_ntype = dataset.pred_ntypes
+        self.pred_ntypes = dataset.pred_ntypes
         self.class_indices = dataset.class_indices
         self.class_sizes = {ntype: ids.numel() for ntype, ids in self.class_indices.items()}
 
@@ -115,10 +115,10 @@ class LabelNodeClassifer(nn.Module):
 
     def forward(self, emb: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
         # TODO ensure cls_emb is same shape as self.n_classes
-        for ntype in self.pred_ntype:
+        for ntype in self.pred_ntypes:
             cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
 
-        assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb}) != n_classes ({self.n_classes})"
+        assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb.shape}) != n_classes ({self.n_classes})"
         logits = emb @ cls_emb.T + self.bias
 
         if hasattr(self, 'activation'):
