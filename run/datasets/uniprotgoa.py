@@ -105,23 +105,24 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     alt_id2go_id = geneontology.get_mapper('alt_id', target).to_dict()
 
-    # Add GO ontology interactions
-    if go_etypes and ntype_subset and {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
+    if not ntype_subset or {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
             ntype_subset):
-        network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=go_etypes)
+        # Add GO ontology interactions
+        if go_etypes:
+            network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=go_etypes)
 
-    geneontology.annotations['go_id'] = geneontology.annotations['go_id'].replace(alt_id2go_id)
-    # Add Protein-GO annotations
-    for dst_ntype in set(['biological_process', 'molecular_function', 'cellular_component']).difference(
-            pred_ntypes):
-        network.add_edges_from_annotations(geneontology, filter_dst_nodes=network.nodes[dst_ntype],
-                                           src_ntype=head_ntype, dst_ntype=dst_ntype,
-                                           src_node_col='protein_id',
-                                           train_date=hparams.train_date,
-                                           valid_date=hparams.valid_date,
-                                           test_date=hparams.test_date,
-                                           use_neg_annotations=False)
-        # TODO whether to add annotation edges with parents
+        geneontology.annotations['go_id'] = geneontology.annotations['go_id'].replace(alt_id2go_id)
+        # Add Protein-GO annotations
+        for dst_ntype in set(['biological_process', 'molecular_function', 'cellular_component']).difference(
+                pred_ntypes):
+            network.add_edges_from_annotations(geneontology, filter_dst_nodes=network.nodes[dst_ntype],
+                                               src_ntype=head_ntype, dst_ntype=dst_ntype,
+                                               src_node_col='protein_id',
+                                               train_date=hparams.train_date,
+                                               valid_date=hparams.valid_date,
+                                               test_date=hparams.test_date,
+                                               use_neg_annotations=False)
+            # TODO whether to add annotation edges with parents
 
     # Set the go_id label and train/valid/test node split for head_node_type
     if labels_dataset == 'DGG':
