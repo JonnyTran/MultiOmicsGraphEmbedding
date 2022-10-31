@@ -748,11 +748,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                       col=torch.tensor(csr_mtx.indices, dtype=torch.long),
                                                       value=torch.tensor(csr_mtx.data, dtype=torch.float),
                                                       sparse_sizes=csr_mtx.shape, is_sorted=True, trust_data=True)
-                    logger.info(f'{ntype}, "expressions sparse", {csr_mtx.shape}')
 
                 elif not expressions.empty:
                     hetero[ntype]['x'] = torch.tensor(expressions.values.T, dtype=torch.float)
-                    logger.info(f"{ntype}, 'expressions', {hetero[ntype]['x'].shape}")
 
         # Node labels
         if target:

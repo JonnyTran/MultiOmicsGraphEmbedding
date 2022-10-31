@@ -152,7 +152,19 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.nodes: Dict[str, pd.Index] = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
 
         # Post-processing to fix some data inconsistencies
-        ## Node namespace
+        ## Missing classes not in .obo
+        for pred_ntype in self.pred_ntypes:
+            extra_classes = pd.Index(self.classes).difference(self.nodes[pred_ntype])
+            if extra_classes.size:
+                self.nodes[pred_ntype] = self.nodes[pred_ntype].append(extra_classes)
+            assert not self.nodes[pred_ntype].duplicated().any()
+
+            # Missing nodes_namespace
+            if ntype not in dataset.nodes_namespace:
+                dataset.nodes_namespace[ntype] = pd.Series([ntype for i in range(self.n_classes)],
+                                                           index=self.classes)
+
+        # Rename nodes_namespace
         self.nodes_namespace = {ntype: df.replace({'biological_process': 'BPO',
                                                    'cellular_component': 'CCO',
                                                    'molecular_function': 'MFO'}) \
@@ -161,13 +173,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if self.head_node_type in self.network.annotations and \
                 'species_id' in self.network.annotations[self.head_node_type].columns:
             self.nodes_namespace[self.head_node_type] = self.network.annotations[self.head_node_type]["species_id"]
-
-        ## Missing classes not in .obo
-        for pred_ntype in self.pred_ntypes:
-            extra_classes = pd.Index(self.classes).difference(self.nodes[pred_ntype])
-            if extra_classes.size:
-                self.nodes[pred_ntype] = self.nodes[pred_ntype].append(extra_classes)
-            assert not self.nodes[pred_ntype].duplicated().any()
 
         return self
 

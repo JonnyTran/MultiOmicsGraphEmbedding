@@ -235,6 +235,9 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         dataset.metapaths.pop(dataset.metapaths.index(('Protein', 'rev_protein-protein', 'Protein')))
 
     # Post-processing
+    for ntype in pred_ntypes:
+        if ntype not in dataset.nodes_namespace:
+            dataset.nodes_namespace[ntype] = geneontology.data.query(f'namespace == "{ntype}"')['namespace']
     dataset.nodes_namespace = {ntype: series.replace({'biological_process': 'BPO',
                                                       'cellular_component': 'CCO',
                                                       'molecular_function': 'MFO'}) \
@@ -250,13 +253,13 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     dataset._name = os.path.basename(load_path)
 
     # Create cls_graph at output layer
-    if set(dataset.nodes.keys()).isdisjoint(pred_ntypes) and 'cls_graph' in hparams and hparams.cls_graph:
-        cls_network_nodes = dataset.classes.tolist() + go_classes.difference(dataset.classes).tolist()
-        cls_network = dgl.heterograph(
-            get_edge_index_dict(geneontology.network, nodes=cls_network_nodes, format="dgl"))
-        hparams.cls_graph = cls_network
-    else:
-        hparams.cls_graph = None
+    # if set(dataset.nodes.keys()).isdisjoint(pred_ntypes) and 'cls_graph' in hparams and hparams.cls_graph:
+    #     cls_network_nodes = dataset.classes.tolist() + go_classes.difference(dataset.classes).tolist()
+    #     cls_network = dgl.heterograph(
+    #         get_edge_index_dict(geneontology.network, nodes=cls_network_nodes, format="dgl"))
+    #     hparams.cls_graph = cls_network
+    # else:
+    #     hparams.cls_graph = None
 
     if save:
         dataset.save(load_path, add_slug=False)
