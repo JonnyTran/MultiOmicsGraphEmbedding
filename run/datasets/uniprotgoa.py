@@ -4,7 +4,7 @@ from argparse import Namespace
 from collections import defaultdict
 from collections.abc import Iterable
 from os.path import join
-from typing import List
+from typing import List, Mapping
 
 import dask.dataframe as dd
 import dgl
@@ -93,10 +93,24 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     else:
         raise Exception()
 
+    # Replace alt_id for go_id labels
+    def replace_alt_id(li: List, mapper: Mapping[str, str]) -> List[str]:
+        assert isinstance(mapper, dict), f"{type(mapper)}"
+        if isinstance(li, str):
+            return mapper.get(li, li)
+        elif isinstance(li, Iterable):
+            return [mapper.get(x, x) for x in li]
+        else:
+            return li
+
+    alt_id2go_id = geneontology.get_mapper('alt_id', target).to_dict()
+
     # Add GO ontology interactions
-    if go_etypes:
+    if go_etypes and ntype_subset and {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
+            ntype_subset):
         network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=go_etypes)
 
+    geneontology.annotations['go_id'] = geneontology.annotations['go_id'].replace(alt_id2go_id)
     # Add Protein-GO annotations
     for dst_ntype in set(['biological_process', 'molecular_function', 'cellular_component']).difference(
             pred_ntypes):
@@ -153,16 +167,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     logger.info(f'Loaded M {go_classes.shape} {",".join(pred_ntypes)} classes')
 
-    # Replace alt_id for go_id labels
-    def replace_alt_id(li: List, mapper: dict) -> List[str]:
-        if isinstance(li, str):
-            return mapper.get(li, li)
-        elif isinstance(li, Iterable):
-            return [mapper.get(x, x) for x in li]
-        else:
-            return li
-
-    alt_id2go_id = geneontology.get_mapper('alt_id', target).to_dict()
+    # Replace alt_id labels
     network.annotations[head_ntype][target].map(lambda li: replace_alt_id(li, alt_id2go_id))
 
     # add parent terms to ['go_id'] column
@@ -282,6 +287,7 @@ def parse_options(hparams, dataset_path):
         ntype_subset = hparams.ntype_subset
     else:
         ntype_subset = None
+
     if 'pred_ntypes' in hparams and isinstance(hparams.pred_ntypes, str):
         assert len(hparams.pred_ntypes)
         pred_ntypes = hparams.pred_ntypes.split(" ")
@@ -289,6 +295,7 @@ def parse_options(hparams, dataset_path):
         pred_ntypes = hparams.pred_ntypes
     else:
         raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
+
     exclude_etypes = [(head_ntype, 'associated', go_ntype) for go_ntype in pred_ntypes]
     if 'exclude_etypes' in hparams and hparams.exclude_etypes:
         exclude_etypes_ = [etype.split(".") if isinstance(etype, str) else etype \
@@ -296,6 +303,7 @@ def parse_options(hparams, dataset_path):
                                              if isinstance(hparams.exclude_etypes, str) \
                                              else hparams.exclude_etypes)]
         exclude_etypes.extend(exclude_etypes_)
+
     # Set etypes to include
     if isinstance(hparams.go_etypes, str):
         go_etypes = hparams.go_etypes.split(" ") if len(hparams.go_etypes) else []
@@ -303,11 +311,15 @@ def parse_options(hparams, dataset_path):
         go_etypes = hparams.go_etypes
     else:
         go_etypes = None
+
     # Check if illegal config
-    if ntype_subset and not {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
-            ntype_subset):
-        if go_etypes != None:
-            raise Exception('Skip runs with any `go_etype` if no GO ntypes are in the graph')
+    # if ntype_subset and not {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
+    #         ntype_subset):
+    #     if go_etypes != None:
+    #         raise Exception('Skip runs with any `go_etype` if no GO ntypes are in the graph')
+    if {'biological_process', 'cellular_component', 'molecular_function'}.intersection(ntype_subset) and \
+            not go_etypes:
+        raise Exception('Skip runs with none `go_etype` if at least one GO ntypes are in the graph')
 
     return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, pred_ntypes, uniprotgoa_path, use_reverse
 

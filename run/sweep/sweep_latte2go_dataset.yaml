@@ -10,14 +10,16 @@ parameters:
     values: [ 'UniProt' ]
   root_path:
     values:
-      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+      #      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
       - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_genelevel.network.pickle'
   labels_dataset:
     values:
       - 'DGG'
-      - 'GOA'
+  #      - 'GOA'
   add_parents:
-    values: [ true, false ]
+    values:
+      - true
+  #      - false
   pred_ntypes:
     values:
       - 'molecular_function'
@@ -25,15 +27,17 @@ parameters:
       - 'cellular_component'
   go_etypes:
     values:
-      - 'is_a'
       - 'is_a part_of has_part'
-      - null
-  exclude_etypes:
-    values:
-      - 'Protein.protein-protein.Protein'
-      - null
+  #      - 'is_a'
+  #      - null
+  #  exclude_etypes:
+  #    values:
+  #      - null
+  #      - 'Protein.protein-protein.Protein'
   feature:
-    values: [ true, false ]
+    values:
+      - true
+  #      - false
   ntype_subset:
     values:
       - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'

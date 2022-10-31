@@ -38,7 +38,7 @@ class Network(object):
 
         if isinstance(nodes, dict):
             # Ensure no empty lists
-            nodes = {ntype: li for ntype, li in nodes.items() if li}
+            nodes = {ntype: set(li) for ntype, li in nodes.items()}
 
             for metapath, g in self.networks.items():
                 g_ntypes = {metapath[0], metapath[-1]}.intersection(nodes)
