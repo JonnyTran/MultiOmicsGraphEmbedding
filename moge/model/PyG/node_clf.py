@@ -4,6 +4,7 @@ import traceback
 from argparse import Namespace
 from typing import Dict, Iterable, Union, Tuple, Any, List
 
+import dgl
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
@@ -361,7 +362,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         # Output layer
         if self.embedder.layer_pooling == 'concat':
             hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
-        if "cls_graph" in hparams and hparams.cls_graph is not None:
+        if "cls_graph" in hparams and isinstance(hparams.cls_graph, (dgl.DGLHeteroGraph, dgl.DGLGraph)):
             self.classifier = LabelGraphNodeClassifier(dataset, hparams)
         elif dataset.pred_ntypes is not None and dataset.class_indices:
             self.classifier = LabelNodeClassifer(dataset, hparams)

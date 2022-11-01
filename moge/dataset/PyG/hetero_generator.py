@@ -154,15 +154,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Post-processing to fix some data inconsistencies
         ## Missing classes not in .obo
         for pred_ntype in self.pred_ntypes:
-            extra_classes = pd.Index(self.classes).difference(self.nodes[pred_ntype])
-            if extra_classes.size:
-                self.nodes[pred_ntype] = self.nodes[pred_ntype].append(extra_classes)
-            assert not self.nodes[pred_ntype].duplicated().any()
+            if pred_ntype in self.nodes:
+                extra_classes = pd.Index(self.classes).difference(self.nodes[pred_ntype])
+                if extra_classes.size:
+                    self.nodes[pred_ntype] = self.nodes[pred_ntype].append(extra_classes)
+                assert not self.nodes[pred_ntype].duplicated().any()
 
             # Missing nodes_namespace
-            if ntype not in dataset.nodes_namespace:
-                dataset.nodes_namespace[ntype] = pd.Series([ntype for i in range(self.n_classes)],
-                                                           index=self.classes)
+            if ntype not in self.nodes_namespace:
+                self.nodes_namespace[ntype] = pd.Series([ntype for i in range(self.n_classes)],
+                                                        index=self.classes)
 
         # Rename nodes_namespace
         self.nodes_namespace = {ntype: df.replace({'biological_process': 'BPO',
@@ -206,10 +207,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             node_ann_pickle = join(path, f'{ntype}.pickle')
 
             if not os.path.exists(node_ann_pickle):
-                if os.path.exists(prev_dir_node_ann_pickle):
-                    os.system(f'ln -s {prev_dir_node_ann_pickle} {node_ann_pickle}')
-                else:
-                    df.to_pickle(node_ann_pickle)
+                df.to_pickle(node_ann_pickle)
 
         torch.save(self.G, join(path, 'heterodata.pt'))
 

@@ -6,24 +6,24 @@ from pathlib import Path
 from typing import Union
 
 import dgl
-import moge
-import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
+from ogb.graphproppred import DglGraphPropPredDataset
+from ogb.linkproppred import PygLinkPropPredDataset
+from ogb.nodeproppred import DglNodePropPredDataset
+from torch_geometric.datasets import AMiner
+
+import moge
+import moge.dataset.PyG.triplet_generator
 from moge.dataset.PyG.hetero_generator import HeteroLinkPredDataset
 from moge.dataset.dgl.graph_generator import DGLGraphSampler
 from moge.dataset.dgl.node_generator import HeteroNeighborGenerator, DGLNodeGenerator
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
 from moge.network.hetero import HeteroNetwork
-from ogb.graphproppred import DglGraphPropPredDataset
-from ogb.linkproppred import PygLinkPropPredDataset
-from ogb.nodeproppred import DglNodePropPredDataset
+from openomics.database.ontology import GeneOntology
 from run.datasets.uniprotgoa import build_uniprot_dataset
 from run.utils import add_node_embeddings
-from torch_geometric.datasets import AMiner
-
-from openomics.database.ontology import GeneOntology
 
 
 def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
@@ -146,8 +146,7 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
 
     elif 'uniprot' in name.lower() and (
             isinstance(dataset_path, HeteroNetwork) or (isinstance(dataset_path, str) and ".pickle" in dataset_path)):
-        dataset = build_uniprot_dataset(name, dataset_path=dataset_path, hparams=hparams,
-                                        rebuild=hparams.rebuild if 'rebuild' in hparams else False)
+        dataset = build_uniprot_dataset(name, dataset_path=dataset_path, hparams=hparams)
 
     else:
         raise Exception(f"dataset {name} not found")

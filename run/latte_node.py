@@ -1,5 +1,6 @@
 import random
 import sys
+import traceback
 from argparse import ArgumentParser, Namespace
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
@@ -93,10 +94,12 @@ def train(hparams: Namespace):
                                                           dataset=dataset,
                                                           metrics=METRICS)
             print(trainer.checkpoint_callback.best_model_path)
-    except:
-        pass
-    finally:
+
         trainer.test(model)
+
+    except Exception as e:
+        print(e)
+        traceback.print_exc()
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -123,17 +126,17 @@ if __name__ == "__main__":
     parser.add_argument('--pred_ntypes', type=str, default='molecular_function')
     parser.add_argument('--go_etypes', type=str, default='is_a part_of')
     parser.add_argument('--train_date', type=str, default='2018-01-01')
-    parser.add_argument('--valid_date', type=str, default='2018-07-01')
+    parser.add_argument('--valid_date', type=str, default='2018-12-31')
     parser.add_argument('--test_date', type=str, default='2021-04-01')
 
     # parametrize the network
     parser.add_argument('-g', '--num_gpus', type=int, default=1)
-    parser.add_argument("-d", '--embedding_dim', type=int, default=256)
+    parser.add_argument('-d', '--embedding_dim', type=int, default=256)
     parser.add_argument('-n', '--batch_size', type=int, default=1024)
     parser.add_argument('--neighbor_loader', type=str, default="HGTLoader")
     parser.add_argument('--n_neighbors', type=int, default=20)
-    parser.add_argument("-l", '--n_layers', type=int, default=2)
-    parser.add_argument("-t", '--t_order', type=int, default=2)
+    parser.add_argument('-l', '--n_layers', type=int, default=2)
+    parser.add_argument('-t', '--t_order', type=int, default=2)
     parser.add_argument('--layer_pooling', type=str, default="concat")
 
     parser.add_argument('--activation', type=str, default="relu")
@@ -153,7 +156,7 @@ if __name__ == "__main__":
     parser.add_argument('--edge_sampling', type=bool, default=False)
 
     parser.add_argument('--sequence', type=bool, default=False)
-    parser.add_argument('--cls_graph', type=bool, default=False)
+    parser.add_argument('--cls_graph', type=bool, default=None)
 
     # parser.add_argument('--reduction', type=str, default="none")
     parser.add_argument('--use_class_weights', type=bool, default=False)
@@ -168,8 +171,6 @@ if __name__ == "__main__":
     parser.add_argument('--early_stopping', type=int, default=5)
     parser.add_argument('--min_epochs', type=int, default=5)
     parser.add_argument('--seed', type=int, default=random.randint(0, int(1e4)))
-    # add all the available options to the trainer
-    # parser = pl.Trainer.add_argparse_args(parser)
 
     args = parse_yaml_config(parser)
     train(args)
