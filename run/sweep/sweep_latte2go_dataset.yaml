@@ -11,14 +11,14 @@ parameters:
   root_path:
     values:
       - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
-      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+#      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
   labels_dataset:
     values:
-      - 'DGG_GOA'
+      - 'DGG'
   add_parents:
     values:
       - true
-  #      - false
+      - false
   pred_ntypes:
     values:
       - 'molecular_function'
@@ -40,10 +40,10 @@ parameters:
   ntype_subset:
     values:
       - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'
-      - 'Protein MessengerRNA MicroRNA LncRNA'
-      - 'Protein MessengerRNA MicroRNA'
-      - 'Protein MessengerRNA'
-      - 'Protein'
+  #      - 'Protein MessengerRNA MicroRNA LncRNA'
+  #      - 'Protein MessengerRNA MicroRNA'
+  #      - 'Protein MessengerRNA'
+  #      - 'Protein'
   inductive:
     values: [ false ]
   embedding_dim:

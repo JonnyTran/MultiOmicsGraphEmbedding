@@ -254,7 +254,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                 split_ntype: str = None, etypes: Optional[List[str]] = None,
                                 reverse_edge_dir=False, d_ntype: str = "GO_term"):
         """
-        Add edges between nodes within the ontology.
+        Add all nodes in the ontology, then all edges between nodes within the ontology.
 
         Args:
             ontology (Ontology): an openomics.Ontology object that metadata and contains edges among the terms.

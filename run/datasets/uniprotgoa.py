@@ -91,15 +91,6 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         raise Exception()
 
     # Replace alt_id for go_id labels
-    def replace_alt_id(li: List, mapper: Mapping[str, str]) -> List[str]:
-        assert isinstance(mapper, dict), f"{type(mapper)}"
-        if isinstance(li, str):
-            return mapper.get(li, li)
-        elif isinstance(li, Iterable):
-            return [mapper.get(x, x) for x in li]
-        else:
-            return li
-
     alt_id2go_id = geneontology.get_mapper('alt_id', target).to_dict()
 
     if not ntype_subset or {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
@@ -108,7 +99,9 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         if go_etypes:
             network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=go_etypes)
 
-        geneontology.annotations['go_id'] = geneontology.annotations['go_id'].replace(alt_id2go_id)
+        to_replace = geneontology.annotations['go_id'].isin(alt_id2go_id)
+        geneontology.annotations.loc[to_replace, 'go_id'] = geneontology.annotations.loc[to_replace, 'go_id'].replace(
+            alt_id2go_id)
 
         # Add Protein-GO annotations
         for dst_ntype in {'biological_process', 'molecular_function', 'cellular_component'}.difference(pred_ntypes):
@@ -123,18 +116,13 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # Set the go_id label and train/valid/test node split for head_node_type
     if labels_dataset.startswith('DGG'):
-        annot_df, train_nodes, valid_nodes, test_nodes = get_DeepGraphGO_split(network.annotations[head_ntype],
-                                                                               deepgraphgo_path, target=target)
-        if 'GOA' in labels_dataset:
-            network.multiomics[head_ntype].annotate_attributes(geneontology.annotations,
-                                                               on=network.annotations[head_ntype].index.name,
-                                                               columns=[target], agg='unique')
+        network.annotations[head_ntype], train_nodes, valid_nodes, test_nodes = get_DeepGraphGO_split(
+            network.annotations[head_ntype], deepgraphgo_path, target=target)
 
         network.train_nodes[head_ntype] = train_nodes
         network.valid_nodes[head_ntype] = valid_nodes
         network.test_nodes[head_ntype] = test_nodes
 
-        network.annotations[head_ntype] = annot_df
 
     elif labels_dataset.startswith("GOA"):
         index_name = network.annotations[head_ntype].index.name
@@ -168,7 +156,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     logger.info(f'Loaded M {go_classes.shape} {",".join(pred_ntypes)} classes')
 
     # Replace alt_id labels
-    network.annotations[head_ntype][target].map(lambda li: replace_alt_id(li, alt_id2go_id))
+    network.annotations[head_ntype][target].map(lambda li: _replace_alt_id(li, alt_id2go_id))
 
     # add parent terms to ['go_id'] column
     if add_parents:
@@ -342,3 +330,13 @@ def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str, target=
     test_nodes = set(annot_df.query('test_mask == True').index)
 
     return annot_df, train_nodes, valid_nodes, test_nodes
+
+
+def _replace_alt_id(li: List, mapper: Mapping[str, str]) -> List[str]:
+    assert isinstance(mapper, dict), f"{type(mapper)}"
+    if isinstance(li, str):
+        return mapper.get(li, li)
+    elif isinstance(li, Iterable):
+        return [mapper.get(x, x) for x in li]
+    else:
+        return li
