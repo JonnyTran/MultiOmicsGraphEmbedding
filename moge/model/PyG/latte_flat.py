@@ -237,8 +237,9 @@ class LATTEConv(MessagePassing, RelationAttention):
                 self.update_relation_attn(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
                                           global_node_index=global_node_index,
                                           batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
-                self.update_edge_attn(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
-                                      batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
+                if save_betas >= 2:
+                    self.update_edge_attn(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
+                                          batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
             except Exception as e:
                 traceback.print_exc()
 
@@ -392,8 +393,9 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
 
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of meapaths
         if hasattr(hparams, 'pred_ntypes') and hparams.pred_ntypes:
-            output_ntypes = [self.head_node_type] + hparams.pred_ntypes.split(' ') if isinstance(hparams.pred_ntypes,
-                                                                                                 str) else hparams.pred_ntypes
+            pred_ntypes = hparams.pred_ntypes
+            output_ntypes = [self.head_node_type] + \
+                            (pred_ntypes.split(' ') if isinstance(pred_ntypes, str) else pred_ntypes)
         else:
             output_ntypes = [self.head_node_type]
 

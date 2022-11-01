@@ -18,7 +18,11 @@ def num_edges(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Te
 
 
 def max_num_hops(metapaths: List[Tuple[str, str, str]]):
-    return max(len(metapath[1::2]) for metapath in metapaths)
+    metapath_lens = [len(metapath[1::2]) for metapath in metapaths]
+    if metapath_lens:
+        return max(metapath_lens)
+    else:
+        return None
 
 
 def convert_to_nx_edgelist(edge_index_dict: Dict[Tuple[str, str, str], Tensor], node_names: Dict[str, pd.Index],

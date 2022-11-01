@@ -333,6 +333,8 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         if hasattr(self, 'pred_ntypes') and isinstance(self.pred_ntypes, list):
             tags.extend(self.pred_ntypes)
 
+        tags = [x for x in tags if isinstance(x, str) and len(x)]
+
         return tags
 
     @abstractmethod
