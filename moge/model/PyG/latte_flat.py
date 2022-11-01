@@ -6,12 +6,13 @@ from typing import List, Dict, Tuple, Union
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 
 
 class LATTEConv(MessagePassing, RelationAttention):
@@ -391,7 +392,8 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
 
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of meapaths
         if hasattr(hparams, 'pred_ntypes') and hparams.pred_ntypes:
-            output_ntypes = [self.head_node_type] + hparams.pred_ntypes
+            output_ntypes = [self.head_node_type] + hparams.pred_ntypes.split(' ') if isinstance(hparams.pred_ntypes,
+                                                                                                 str) else hparams.pred_ntypes
         else:
             output_ntypes = [self.head_node_type]
 

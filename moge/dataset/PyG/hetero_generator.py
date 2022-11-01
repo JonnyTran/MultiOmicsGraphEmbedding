@@ -134,7 +134,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         with open(join(path, 'metadata.pickle'), 'rb') as f:
             attrs: Dict = pickle.load(f)
         if kwargs:
-            attrs.update(kwargs)
+            attrs.update({k: v for k, v in kwargs.items() if k != 'dataset'})
 
         self = cls(hetero, **attrs)
 

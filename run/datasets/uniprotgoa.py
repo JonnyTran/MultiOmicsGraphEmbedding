@@ -153,20 +153,20 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     go_classes = np.hstack(go_classes) if len(go_classes) > 1 else go_classes[0]
     min_count = None
 
-    logger.info(f'Loaded M {go_classes.shape} {",".join(pred_ntypes)} classes')
+    logger.info(f'Loaded MultiLabelBinarizer with {go_classes.shape} {",".join(pred_ntypes)} classes')
 
     # Replace alt_id labels
     network.annotations[head_ntype][target].map(lambda li: _replace_alt_id(li, alt_id2go_id))
 
     # add parent terms to ['go_id'] column
     if add_parents:
-        logger.info(f"add_parents, before: {network.annotations[head_ntype][target].head().map(len).to_dict()}")
+        logger.info(f"add_parents, before: {network.annotations[head_ntype][target].dropna().map(len).mean()}")
         subgraph = geneontology.get_subgraph(edge_types="is_a")
         node_ancestors = {node: nx.ancestors(subgraph, node) for node in subgraph.nodes}
         agg = lambda s: get_predecessor_terms(s, g=node_ancestors, join_groups=True, keep_terms=True)
 
         network.annotations[head_ntype][target] = network.annotations[head_ntype][target].apply(agg)
-        logger.info(f"add_parents, after: {network.annotations[head_ntype][target].head().map(len).to_dict()}")
+        logger.info(f"add_parents, after: {network.annotations[head_ntype][target].dropna().map(len).mean()}")
 
     else:
         network.annotations[head_ntype][target] = network.annotations[head_ntype][target] \
