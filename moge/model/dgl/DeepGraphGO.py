@@ -20,6 +20,7 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
+from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
@@ -27,8 +28,6 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -576,7 +575,7 @@ def load_dgl_graph(data_cnf, model_cnf, model_id=None, subset_pid: List[str] = N
     return dgl_graph, node_feats, net_pid_list, train_idx, valid_idx, test_idx
 
 
-def load_protein_dataset(path: str, namespaces=['mf', 'bp', 'cc']) -> pd.DataFrame:
+def load_protein_dataset(path: str, namespaces: List[str] = ['mf', 'bp', 'cc']) -> pd.DataFrame:
     def get_pid_list(pid_list_file):
         with open(pid_list_file) as fp:
             return [line.split()[0] for line in fp]

@@ -17,8 +17,8 @@ parameters:
       - 'DGG'
   add_parents:
     values:
-#      - true
       - false
+#      - true
   pred_ntypes:
     values:
       - 'molecular_function'
@@ -45,7 +45,9 @@ parameters:
       - 'Protein MessengerRNA'
       - 'Protein'
   inductive:
-    values: [ false, true ]
+    values:
+      - false
+  #      - true
   embedding_dim:
     values: [ 256 ]
   layer_pooling:

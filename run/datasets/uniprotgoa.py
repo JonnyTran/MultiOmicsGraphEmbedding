@@ -128,7 +128,9 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         network.multiomics[head_ntype].annotate_attributes(geneontology.annotations, on=index_name,
                                                            columns=[target], agg='unique')
 
-        protein_earliest = geneontology.annotations.groupby(geneontology.annotations.index.name)['Date'].min()
+        protein_earliest = geneontology.annotations \
+            .query(f'namespace in {pred_ntypes}') \
+            .groupby(geneontology.annotations.index.name)['Date'].min()
         if isinstance(protein_earliest, dd.Series):
             protein_earliest = protein_earliest.compute()
         network.train_nodes[head_ntype] = set(protein_earliest.index[protein_earliest <= hparams.train_date])
