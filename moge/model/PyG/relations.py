@@ -7,13 +7,14 @@ import pandas as pd
 import scipy.sparse as ssp
 import torch
 from colorhash import ColorHash
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
+
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
 
 
 class MetapathGATConv(nn.Module):
@@ -164,9 +165,49 @@ class RelationAttention(ABC):
         return len(relations) + 1
 
     @torch.no_grad()
+    def update_relation_attn(self, betas: Dict[str, Tensor],
+                             global_node_index: Dict[str, Tensor],
+                             batch_sizes: Dict[str, int]):
+        # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
+        if not hasattr(self, "_betas"):
+            self._betas = {}
+
+        for ntype in betas:
+            if ntype not in global_node_index or global_node_index[ntype].numel() == 0: continue
+
+            relations = self.get_tail_relations(ntype, str_form=True) + [ntype, ]
+            if len(relations) <= 1: continue
+
+            nids = global_node_index[ntype].cpu().numpy()
+            if batch_sizes and ntype in batch_sizes:
+                batch_nids = nids[:batch_sizes[ntype]]
+            else:
+                batch_nids = nids
+
+            betas_mean = betas[ntype].squeeze(-1).cpu().numpy()
+
+            df = pd.DataFrame(betas_mean, columns=relations, index=nids, dtype=np.float16)
+            df = df.loc[batch_nids]
+            df.index.name = f"{ntype}_nid"
+
+            if len(self._betas) == 0 or ntype not in self._betas:
+                self._betas[ntype] = df
+            else:
+                self._betas[ntype].update(df, overwrite=True)
+
+    @torch.no_grad()
     def update_edge_attn(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                          global_node_index: Dict[str, Tensor],
                          batch_sizes: Dict[str, int] = None, save_count_only=False):
+        """
+        Add
+
+        Args:
+            edge_index_dict ():
+            global_node_index ():
+            batch_sizes ():
+            save_count_only ():
+        """
         if not hasattr(self, "_counts"):
             self._counts = {}
         if not hasattr(self, "_alphas"):
@@ -230,36 +271,6 @@ class RelationAttention(ABC):
                     self._counts[ntype] = counts_df
                 else:
                     self._counts[ntype].update(counts_df, overwrite=True)
-
-    @torch.no_grad()
-    def update_relation_attn(self, betas: Dict[str, Tensor],
-                             global_node_index: Dict[str, Tensor],
-                             batch_sizes: Dict[str, int]):
-        # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
-        if not hasattr(self, "_betas"):
-            self._betas = {}
-
-        for ntype in betas:
-            if ntype not in global_node_index or global_node_index[ntype].numel() == 0: continue
-
-            relations = self.get_tail_relations(ntype, str_form=True) + [ntype, ]
-            if len(relations) <= 1: continue
-
-            nids = global_node_index[ntype].cpu().numpy()
-            if batch_sizes and ntype in batch_sizes:
-                batch_nids = nids[:batch_sizes[ntype]]
-            else:
-                batch_nids = nids
-
-            df = pd.DataFrame(betas[ntype].squeeze(-1).cpu().numpy(),
-                              columns=relations, index=nids, dtype=np.float16)
-            df = df.loc[batch_nids]
-            df.index.name = f"{ntype}_nid"
-
-            if len(self._betas) == 0 or ntype not in self._betas:
-                self._betas[ntype] = df
-            else:
-                self._betas[ntype].update(df, overwrite=True)
 
     @property
     def _beta_std(self):

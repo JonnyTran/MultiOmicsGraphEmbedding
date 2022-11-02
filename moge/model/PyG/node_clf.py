@@ -27,6 +27,7 @@ from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
 from moge.model.PyG.link_pred import LATTEFlatLinkPred
 from moge.model.PyG.relations import RelationAttention
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier, LabelNodeClassifer
+from moge.model.dgl.DeepGraphGO import pair_aupr, fmax
 from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
@@ -286,6 +287,8 @@ class LATTENodeClf(NodeClfTrainer):
         self.log_relation_atten_values()
 
     def on_test_end(self):
+        super().on_test_end()
+
         try:
             if self.wandb_experiment is not None:
                 dataloader = self.test_dataloader()
@@ -305,6 +308,13 @@ class LATTENodeClf(NodeClfTrainer):
                             split_samples = None
                             title = f"{namespace}_PR_Curve"
 
+                        # Log AUPR and FMax for whole test set
+                        if any(('fmax' in metric or 'aupr' in metric) for metric in self.test_metrics.metrics.keys()):
+                            final_metrics = {
+                                f'test_{namespace}_aupr': pair_aupr(y_true_dict[namespace], y_pred_dict[namespace]),
+                                f'test_{namespace}_fmax': fmax(y_true_dict[namespace], y_pred_dict[namespace])[0], }
+                            self.wandb_experiment.log(final_metrics | {'epoch': self.current_epoch})
+
                         self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
                                            split_samples=split_samples, title=title)
 
@@ -318,8 +328,6 @@ class LATTENodeClf(NodeClfTrainer):
         except Exception as e:
             traceback.print_exc()
 
-        finally:
-            super().on_test_end()
 
 
 class LATTEFlatNodeClf(LATTENodeClf):

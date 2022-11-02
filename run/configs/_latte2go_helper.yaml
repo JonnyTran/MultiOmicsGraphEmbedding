@@ -30,7 +30,7 @@ batch_size: 2048
 loss_type: "BCE_WITH_LOGITS"
 max_epochs: 500
 sweep: true
-lr: 0.01
+lr: 0.001
 min_epochs: 60
 #hours: 3
 early_stopping: 10

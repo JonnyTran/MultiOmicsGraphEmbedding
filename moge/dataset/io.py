@@ -17,7 +17,7 @@ def get_attrs(obj, exclude: Iterable = None,
         if isinstance(exclude, Iterable) and name in exclude: continue
 
         val = getattr(obj, name)
-        if not callable(val) and not name.startswith("_") and isinstance(val, dtypes):
+        if not callable(val) and (not name.startswith("_") or name == '_name') and isinstance(val, dtypes):
             attrs[name] = val
 
     return attrs

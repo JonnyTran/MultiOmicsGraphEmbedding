@@ -152,6 +152,10 @@ def get_mlb(mlb_path: Path, labels=None, **kwargs) -> MultiLabelBinarizer:
 
 
 def fmax(targets: ssp.csr_matrix, scores: np.ndarray) -> Tuple[float, float]:
+    if isinstance(targets, pd.DataFrame):
+        targets = targets.values
+    if isinstance(scores, pd.DataFrame):
+        scores = scores.values
     if not isinstance(targets, ssp.csr_matrix):
         targets = ssp.csr_matrix(targets)
 
@@ -175,6 +179,10 @@ def fmax(targets: ssp.csr_matrix, scores: np.ndarray) -> Tuple[float, float]:
 
 
 def pair_aupr(targets: np.ndarray, scores: np.ndarray, top=200):
+    if isinstance(targets, pd.DataFrame):
+        targets = targets.values
+    if isinstance(scores, pd.DataFrame):
+        scores = scores.values
     if isinstance(targets, ssp.csr_matrix):
         targets = targets.toarray()
 
