@@ -12,13 +12,6 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -33,6 +26,12 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -329,7 +328,6 @@ class LATTENodeClf(NodeClfTrainer):
             traceback.print_exc()
 
 
-
 class LATTEFlatNodeClf(LATTENodeClf):
     dataset: HeteroNodeClfDataset
 
@@ -482,6 +480,103 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
         self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
 
+        self.log("test_loss", test_loss)
+
+        return test_loss
+
+
+class MLP(NodeClfTrainer):
+    def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
+        super().__init__(hparams, dataset, metrics, *args, **kwargs)
+        self.head_node_type = dataset.head_node_type
+        self.dataset = dataset
+        self.multilabel = dataset.multilabel
+
+        self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
+        self.classifier = DenseClassification(hparams)
+        self.criterion = ClassificationLoss(
+            loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
+                                                 'use_class_weights' in hparams and hparams.use_class_weights else None,
+            pos_weight=dataset.pos_weight if hasattr(dataset, "pos_weight") and
+                                             'use_pos_weights' in hparams and hparams.use_pos_weights else None,
+            multilabel=dataset.multilabel,
+            reduction=hparams.reduction if "reduction" in hparams else "mean")
+
+    def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]],
+                return_embeddings=False, **kwargs) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+        if not self.training:
+            self._node_ids = inputs["global_node_index"]
+
+        h_out = {}
+        if len(h_out) < len(inputs["global_node_index"].keys()):
+            embs = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
+            h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
+
+        if hasattr(self, "classifier"):
+            head_ntype_embeddings = h_out[self.head_node_type]
+            if "batch_size" in inputs and self.head_node_type in inputs["batch_size"]:
+                head_ntype_embeddings = head_ntype_embeddings[:inputs["batch_size"][self.head_node_type]]
+
+            logits = self.classifier.forward(head_ntype_embeddings, h_dict=h_out)
+        else:
+            logits = h_out[self.head_node_type]
+
+        if return_embeddings:
+            return h_out, logits
+        else:
+            return logits
+
+    def training_step(self, batch, batch_nb):
+        X, y_true, weights = batch
+        scores = self.forward(X)
+
+        scores, y_true, weights = stack_tensor_dicts(scores, y_true, weights)
+        scores, y_true, weights = filter_samples_weights(y_pred=scores, y_true=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
+
+        loss = self.criterion.forward(scores, y_true, weights=weights)
+        self.update_node_clf_metrics(self.train_metrics, scores, y_true, weights)
+
+        if batch_nb % 100 == 0 and isinstance(self.train_metrics, Metrics):
+            logs = self.train_metrics.compute_metrics()
+        else:
+            logs = {}
+
+        self.log("loss", loss, on_step=True)
+        self.log_dict(logs, prog_bar=True, logger=True)
+
+        return loss
+
+    def validation_step(self, batch, batch_nb):
+        X, y_true, weights = batch
+        y_pred = self.forward(X)
+
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
+
+        val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
+        self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
+
+        self.log("val_loss", val_loss)
+
+        return val_loss
+
+    def test_step(self, batch, batch_nb):
+        X, y_true, weights = batch
+        y_pred = self.forward(X)
+
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
+
+        test_loss = self.criterion(y_pred, y_true, weights=weights)
+
+        if batch_nb == 0:
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+
+        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
         self.log("test_loss", test_loss)
 
         return test_loss

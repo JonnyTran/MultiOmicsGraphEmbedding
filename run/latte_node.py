@@ -95,11 +95,12 @@ def train(hparams: Namespace):
                                                           metrics=METRICS)
             print(trainer.checkpoint_callback.best_model_path)
 
-        trainer.test(model)
 
     except Exception as e:
         print(e)
         traceback.print_exc()
+    finally:
+        trainer.test(model)
 
 if __name__ == "__main__":
     parser = ArgumentParser()

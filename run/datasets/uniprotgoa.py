@@ -12,15 +12,14 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from logzero import logger
-from sklearn.preprocessing import MultiLabelBinarizer
-from torch_geometric.utils import to_undirected
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.network.hetero import HeteroNetwork
 from moge.network.utils import to_list_of_strs
 from openomics.database.ontology import UniProtGOA, get_predecessor_terms
+from sklearn.preprocessing import MultiLabelBinarizer
+from torch_geometric.utils import to_undirected
 
 
 def get_load_path(name, hparams: Namespace, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
@@ -117,7 +116,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     # Set the go_id label and train/valid/test node split for head_node_type
     if labels_dataset.startswith('DGG'):
         network.annotations[head_ntype], train_nodes, valid_nodes, test_nodes = get_DeepGraphGO_split(
-            network.annotations[head_ntype], deepgraphgo_path, target=target)
+            network.annotations[head_ntype], deepgraphgo_path, target=target, pred_ntypes=pred_ntypes)
 
         network.train_nodes[head_ntype] = train_nodes
         network.valid_nodes[head_ntype] = valid_nodes
@@ -306,11 +305,12 @@ def parse_options(hparams, dataset_path):
     return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, pred_ntypes, uniprotgoa_path, use_reverse
 
 
-def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str, target='go_id'):
+def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str, target='go_id',
+                          pred_ntypes=['cc', 'bp', 'mf']):
     # Add GOA's from DeepGraphGO to UniProtGOA
     annot_df[target] = annot_df[target].map(to_list_of_strs)
 
-    dgg_go_id = load_protein_dataset(deepgraphgo_data, namespaces=['cc', 'bp', 'mf'])
+    dgg_go_id = load_protein_dataset(deepgraphgo_data, namespaces=pred_ntypes)
     # Set train/valid/test_mask
     mask_cols = ['train_mask', 'valid_mask', 'test_mask']
     if not annot_df.columns.intersection(mask_cols).size:

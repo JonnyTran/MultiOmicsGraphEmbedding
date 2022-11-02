@@ -25,12 +25,12 @@ attn_activation: "LeakyReLU"
 activation: "relu"
 
 input_dropout: false
-batch_size: 2048
+batch_size: 1024
 
 loss_type: "BCE_WITH_LOGITS"
-max_epochs: 500
+max_epochs: 700
 sweep: true
 lr: 0.001
-min_epochs: 60
+min_epochs: 100
 #hours: 3
-early_stopping: 10
+early_stopping: 15

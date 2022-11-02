@@ -1,8 +1,0 @@
-program: run/latte_link.py
-method: grid
-metric:
-  name: val_mrr
-  goal: maximize
-parameters:
-  dataset:
-    values: ["ogbl-biokg", "ogbl-wikikg"]

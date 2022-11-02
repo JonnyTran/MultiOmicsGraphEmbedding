@@ -17,7 +17,7 @@ parameters:
       - 'DGG'
   add_parents:
     values:
-      - true
+#      - true
       - false
   pred_ntypes:
     values:
@@ -40,12 +40,12 @@ parameters:
   ntype_subset:
     values:
       - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'
-  #      - 'Protein MessengerRNA MicroRNA LncRNA'
-  #      - 'Protein MessengerRNA MicroRNA'
-  #      - 'Protein MessengerRNA'
-  #      - 'Protein'
+      - 'Protein MessengerRNA MicroRNA LncRNA'
+      - 'Protein MessengerRNA MicroRNA'
+      - 'Protein MessengerRNA'
+      - 'Protein'
   inductive:
-    values: [ false ]
+    values: [ false, true ]
   embedding_dim:
     values: [ 256 ]
   layer_pooling:
