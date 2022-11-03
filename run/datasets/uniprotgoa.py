@@ -12,14 +12,15 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from logzero import logger
+from sklearn.preprocessing import MultiLabelBinarizer
+from torch_geometric.utils import to_undirected
+
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.network.hetero import HeteroNetwork
 from moge.network.utils import to_list_of_strs
 from openomics.database.ontology import UniProtGOA, get_predecessor_terms
-from sklearn.preprocessing import MultiLabelBinarizer
-from torch_geometric.utils import to_undirected
 
 
 def get_load_path(name, hparams: Namespace, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
@@ -131,6 +132,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         protein_earliest = geneontology.annotations \
             .query(f'namespace in {pred_ntypes}') \
             .groupby(geneontology.annotations.index.name)['Date'].min()
+
         if isinstance(protein_earliest, dd.Series):
             protein_earliest = protein_earliest.compute()
         network.train_nodes[head_ntype] = set(protein_earliest.index[protein_earliest <= hparams.train_date])
