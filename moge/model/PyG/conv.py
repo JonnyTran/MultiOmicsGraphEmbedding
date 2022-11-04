@@ -10,13 +10,13 @@ class HGT(torch.nn.Module):
                  metadata: Tuple[List[str], List[Tuple[str, str, str]]]):
         super().__init__()
 
-        self.convs: List[HGTConv] = torch.nn.ModuleList()
+        self.layers: List[HGTConv] = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HGTConv(embedding_dim, embedding_dim, metadata, num_heads, group='sum')
-            self.convs.append(conv)
+            self.layers.append(conv)
 
     def forward(self, x_dict: Dict[str, Tensor], edge_index_dict: Dict[Tuple[str, str, str], Tensor], **kwargs):
-        for conv in self.convs:
+        for conv in self.layers:
             x_dict = conv(x_dict, edge_index_dict)
 
         return x_dict

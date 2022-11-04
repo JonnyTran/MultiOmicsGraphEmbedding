@@ -3,43 +3,72 @@ method: bayes
 
 metric:
   goal: maximize
-  name: "val_BPO_aupr"
-
-early_terminate:
-  type: hyperband
-  max_iter: 160
-  s: 8
-
+  name: "val_aupr"
 
 parameters:
   dataset:
-    values: [ 'UniProtGOA', 'UniProtGOA+DeepGraphGO' ]
-  namespaces:
-    values: [ 'm' ]
-  embedding_dim:
-    values: [ 256, 512 ]
-  layer_pooling:
-    values: [ 'concat', 'last' ]
-  t_order:
-    values: [ 1, 2 ]
-  n_layers:
-    values: [ 1,2,3 ]
-  neighbor_loader:
-    values: [ "HGTLoader" ]
+    values: [ 'UniProt' ]
+  root_path:
+    values:
+      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+  #      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+  labels_dataset:
+    values:
+      - 'DGG'
+  add_parents:
+    values:
+      - false
+  #      - true
+  pred_ntypes:
+    values:
+      - 'molecular_function'
+      - 'biological_process'
+      - 'cellular_component'
+  #  go_etypes:
+  #    values:
+  #      - 'is_a part_of has_part'
+  #      - 'is_a'
+  #      - null
+  #  exclude_etypes:
+  #    values:
+  #      - null
+  #      - 'Protein.protein-protein.Protein'
+  feature:
+    values:
+      - true
+  #      - false
   ntype_subset:
     values:
-      - 'Protein MessengerRNA MicroRNA LncRNA'
-      - 'Protein MessengerRNA MicroRNA'
-      - 'Protein MessengerRNA'
+      - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'
+      #      - 'Protein MessengerRNA MicroRNA LncRNA'
+      #      - 'Protein MessengerRNA MicroRNA'
+      #      - 'Protein MessengerRNA'
       - 'Protein'
+  inductive:
+    values:
+      - false
+  #      - true
+  embedding_dim:
+    values: [ 256 ]
+  layer_pooling:
+    values: [ 'concat' ]
+  n_layers:
+    values: [ 2 ]
+  neighbor_loader:
+    values: [ 'HGTLoader' ]
+  loss_type:
+    values: [ "BCE_WITH_LOGITS" ]
+  use_pos_weights:
+    values: [ false ]
+  config:
+    values: [ "run/configs/_latte2go_helper.yaml" ]
+
+  t_order:
+    values: [ 1, 2 ]
   n_neighbors:
     values: [ 2048, 1024, 512 ]
-  cls_graph:
-    values: [ true, false ]
   attn_heads:
     values: [ 1, 2, 4, 8 ]
-  inductive:
-    values: [ false ]
   attn_dropout:
     min: 0.0
     max: 0.5
@@ -48,11 +77,5 @@ parameters:
     min: 0.0
     max: 0.5
     distribution: uniform
-  loss_type:
-    values: [ "BCE_WITH_LOGITS" ]
-  use_pos_weights:
-    values: [ true, false ]
   weight_decay:
     values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
-  config:
-    values: [ "run/configs/_latte2go_helper.yaml" ]

@@ -12,6 +12,13 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -26,12 +33,6 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -137,21 +138,24 @@ class LATTENodeClf(NodeClfTrainer):
             return logits
 
     def on_validation_epoch_start(self) -> None:
-        for l, layer in enumerate(self.embedder.layers):
-            if isinstance(layer, RelationAttention):
-                layer.reset()
+        if hasattr(self.embedder, 'layers'):
+            for l, layer in enumerate(self.embedder.layers):
+                if isinstance(layer, RelationAttention):
+                    layer.reset()
         super().on_validation_epoch_start()
 
     def on_test_epoch_start(self) -> None:
-        for l, layer in enumerate(self.embedder.layers):
-            if isinstance(layer, RelationAttention):
-                layer.reset()
+        if hasattr(self.embedder, 'layers'):
+            for l, layer in enumerate(self.embedder.layers):
+                if isinstance(layer, RelationAttention):
+                    layer.reset()
         super().on_test_epoch_start()
 
     def on_predict_epoch_start(self) -> None:
-        for l, layer in enumerate(self.embedder.layers):
-            if isinstance(layer, RelationAttention):
-                layer.reset()
+        if hasattr(self.embedder, 'layers'):
+            for l, layer in enumerate(self.embedder.layers):
+                if isinstance(layer, RelationAttention):
+                    layer.reset()
         super().on_predict_epoch_start()
 
     def training_step(self, batch, batch_nb):
@@ -247,15 +251,15 @@ class LATTENodeClf(NodeClfTrainer):
 
             y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
             y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
-            mask = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
+            idx = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
 
-            y_true = y_true[mask]
-            y_pred = y_pred[mask]
-            emb: Tensor = h_dict[self.head_node_type][mask]
+            y_true = y_true[idx]
+            y_pred = y_pred[idx]
+            emb: Tensor = h_dict[self.head_node_type][idx]
 
             global_node_index = X["global_node_index"][-1] \
                 if isinstance(X["global_node_index"], (list, tuple)) else X["global_node_index"]
-            nid = global_node_index[self.head_node_type][mask]
+            nid = global_node_index[self.head_node_type][idx]
 
             # Convert all to CPU device
             y_trues.append(y_true.cpu().numpy())
@@ -580,6 +584,106 @@ class MLP(NodeClfTrainer):
         self.log("test_loss", test_loss)
 
         return test_loss
+
+    @torch.no_grad()
+    def predict(self, dataloader: DataLoader, node_names: pd.Index = None, save_betas=False, **kwargs) \
+            -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, np.ndarray]]:
+        """
+
+        Args:
+            dataloader ():
+            node_names (): an pd.Index or np.ndarray to map node indices to node names for `head_node_type`.
+            **kwargs ():
+
+        Returns:
+            targets, scores, embeddings, ntype_nids
+        """
+        if isinstance(self, RelationAttention):
+            self.reset()
+
+        y_trues = []
+        y_preds = []
+        embs = []
+        nids = []
+
+        for batch in tqdm.tqdm(dataloader, desc='Predict dataloader'):
+            X, y_true, weights = to_device(batch, device=self.device)
+            h_dict, logits = self.forward(X, return_embeddings=True)
+            y_pred = activation(logits, loss_type=self.hparams['loss_type'])
+
+            y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+            y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
+            idx = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights, return_index=True)
+
+            y_true = y_true[idx]
+            y_pred = y_pred[idx]
+            emb: Tensor = h_dict[self.head_node_type][idx]
+
+            global_node_index = X["global_node_index"][-1] \
+                if isinstance(X["global_node_index"], (list, tuple)) else X["global_node_index"]
+            nid = global_node_index[self.head_node_type][idx]
+
+            # Convert all to CPU device
+            y_trues.append(y_true.cpu().numpy())
+            y_preds.append(y_pred.cpu().numpy())
+            embs.append(emb.cpu().numpy())
+            nids.append(nid.cpu().numpy())
+
+        targets = np.concatenate(y_trues, axis=0)
+        scores = np.concatenate(y_preds, axis=0)
+        embeddings = np.concatenate(embs, axis=0)
+        node_ids = np.concatenate(nids, axis=0)
+
+        if node_names is not None:
+            index = node_names[node_ids]
+        else:
+            index = pd.Index(node_ids, name="nid")
+
+        targets = pd.DataFrame(targets, index=index, columns=self.dataset.classes)
+        scores = pd.DataFrame(scores, index=index, columns=self.dataset.classes)
+        embeddings = pd.DataFrame(embeddings, index=index)
+        ntype_nids = {self.head_node_type: node_ids}
+
+        return targets, scores, embeddings, ntype_nids
+
+
+class HGTNodeClf(LATTEFlatNodeClf):
+    def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"], collate_fn=None) -> None:
+        super().__init__(hparams, dataset, metrics)
+        self.head_node_type = dataset.head_node_type
+        self.dataset = dataset
+        self.multilabel = dataset.multilabel
+        self._name = f"HGT-{hparams.n_layers}"
+        self.collate_fn = collate_fn
+        # Node attr input
+        if hasattr(dataset, 'seq_tokenizer'):
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
+
+        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(dataset.node_types):
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
+
+        self.embedder = HGT(embedding_dim=hparams.embedding_dim, num_layers=hparams.n_layers,
+                            num_heads=hparams.attn_heads,
+                            node_types=dataset.G.node_types, metadata=dataset.G.metadata())
+
+        # Output layer
+        if "cls_graph" in hparams and hparams.cls_graph is not None:
+            self.classifier = LabelGraphNodeClassifier(dataset, hparams)
+
+        elif hparams.nb_cls_dense_size >= 0:
+            self.classifier = DenseClassification(hparams)
+        else:
+            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
+
+        use_cls_weight = 'use_class_weights' in hparams and hparams.use_class_weights
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                            class_weight=dataset.class_weight \
+                                                if use_cls_weight and hasattr(dataset, "class_weight") else None,
+                                            multilabel=dataset.multilabel,
+                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
+
+        self.hparams.n_params = self.get_n_params()
+        self.lr = self.hparams.lr
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):
@@ -929,45 +1033,3 @@ class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
 
         finally:
             super().on_test_end()
-
-
-class HGTNodeClf(LATTEFlatNodeClf):
-    def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"], collate_fn=None) -> None:
-        super().__init__(hparams, dataset, metrics)
-        self.head_node_type = dataset.head_node_type
-        self.dataset = dataset
-        self.multilabel = dataset.multilabel
-        self._name = f"HGT-{hparams.n_layers}"
-        self.collate_fn = collate_fn
-        # Node attr input
-        if hasattr(dataset, 'seq_tokenizer'):
-            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
-
-        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(dataset.node_types):
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
-
-        self.embedder = HGT(embedding_dim=hparams.embedding_dim, num_layers=hparams.n_layers,
-                            num_heads=hparams.attn_heads,
-                            node_types=dataset.G.node_types, metadata=dataset.G.metadata())
-
-        # Output layer
-        if "cls_graph" in hparams and hparams.cls_graph is not None:
-            self.classifier = LabelGraphNodeClassifier(dataset, hparams)
-
-        elif hparams.nb_cls_dense_size >= 0:
-            if hparams.layer_pooling == "concat":
-                hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-                logging.info("embedding_dim {}".format(hparams.embedding_dim))
-
-            self.classifier = DenseClassification(hparams)
-        else:
-            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
-
-        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                                                 hparams.use_class_weights else None,
-                                            multilabel=dataset.multilabel,
-                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
-
-        self.hparams.n_params = self.get_n_params()
-        self.lr = self.hparams.lr

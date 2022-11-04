@@ -28,9 +28,9 @@ input_dropout: false
 batch_size: 1024
 
 loss_type: "BCE_WITH_LOGITS"
-max_epochs: 700
+max_epochs: 1000
 sweep: true
 lr: 0.001
 min_epochs: 100
-#hours: 3
+#hours: 7
 early_stopping: 15
