@@ -258,6 +258,7 @@ def parse_options(hparams, dataset_path):
     deepgraphgo_path = hparams.deepgraphgo_data
     labels_dataset = hparams.labels_dataset
 
+    # Species-specific dataset
     if isinstance(dataset_path, str) and 'HUMAN_MOUSE' in dataset_path:
         hparams.species = 'HUMAN_MOUSE'
     elif isinstance(dataset_path, str) and 'HUMAN' in dataset_path:
@@ -265,6 +266,7 @@ def parse_options(hparams, dataset_path):
     elif isinstance(dataset_path, str) and not 'HUMAN' in dataset_path:
         hparams.species = 'MULTISPECIES'
 
+    # ntype_subset
     if 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, str):
         assert len(hparams.ntype_subset)
         ntype_subset = hparams.ntype_subset.split(" ")
@@ -272,7 +274,10 @@ def parse_options(hparams, dataset_path):
         ntype_subset = hparams.ntype_subset
     else:
         ntype_subset = None
+    if isinstance(ntype_subset, list) and len(ntype_subset) == 0 and head_ntype is not None:
+        ntype_subset = [head_ntype]
 
+    # Pred ntypes
     if isinstance(hparams.pred_ntypes, str):
         assert len(hparams.pred_ntypes)
         pred_ntypes = hparams.pred_ntypes.split(" ")
@@ -281,6 +286,7 @@ def parse_options(hparams, dataset_path):
     else:
         raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
 
+    # Exclude etype
     exclude_etypes = [(head_ntype, 'associated', go_ntype) for go_ntype in pred_ntypes]
     if 'exclude_etypes' in hparams and hparams.exclude_etypes:
         exclude_etypes_ = [etype.split(".") if isinstance(etype, str) else etype \
@@ -289,7 +295,7 @@ def parse_options(hparams, dataset_path):
                                              else hparams.exclude_etypes)]
         exclude_etypes.extend(exclude_etypes_)
 
-    # Set etypes to include
+    # Set GO etypes to include
     if 'go_etypes' in hparams and isinstance(hparams.go_etypes, str):
         go_etypes = hparams.go_etypes.split(" ") if len(hparams.go_etypes) else []
     elif 'go_etypes' in hparams and isinstance(hparams.go_etypes, Iterable):
@@ -297,16 +303,18 @@ def parse_options(hparams, dataset_path):
     else:
         go_etypes = None
 
+    # Determine whether to include or ex
     if ntype_subset:
         if not {'biological_process', 'cellular_component', 'molecular_function'}.intersection(ntype_subset):
             if go_etypes:
                 hparams.go_etypes = None
         elif {'biological_process', 'cellular_component', 'molecular_function'}.intersection(ntype_subset):
             if not go_etypes:
-                go_etypes = ['is_a', 'part_of', 'has_part']
+                go_etypes = ['is_a', 'part_of', 'has_part']  # TODO add 'regulates'
                 hparams.go_etypes = go_etypes
 
-    return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, pred_ntypes, uniprotgoa_path, use_reverse
+    return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
+           pred_ntypes, uniprotgoa_path, use_reverse
 
 
 def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str, target='go_id',

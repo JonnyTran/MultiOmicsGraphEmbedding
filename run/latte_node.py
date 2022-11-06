@@ -1,3 +1,4 @@
+import datetime
 import random
 import sys
 import traceback
@@ -10,7 +11,7 @@ from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.model.PyG.node_clf import LATTEFlatNodeClf
+from moge.model.PyG.node_clf import LATTEFlatNodeClf, MLP
 from run.load_data import load_node_dataset
 from run.utils import parse_yaml_config, select_empty_gpus
 
@@ -42,7 +43,11 @@ def train(hparams: Namespace):
     hparams.loss_type = hparams.loss_type
     hparams.n_classes = dataset.n_classes
     hparams.head_node_type = dataset.head_node_type
-    model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
+
+    if 'ntype_subset' in hparams and len(hparams.ntype_subset) == 0:
+        model = MLP(hparams, dataset, metrics=METRICS)
+    else:
+        model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
 
     tags = [] + hparams.dataset.split(" ")
     if hasattr(hparams, "namespaces"):
@@ -65,7 +70,6 @@ def train(hparams: Namespace):
     else:
         GPUS = random.sample([0, 1, 2], NUM_GPUS)
 
-    print("GPUS", GPUS)
     trainer = Trainer(
         accelerator='cuda',
         devices=GPUS,
@@ -77,8 +81,8 @@ def train(hparams: Namespace):
         min_epochs=MIN_EPOCHS,
         callbacks=callbacks,
         logger=logger,
-        # max_time=datetime.timedelta(hours=hparams.hours) \
-        #     if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
+        max_time=datetime.timedelta(hours=hparams.hours) \
+            if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
         # plugins='deepspeed' if NUM_GPUS > 1 else None,
         # accelerator='ddp_spawn',
         # plugins='ddp_sharded'
