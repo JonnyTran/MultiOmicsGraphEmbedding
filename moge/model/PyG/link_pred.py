@@ -462,7 +462,7 @@ class LATTEFlatLinkPred(PyGLinkPredTrainer):
         h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 3)))
+                                                  split_size=math.sqrt(self.hparams.batch_size // 3)))
 
         if len(h_out) < len(input_nodes.keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=input_nodes)
@@ -669,7 +669,7 @@ class LATTELinkPred(LATTEFlatLinkPred):
         h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 3)))
+                                                  split_size=math.sqrt(self.hparams.batch_size // 3)))
 
         if len(h_out) < len(input_nodes.keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=input_nodes)

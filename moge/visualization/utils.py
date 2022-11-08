@@ -39,7 +39,7 @@ main_colors = [
 
 def group_axis_ticks(series: Union[pd.MultiIndex, pd.Index], level=0):
     ticks = series.get_level_values(level).to_series().reset_index(drop=True)
-    grouped_ticks = ticks.reset_index().groupby(ticks.name)['index'].mean().astype(int)
+    grouped_ticks = ticks.reset_index().groupby(ticks.values)['index'].mean().astype(int)
     return grouped_ticks
 
 

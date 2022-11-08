@@ -202,37 +202,39 @@ class HeteroSequenceEncoder(nn.Module):
         self.seq_encoders: Dict[str, Union[BertForSequenceClassification, LSTMSequenceEncoder, ESM2]] = \
             nn.ModuleDict(encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], split_batch_size: Union[float, int] = None) \
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], split_size: Union[float, int] = None) \
             -> Dict[str, Tensor]:
         """
 
         Args:
             sequences ():
-            split_batch_size ():
+            split_size ():
 
         Returns:
 
         """
         h_out = {}
-        if split_batch_size != None and isinstance(split_batch_size, (int, float)):
-            split_batch_size = max(int(split_batch_size), 1)
+        if isinstance(split_size, (int, float)):
+            split_size = max(int(split_size), 1)
         else:
-            split_batch_size = None
+            split_size = None
 
         for ntype, inputs in sequences.items():
             model = self.seq_encoders[ntype]
 
             if isinstance(model, LSTMSequenceEncoder):
+                # LTSM
                 lengths = inputs["input_ids"].ne(0).sum(1)
                 h_out[ntype] = model.forward(seqs=inputs["input_ids"], lengths=lengths)
 
             elif isinstance(model, ESM2):
-                # Predict protein embeddings and generate per-sequence representation by averaging
+                # ESM
                 n_layers = len(model.layers)
                 sequence_embs = []
 
-                for batch_tokens, batch_lengths in zip(torch.split(inputs['batch_tokens'], split_batch_size),
-                                                       torch.split(inputs['batch_lengths'], split_batch_size)):
+                # Predict protein embeddings and generate per-sequence representation by averaging
+                for batch_tokens, batch_lengths in zip(torch.split(inputs['batch_tokens'], split_size),
+                                                       torch.split(inputs['batch_lengths'], split_size)):
                     results = model.forward(batch_tokens, repr_layers=[n_layers], return_contacts=False)
                     token_representations = results["representations"][n_layers]
                     for i, seq_len in enumerate(batch_lengths):
@@ -244,12 +246,12 @@ class HeteroSequenceEncoder(nn.Module):
                 h_out[ntype] = torch.stack(sequence_embs, dim=0)
 
             elif isinstance(model, BertForSequenceClassification):
-                if split_batch_size:
+                # BERT
+                if split_size:
                     batch_output = []
-                    for input_ids, att_mask, token_type_ids in \
-                            zip(torch.split(inputs["input_ids"], split_batch_size),
-                                torch.split(inputs["attention_mask"], split_batch_size),
-                                torch.split(inputs["token_type_ids"], split_batch_size)):
+                    for input_ids, att_mask, token_type_ids in zip(torch.split(inputs["input_ids"], split_size),
+                                                                   torch.split(inputs["attention_mask"], split_size),
+                                                                   torch.split(inputs["token_type_ids"], split_size)):
                         out = model.forward(input_ids=input_ids, attention_mask=att_mask, token_type_ids=token_type_ids)
                         batch_output.append(out.logits)
 

@@ -110,7 +110,7 @@ class LATTENodeClf(NodeClfTrainer):
         h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 4)))
+                                                  split_size=math.sqrt(self.hparams.batch_size // 4)))
 
         input_nodes = inputs["global_node_index"][0]
         if len(h_out) < len(input_nodes.keys()):
@@ -408,7 +408,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  split_batch_size=math.sqrt(self.hparams.batch_size // 4)))
+                                                  split_size=math.sqrt(self.hparams.batch_size // 4)))
 
         if len(h_out) < len(inputs["global_node_index"].keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])

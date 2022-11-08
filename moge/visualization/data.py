@@ -23,16 +23,19 @@ def rasterize_matrix(df: pd.DataFrame, x_label="X", y_label="Y", size=1000, **kw
         y_label = df.index.name if df.index.name else df.index.names[0]
         x_label = df.columns.name if df.columns.name else df.columns.names[0]
 
-        if isinstance(df.index, pd.MultiIndex):
-            grouped_xticks = group_axis_ticks(df.index, level=0)
-            grouped_yticks = group_axis_ticks(df.columns, level=0)
-            layout_args = dict(
-                xaxis_tickmode='array', yaxis_tickmode='array',
+        if isinstance(df.columns, pd.MultiIndex):
+            grouped_xticks = group_axis_ticks(df.columns, level=0)
+            layout_args.update(dict(
+                xaxis_tickmode='array',
                 xaxis_tickvals=grouped_xticks.values, xaxis_ticktext=grouped_xticks.index,
+            ))
+
+        if isinstance(df.index, pd.MultiIndex):
+            grouped_yticks = group_axis_ticks(df.index, level=0)
+            layout_args.update(dict(
+                yaxis_tickmode='array',
                 yaxis_tickvals=grouped_yticks.values, yaxis_ticktext=grouped_yticks.index,
-            )
-            if grouped_xticks.index.dtype == 'O':
-                layout_args['xaxis_tickangle'] = 90
+            ))
 
     width = max(int(size * df.shape[1] / sum(df.shape)), 500)
     height = max(int(size * df.shape[0] / sum(df.shape)), 500)
@@ -45,7 +48,9 @@ def rasterize_matrix(df: pd.DataFrame, x_label="X", y_label="Y", size=1000, **kw
                         show_legend=True)
 
     fig = hv.render(rasterized_img, backend="plotly")
-    go_fig = go.Figure(fig).update_layout(**layout_args, **kwargs)
+
+    layout_args.update(kwargs)
+    go_fig = go.Figure(fig).update_layout(**layout_args)
     return go_fig
 
 
