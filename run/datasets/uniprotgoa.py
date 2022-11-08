@@ -188,13 +188,17 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # Sequences
     if hasattr(hparams, 'sequence') and hparams.sequence:
+        if 'vocabularies' in hparams:
+            vocabularies = hparams.vocabularies
+        else:
+            vocabularies = {"MicroRNA": "armheb/DNA_bert_3",
+                            "LncRNA": "armheb/DNA_bert_6",
+                            "MessengerRNA": "armheb/DNA_bert_6",
+                            'Protein': 'zjukg/OntoProtein',
+                            'GO_term': "dmis-lab/biobert-base-cased-v1.2", }
         sequence_tokenizers = SequenceTokenizers(
-            vocabularies={"MicroRNA": "armheb/DNA_bert_3",
-                          "LncRNA": "armheb/DNA_bert_6",
-                          "MessengerRNA": "armheb/DNA_bert_6",
-                          'Protein': 'zjukg/OntoProtein',
-                          'GO_term': "dmis-lab/biobert-base-cased-v1.2", },
-            max_length=hparams.max_length)
+            vocabularies=vocabularies,
+            max_length=hparams.max_length if 'max_length' in hparams else None)
     else:
         sequence_tokenizers = None
 

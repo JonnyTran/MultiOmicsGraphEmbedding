@@ -137,17 +137,33 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             attrs.update({k: v for k, v in kwargs.items() if k != 'dataset'})
 
         self = cls(hetero, **attrs)
-
         self._name = os.path.basename(path)
 
         self.network = Namespace()
+
+        # Load node annotations
         self.network.annotations = {}
         for ntype in hetero.node_types:
+            ann_df = None
             if os.path.exists(join(path, f'{ntype}.pickle')):
-                self.network.annotations[ntype] = pd.read_pickle(join(path, f'{ntype}.pickle'))
+                ann_df = pd.read_pickle(join(path, f'{ntype}.pickle'))
             elif os.path.exists(join(path, f'{ntype}.parquet')):
-                self.network.annotations[ntype] = pd.read_parquet(join(path, f'{ntype}.parquet'))
+                ann_df = pd.read_parquet(join(path, f'{ntype}.parquet'))
 
+            if ann_df is not None:
+                self.network.annotations[ntype] = ann_df
+
+                if 'sequence' in ann_df.columns:
+                    hetero[ntype].sequence = ann_df['sequence']
+
+        # Load sequence tokenizer
+        if 'vocabularies' in kwargs:
+            seq_tokenizer = SequenceTokenizers(
+                vocabularies=kwargs['vocabularies'],
+                max_length=kwargs['max_length'] if 'max_length' in kwargs else None)
+            self.seq_tokenizer = seq_tokenizer
+
+        # Load nodes list
         nodes = pd.read_pickle(join(path, 'nodes.pickle'))
         self.nodes: Dict[str, pd.Index] = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
 

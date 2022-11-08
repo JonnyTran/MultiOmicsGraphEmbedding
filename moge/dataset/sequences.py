@@ -2,8 +2,11 @@ import os.path
 from pprint import pprint
 from typing import Dict, Optional, Union
 
+import esm
+import numpy as np
 import pandas as pd
 import torch
+from esm import BatchConverter
 from torch.utils.data import DataLoader, Dataset
 from torch_geometric.data import HeteroData
 from transformers import AutoTokenizer, BatchEncoding
@@ -17,19 +20,35 @@ from moge.model.transformers import DNATokenizer
 
 class SequenceTokenizers():
     def __init__(self, vocabularies: Dict[str, str], max_length: Union[int, Dict[str, int]] = None, verbose=False):
+        """
+
+        Args:
+            vocabularies (): Dict of node types and the sequence model name
+            max_length ():
+            verbose ():
+        """
         self.tokenizers: Dict[str, BertTokenizer] = {}
         self.word_lengths: Dict[str, int] = {}
         self.max_length: Dict[str, int] = {ntype: max_length \
-                                           for ntype in vocabularies} if isinstance(max_length, int) else max_length
+                                           for ntype in vocabularies} if not isinstance(max_length,
+                                                                                        dict) else max_length
 
-        for ntype, vocab_file in vocabularies.items():
-            if os.path.exists(vocab_file):
-                self.tokenizers[ntype] = DNATokenizer.from_pretrained(vocab_file)
+        for ntype, vocab in vocabularies.items():
+            # ESM
+            if vocab.startswith('esm'):
+                self.esm_model, alphabet = esm.pretrained.load_model_and_alphabet(vocab)
+                self.tokenizers[ntype] = alphabet.get_batch_converter()
+                self.word_lengths[ntype] = 1
+
+            # huggingface
             else:
-                self.tokenizers[ntype] = AutoTokenizer.from_pretrained(vocab_file)
+                if os.path.exists(vocab):
+                    self.tokenizers[ntype] = DNATokenizer.from_pretrained(vocab)
+                elif "/" in vocab:
+                    self.tokenizers[ntype] = AutoTokenizer.from_pretrained(vocab)
 
-            # get most frequent word length
-            self.word_lengths[ntype] = pd.Series(self.tokenizers[ntype].vocab.keys()).str.len().mode().item()
+                # get most frequent word length
+                self.word_lengths[ntype] = pd.Series(self.tokenizers[ntype].vocab.keys()).str.len().mode().item()
 
         pprint({f"{ntype} tokenizer": f"vocab_size={tokenizer.vocab_size}, "
                                       f"word_length={self.word_lengths[ntype]}, "
@@ -44,19 +63,34 @@ class SequenceTokenizers():
 
     def encode_sequences(self, batch: HeteroData, ntype: str, max_length: Optional[int] = None, **kwargs) -> \
             BatchEncoding:
-        nids = batch[ntype].nid
-        seqs = batch[ntype].sequence.iloc[nids]
+        node_ids = batch[ntype].nid
+        seqs = batch[ntype].sequence.iloc[node_ids]
 
-        if not any(" " in seq for seq in seqs):
-            match_regex = "." * self.word_lengths[ntype]
-            seqs = seqs.str.findall(match_regex).str.join(" ")
+        if isinstance(self.tokenizers[ntype], (AutoTokenizer, DNATokenizer)):
+            if not seqs.str.contains(" ").any():
+                match_regex = "." * self.word_lengths[ntype]
+                seqs = seqs.str.findall(match_regex).str.join(" ")
 
-        if max_length is None and self.max_length is not None:
-            max_length = self.max_length[ntype]
+            if max_length is None and self.max_length is not None:
+                max_length = self.max_length[ntype]
 
-        encodings = self.tokenizers[ntype].batch_encode_plus(seqs.tolist(), padding=True,
-                                                             max_length=max_length, truncation=True,
-                                                             add_special_tokens=True, return_tensors="pt", **kwargs)
+            encodings = self.tokenizers[ntype].batch_encode_plus(seqs.tolist(), padding=True,
+                                                                 max_length=max_length, truncation=True,
+                                                                 add_special_tokens=True, return_tensors="pt", **kwargs)
+
+        elif isinstance(self.tokenizers[ntype], BatchConverter):
+            batch_converter = self.tokenizers[ntype]
+            if self.max_length[ntype] is not None:
+                seqs = seqs.str.slice(0, self.max_length[ntype])
+
+            data = list(seqs.iteritems())  # List of (name, sequence) tuples
+
+            batch_labels, batch_strs, batch_tokens = batch_converter(data)
+            batch_lengths = torch.from_numpy(seqs.str.len().values)
+            encodings = {'batch_labels': np.array(batch_labels),
+                         'batch_tokens': batch_tokens,
+                         'batch_lengths': batch_lengths}
+
         return encodings
 
 

@@ -4,13 +4,15 @@ from collections import OrderedDict
 from typing import Dict, Union, List
 
 import torch
-from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
+from esm.model.esm2 import ESM2
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch_sparse import SparseTensor
 from transformers import BertConfig, BertForSequenceClassification
+
+from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -144,27 +146,35 @@ class HeteroNodeFeatureEncoder(nn.Module):
 class HeteroSequenceEncoder(nn.Module):
     def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset) -> None:
         super().__init__()
-        seq_encoders = {}
+        encoders = {}
         print("HeteroSequenceEncoder", list(dataset.seq_tokenizer.tokenizers.keys()))
 
         for ntype, tokenizer in dataset.seq_tokenizer.items():
             max_position_embeddings = dataset.seq_tokenizer.max_length[ntype]
 
-            if hasattr(hparams, "bert_config") and ntype in hparams.bert_config:
+            if hasattr(dataset.seq_tokenizer, 'esm_model'):
+                encoders[ntype] = dataset.seq_tokenizer.esm_model
+
+                # Freeze ESM pretrained layers
+                for name, param in encoders[ntype].named_parameters():
+                    if 'classifier' not in name:
+                        param.requires_grad = False
+
+            elif hasattr(hparams, "bert_config") and ntype in hparams.bert_config:
                 if isinstance(hparams.bert_config[ntype], BertConfig):
                     bert_config = hparams.bert_config[ntype]
-                    seq_encoders[ntype] = BertForSequenceClassification(bert_config)
+                    encoders[ntype] = BertForSequenceClassification(bert_config)
 
                     print("BertForSequenceClassification custom BertConfig", ntype)
 
                 elif isinstance(hparams.bert_config[ntype], str):
-                    seq_encoders[ntype] = BertForSequenceClassification.from_pretrained(
+                    encoders[ntype] = BertForSequenceClassification.from_pretrained(
                         hparams.bert_config[ntype],
                         num_labels=hparams.embedding_dim,
                         classifier_dropout=hparams.dropout, )
 
                     # Freeze BERT pretrained layers
-                    for name, param in seq_encoders[ntype].named_parameters():
+                    for name, param in encoders[ntype].named_parameters():
                         if 'classifier' not in name:  # BERT emebedding/encoder/decoder layers
                             param.requires_grad = False
 
@@ -172,12 +182,13 @@ class HeteroSequenceEncoder(nn.Module):
 
             elif hasattr(hparams, "lstm_config"):
                 lstm_config = hparams.lstm_config[ntype] if ntype in hparams.lstm_config else hparams.lstm_config
-                seq_encoders[ntype] = LSTMSequenceEncoder(vocab_size=tokenizer.vocab_size,
-                                                          embedding_dim=hparams.embedding_dim,
-                                                          hidden_dim=lstm_config["hidden_dim"],
-                                                          kernel_size=lstm_config["kernel_size"],
-                                                          num_layers=lstm_config["num_layers"],
-                                                          dropout=lstm_config["dropout"], )
+                encoders[ntype] = LSTMSequenceEncoder(vocab_size=tokenizer.vocab_size,
+                                                      embedding_dim=hparams.embedding_dim,
+                                                      hidden_dim=lstm_config["hidden_dim"],
+                                                      kernel_size=lstm_config["kernel_size"],
+                                                      num_layers=lstm_config["num_layers"],
+                                                      dropout=lstm_config["dropout"], )
+
             else:
                 bert_config = BertConfig(
                     vocab_size=tokenizer.vocab_size, hidden_size=128, max_position_embeddings=max_position_embeddings,
@@ -185,46 +196,72 @@ class HeteroSequenceEncoder(nn.Module):
                     pad_token_id=tokenizer.vocab["[PAD]"], num_labels=hparams.embedding_dim,
                     position_embedding_type=None, use_cache=False, classifier_dropout=0.1)
 
-                seq_encoders[ntype] = BertForSequenceClassification(bert_config)
+                encoders[ntype] = BertForSequenceClassification(bert_config)
                 print("BertForSequenceClassification default BertConfig", ntype)
 
-        self.seq_encoders: Dict[str, Union[BertForSequenceClassification, LSTMSequenceEncoder]] = \
-            nn.ModuleDict(seq_encoders)
+        self.seq_encoders: Dict[str, Union[BertForSequenceClassification, LSTMSequenceEncoder, ESM2]] = \
+            nn.ModuleDict(encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], split_batch_size: Union[float, int] = None) -> Dict[
-        str, Tensor]:
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], split_batch_size: Union[float, int] = None) \
+            -> Dict[str, Tensor]:
+        """
+
+        Args:
+            sequences ():
+            split_batch_size ():
+
+        Returns:
+
+        """
         h_out = {}
         if split_batch_size != None and isinstance(split_batch_size, (int, float)):
             split_batch_size = max(int(split_batch_size), 1)
         else:
             split_batch_size = None
 
-        for ntype, encoding in sequences.items():
-            if isinstance(self.seq_encoders[ntype], LSTMSequenceEncoder):
-                lengths = encoding["input_ids"].ne(0).sum(1)
-                h_out[ntype] = self.seq_encoders[ntype].forward(seqs=encoding["input_ids"], lengths=lengths)
+        for ntype, inputs in sequences.items():
+            model = self.seq_encoders[ntype]
 
-            elif split_batch_size:
-                batch_output = []
-                for input_ids, attention_mask, token_type_ids in \
-                        zip(torch.split(encoding["input_ids"], split_batch_size),
-                            torch.split(encoding["attention_mask"], split_batch_size),
-                            torch.split(encoding["token_type_ids"], split_batch_size)):
-                    out = self.seq_encoders[ntype].forward(input_ids=input_ids,
-                                                           attention_mask=attention_mask,
-                                                           token_type_ids=token_type_ids)
-                    batch_output.append(out.logits)
+            if isinstance(model, LSTMSequenceEncoder):
+                lengths = inputs["input_ids"].ne(0).sum(1)
+                h_out[ntype] = model.forward(seqs=inputs["input_ids"], lengths=lengths)
 
-                h_out[ntype] = torch.cat(batch_output, dim=0)
+            elif isinstance(model, ESM2):
+                # Predict protein embeddings and generate per-sequence representation by averaging
+                n_layers = len(model.layers)
+                sequence_embs = []
 
-            else:
-                out = self.seq_encoders[ntype].forward(input_ids=encoding["input_ids"],
-                                                       attention_mask=encoding["attention_mask"],
-                                                       token_type_ids=encoding["token_type_ids"])
-                h_out[ntype] = out.logits
+                for batch_tokens, batch_lengths in zip(torch.split(inputs['batch_tokens'], split_batch_size),
+                                                       torch.split(inputs['batch_lengths'], split_batch_size)):
+                    results = model.forward(batch_tokens, repr_layers=[n_layers], return_contacts=False)
+                    token_representations = results["representations"][n_layers]
+                    for i, seq_len in enumerate(batch_lengths):
+                        if seq_len >= token_representations.size(1) - 2:
+                            sequence_embs.append(token_representations[i].mean(0))
+                        else:
+                            sequence_embs.append(token_representations[i, 1: seq_len + 1].mean(0))
+
+                h_out[ntype] = torch.stack(sequence_embs, dim=0)
+
+            elif isinstance(model, BertForSequenceClassification):
+                if split_batch_size:
+                    batch_output = []
+                    for input_ids, att_mask, token_type_ids in \
+                            zip(torch.split(inputs["input_ids"], split_batch_size),
+                                torch.split(inputs["attention_mask"], split_batch_size),
+                                torch.split(inputs["token_type_ids"], split_batch_size)):
+                        out = model.forward(input_ids=input_ids, attention_mask=att_mask, token_type_ids=token_type_ids)
+                        batch_output.append(out.logits)
+
+                    h_out[ntype] = torch.cat(batch_output, dim=0)
+
+                else:
+                    out = model.forward(input_ids=inputs["input_ids"],
+                                        attention_mask=inputs["attention_mask"],
+                                        token_type_ids=inputs["token_type_ids"])
+                    h_out[ntype] = out.logits
 
         return h_out
-
 
 class LSTMSequenceEncoder(nn.Module):
     def __init__(self, vocab_size: int, embedding_dim: int, hidden_dim: int = 32, kernel_size: int = 13, num_layers=1,
