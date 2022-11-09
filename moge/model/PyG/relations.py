@@ -1,3 +1,4 @@
+import collections
 import itertools
 from abc import ABC
 from typing import Tuple, List, Dict, Union
@@ -471,11 +472,16 @@ class RelationMultiLayerAgg:
 
     @property
     def _beta_avg(self):
-        return {i: layer._beta_avg for i, layer in enumerate(self.layers)}
+        return {i: dict(collections.ChainMap(*layer._beta_avg.values())) for i, layer in enumerate(self.layers)}
 
     @property
     def _beta_std(self):
-        return {i: layer._beta_std for i, layer in enumerate(self.layers)}
+        return {i: dict(collections.ChainMap(*layer._beta_std.values())) for i, layer in enumerate(self.layers)}
+
+    @property
+    def _counts_sum(self):
+        return {i: pd.concat(layer._counts.values(), axis=1).sum(0).astype(int).to_dict() for i, layer in
+                enumerate(self.layers)}
 
     def get_sankey_flow(self, node_types=None, self_loop=True, agg="median"):
         """

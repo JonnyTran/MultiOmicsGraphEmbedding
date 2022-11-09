@@ -262,8 +262,12 @@ class NodeEmbeddingEvaluator(LightningModule):
     def log_relation_atten_values(self, **kwargs):
         if self.wandb_experiment is not None and hasattr(self.embedder, '_beta_avg'):
             beta_avg = self.embedder._beta_avg
-            if beta_avg is not None:
+            if beta_avg:
                 self.wandb_experiment.log({'_betas': beta_avg, 'epoch': self.current_epoch, **kwargs})
+
+            edge_counts = self.embedder._counts_sum
+            if edge_counts:
+                self.wandb_experiment.log({'_counts': edge_counts, 'epoch': self.current_epoch, **kwargs})
 
     def plot_sankey_flow(self, width=800, height=600):
         if self.wandb_experiment is None:

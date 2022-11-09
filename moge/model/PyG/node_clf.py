@@ -24,7 +24,7 @@ from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
 from moge.model.PyG.latte import LATTE
 from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
-from moge.model.PyG.relations import RelationAttention
+from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier, LabelNodeClassifer
 from moge.model.dgl.DeepGraphGO import pair_aupr, fmax
 from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
@@ -452,7 +452,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X, save_betas=True)
+        y_pred = self.forward(X, save_betas=2 if batch_nb == 0 else True)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
@@ -486,6 +486,21 @@ class LATTEFlatNodeClf(LATTENodeClf):
         self.log("test_loss", test_loss)
 
         return test_loss
+
+    def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
+        if 't_order' in self.hparams and self.hparams.t_order > 1 and isinstance(self.embedder, RelationMultiLayerAgg):
+            kwargs['add_metapaths'] = self.embedder.get_metapaths_chain()
+        return super().train_dataloader(batch_size, num_workers, **kwargs)
+
+    def val_dataloader(self, batch_size=None, num_workers=0, **kwargs):
+        if 't_order' in self.hparams and self.hparams.t_order > 1 and isinstance(self.embedder, RelationMultiLayerAgg):
+            kwargs['add_metapaths'] = self.embedder.get_metapaths_chain()
+        return super().val_dataloader(batch_size, num_workers, **kwargs)
+
+    def test_dataloader(self, batch_size=None, num_workers=0, **kwargs):
+        if 't_order' in self.hparams and self.hparams.t_order > 1 and isinstance(self.embedder, RelationMultiLayerAgg):
+            kwargs['add_metapaths'] = self.embedder.get_metapaths_chain()
+        return super().test_dataloader(batch_size, num_workers, **kwargs)
 
 
 class MLP(NodeClfTrainer):

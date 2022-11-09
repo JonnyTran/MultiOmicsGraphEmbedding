@@ -330,6 +330,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Add metapaths to hetero before
         if add_metapaths and callable(transform_fn):
             op = transforms.AddMetaPaths(add_metapaths, max_sample=max_sample, weighted=True)
+            logger.info(f"AddMetaPaths {len(add_metapaths)}")
             transform = lambda x: transform_fn(x, op)
         elif callable(transform_fn):
             transform = transform_fn
