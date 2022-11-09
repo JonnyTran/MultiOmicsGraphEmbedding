@@ -84,11 +84,34 @@ def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tu
 
 
 def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, List[int]] = None,
-                     head_type: Union[str, List[str]] = None, tail_type: Union[str, List[str]] = None) \
+                     head_type: Union[str, List[str]] = None, tail_type: Union[str, List[str]] = None,
+                     filter: Dict[str, Set[Tuple]] = None,
+                     exclude: Dict[str, Set[Tuple]] = None) \
         -> List[Tuple[str, str, str]]:
+    """
+
+    Args:
+        metapaths (list):
+            A list of metapaths of various lengths
+        order (int): default None
+            If given, only select metapaths with number of hop equal to this.
+        head_type (str): default None
+            If given, only select metapaths with source ntype equal to this.
+        tail_type (str): default None
+            If given, only select metapaths with target ntype equal to this.
+        filter (): default None
+            Contain the list of multi-hop etypes allowed if a metapath is multi-hop and its target ntype is in `filter`.
+            Used to limit the size of metapath generation.
+        exclude (): default None
+            Contain the list of multi-hop etypes not allowed if a metapath is multi-hop and its target ntype is in
+            `exclude`. Used to limit the size of metapath generation.
+
+    Returns:
+        filtered_metapaths (list)
+    """
+
     def filter_func(metapath: Tuple[str]):
         condition = True
-
         num_hops = len(metapath[1::2])
 
         if isinstance(order, int):
@@ -100,6 +123,14 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, Li
             condition = condition & (metapath[0] in head_type)
         if tail_type:
             condition = condition & (metapath[-1] in tail_type)
+
+        if num_hops > 1 and isinstance(exclude, dict) and metapath[-1] in exclude:
+            if tuple(metapath[1::2]) in exclude[metapath[-1]]:
+                condition = False
+
+        if num_hops > 1 and isinstance(filter, dict) and metapath[-1] in filter:
+            if tuple(metapath[1::2]) not in filter[metapath[-1]]:
+                condition = False
 
         return condition
 

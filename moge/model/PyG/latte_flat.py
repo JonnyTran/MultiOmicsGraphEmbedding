@@ -153,7 +153,7 @@ class LATTEConv(MessagePassing, RelationAttention):
                 global_node_index: Dict[str, Tensor],
                 edge_pred_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                 batch_sizes: Dict[str, int],
-                save_betas=False, empty_gpu_device=None, verbose=False) -> \
+                save_betas=False, verbose=False) -> \
             Tuple[Dict[str, Tensor], Dict[Tuple[str, str, str], Tensor]]:
         """
         Args:
@@ -241,7 +241,8 @@ class LATTEConv(MessagePassing, RelationAttention):
                                           batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
                 if save_betas >= 2:
                     self.update_edge_attn(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
-                                          batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
+                                          batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None,
+                                          save_count_only=save_betas == 2)
             except Exception as e:
                 traceback.print_exc()
                 pprint(tensor_sizes(edge_pred_dict=edge_pred_dict), width=400)
@@ -407,11 +408,12 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
         for l in range(n_layers):
             is_last_layer = l + 1 == n_layers
 
-            l_layer_metapaths = filter_metapaths(
-                metapaths=metapaths + higher_order_metapaths,
-                order=list(range(1, min(l + 1, t_order) + 1)),  # Select only up to t-order
-                # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
-                tail_type=output_ntypes if is_last_layer else None)
+            l_layer_metapaths = filter_metapaths(metapaths=metapaths + higher_order_metapaths,
+                                                 order=list(range(1, min(l + 1, t_order) + 1)),
+                                                 tail_type=output_ntypes if is_last_layer else None,
+                                                 filter=hparams.filter_metapaths if 'filter_metapaths' in hparams else None,
+                                                 exclude=hparams.exclude_metapaths if 'exclude_metapaths' in hparams else None,
+                                                 )
 
             layers.append(LATTEConv(input_dim=embedding_dim,
                                     output_dim=embedding_dim,

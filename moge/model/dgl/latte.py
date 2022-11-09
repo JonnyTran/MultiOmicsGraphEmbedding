@@ -7,10 +7,11 @@ import torch.nn.functional as F
 from dgl.heterograph import DGLBlock
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
+from torch import nn as nn, Tensor
+
 from moge.model.PyG.relations import RelationAttention
 from moge.model.PyG.utils import filter_metapaths, max_num_hops, join_metapaths
 from moge.model.dgl.utils import ChainMetaPaths
-from torch import nn as nn, Tensor
 
 
 class LATTEConv(nn.Module, RelationAttention):
@@ -287,7 +288,6 @@ class LATTE(nn.Module):
             is_last_layer = (l + 1 == n_layers)
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
                                                  order=list(range(1, min(l + 1, t_order) + 1)),
-                                                 # Select only up to t-order
                                                  tail_type=head_node_type if is_last_layer else None)
 
             layers.append(LATTEConv(in_dim=embedding_dim, out_dim=embedding_dim, num_nodes_dict=num_nodes_dict,

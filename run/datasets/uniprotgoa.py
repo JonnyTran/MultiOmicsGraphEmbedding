@@ -307,15 +307,14 @@ def parse_options(hparams, dataset_path):
     else:
         go_etypes = None
 
-    # Determine whether to include or ex
+    # Determine whether to include or exclude go_etypes
     if ntype_subset:
-        if not {'biological_process', 'cellular_component', 'molecular_function'}.intersection(ntype_subset):
-            if go_etypes:
-                hparams.go_etypes = None
-        elif {'biological_process', 'cellular_component', 'molecular_function'}.intersection(ntype_subset):
-            if not go_etypes:
-                go_etypes = ['is_a', 'part_of', 'has_part']  # TODO add 'regulates'
-                hparams.go_etypes = go_etypes
+        pred_ntypes_in_graph = {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
+            ntype_subset)
+        if not pred_ntypes_in_graph and go_etypes:
+            hparams.go_etypes = go_etypes = None
+        elif pred_ntypes_in_graph and not go_etypes:
+            hparams.go_etypes = go_etypes = ['is_a', 'part_of', 'has_part']  # TODO add 'regulates'
 
     return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
            pred_ntypes, uniprotgoa_path, use_reverse

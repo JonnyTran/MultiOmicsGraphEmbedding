@@ -75,7 +75,9 @@ def tensor_sizes(input=None, **kwargs) -> ...:
     elif isinstance(input, set):
         if len(input) and isinstance(list(input)[0], str):
             return len(input)
-        return {tensor_sizes(v) for v in input}
+        elif len(input) and isinstance(list(input)[0], tuple):
+            return ['.'.join(tup) for tup in input]
+        return len(input)
 
     elif isinstance(input, (DGLGraph, DGLBlock, DGLHeteroGraph)):
         return {ntype: (input.num_src_nodes(ntype), input.num_dst_nodes(ntype)) \

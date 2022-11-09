@@ -5,13 +5,13 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from moge.model.PyG.relations import RelationAttention, MetapathGATConv
-from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
+from moge.model.PyG.relations import RelationAttention, MetapathGATConv
+from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
@@ -470,8 +470,6 @@ class LATTE(nn.Module):
 
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
                                                  order=list(range(1, min(l + 1, t_order) + 1)),
-                                                 # Select only up to t-order
-                                                 # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
                                                  tail_type=self.head_node_type if is_last_layer else None)
 
             layers.append(

@@ -229,31 +229,32 @@ class RelationAttention(ABC):
                 if edge_values is None or (batch_sizes and tail_type not in batch_sizes): continue
 
                 # Edge attn
-                value, row, col = edge_values.mean(1).cpu().numpy(), \
-                                  edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
-                csc_matrix = ssp.coo_matrix((value, (row, col)),
-                                            shape=(global_node_index[head_type].shape[0],
-                                                   global_node_index[tail_type].shape[0]))
-                # Create Sparse DataFrame of size (batch_nids, neighbor_nids)
-                edge_attn = pd.DataFrame.sparse.from_spmatrix(csc_matrix.transpose().tocsc())
-                edge_attn.index = pd.Index(global_node_index[tail_type].cpu().numpy(), name=f"{tail_type}_nid")
-                edge_attn.columns = pd.Index(global_node_index[head_type].cpu().numpy(), name=f"{head_type}_nid")
-                edge_attn = edge_attn.loc[batch_nids]
+                if not save_count_only:
+                    value, row, col = edge_values.mean(1).cpu().numpy(), \
+                                      edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
+                    csc_matrix = ssp.coo_matrix((value, (row, col)),
+                                                shape=(global_node_index[head_type].shape[0],
+                                                       global_node_index[tail_type].shape[0]))
+                    # Create Sparse DataFrame of size (batch_nids, neighbor_nids)
+                    edge_attn = pd.DataFrame.sparse.from_spmatrix(csc_matrix.transpose().tocsc())
+                    edge_attn.index = pd.Index(global_node_index[tail_type].cpu().numpy(), name=f"{tail_type}_nid")
+                    edge_attn.columns = pd.Index(global_node_index[head_type].cpu().numpy(), name=f"{head_type}_nid")
+                    edge_attn = edge_attn.loc[batch_nids]
 
-                if len(self._alphas) == 0 or metapath_name not in self._alphas:
-                    self._alphas[metapath_name] = edge_attn
-                else:
-                    # Update the df
-                    old_cols = edge_attn.columns.intersection(self._alphas[metapath_name].columns)
-                    if len(new_cols):
-                        self._alphas[metapath_name] = self._alphas[metapath_name].join(
-                            edge_attn.filter(new_cols, axis="columns"), how="left")
+                    if len(self._alphas) == 0 or metapath_name not in self._alphas:
+                        self._alphas[metapath_name] = edge_attn
+                    else:
+                        # Update the df
+                        old_cols = edge_attn.columns.intersection(self._alphas[metapath_name].columns)
+                        if len(new_cols):
+                            self._alphas[metapath_name] = self._alphas[metapath_name].join(
+                                edge_attn.filter(new_cols, axis="columns"), how="left")
 
-                    # Fillna attn values
-                    new_cols = edge_attn.columns.difference(self._alphas[metapath_name].columns)
-                    if len(old_cols):
-                        self._alphas[metapath_name].update(
-                            edge_attn.filter(old_cols, axis='columns'), overwrite=True)
+                        # Fillna attn values
+                        new_cols = edge_attn.columns.difference(self._alphas[metapath_name].columns)
+                        if len(old_cols):
+                            self._alphas[metapath_name].update(
+                                edge_attn.filter(old_cols, axis='columns'), overwrite=True)
 
                 # Edge counts
                 dst_nids, dst_edge_counts = edge_index[1].cpu().unique(return_counts=True)
