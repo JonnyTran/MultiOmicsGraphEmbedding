@@ -541,7 +541,6 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         return dataset
 
     def test_dataloader(self, batch_size=None, num_workers=0, **kwargs):
-
         dataset = self.dataset.test_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
                                                batch_size=batch_size if batch_size else self.hparams.batch_size,
                                                num_workers=num_workers,

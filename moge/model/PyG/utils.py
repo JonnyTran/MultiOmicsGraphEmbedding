@@ -58,7 +58,7 @@ def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tu
         metapaths_B ():
         tail_types ():
         skip_undirected ():
-        return_dict (): If True, return in from of Dict of new etype as keys and chain of metapaths as values
+        return_dict (): If True, return in from of Dict of new etypes names and list of metapaths.
 
     Returns:
 
@@ -158,7 +158,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                                                        use_edge_values=use_edge_values)
         if edge_index_b is None or edge_index_b.size(1) < 1: continue
 
-        # In the current LATTE layer that calls this method, a metapath is not higher-order
+        # In the current layer that calls this method, keep the non- higher-order metapath_b
         if filter_metapaths is not None and metapath_b in filter_metapaths:
             joined_edge_index[metapath_b] = (edge_index_b, values_b)
 

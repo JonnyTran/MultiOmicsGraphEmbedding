@@ -1,3 +1,4 @@
+import itertools
 import json
 import os
 import pickle
@@ -17,6 +18,7 @@ from logzero import logger
 from pandas import DataFrame, Series, Index
 from torch import Tensor
 from torch.utils.data import DataLoader
+from torch_geometric import transforms
 from torch_geometric.data import HeteroData
 from torch_sparse.tensor import SparseTensor
 
@@ -153,7 +155,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             if ann_df is not None:
                 self.network.annotations[ntype] = ann_df
 
-                if 'sequence' in ann_df.columns:
+                if 'sequence' in kwargs and kwargs['sequence'] and 'sequence' in ann_df.columns:
                     hetero[ntype].sequence = ann_df['sequence']
 
         # Load sequence tokenizer
@@ -296,50 +298,97 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         df.index.names = ['src_ntype', 'etype', 'dst_ntype']
         return df.sort_index()
 
-    def create_graph_sampler(self, graph: HeteroData, batch_size: int,
-                             node_type: str, node_mask: Tensor,
-                             transform_fn: Callable = None, num_workers=10, verbose=False, shuffle=True, **kwargs):
-        min_expansion_size = min(self.neighbor_sizes)
-        max_expansion_size = 100
+    def create_graph_sampler(self,
+                             graph: HeteroData,
+                             batch_size: int,
+                             node_type: str,
+                             node_mask: Tensor,
+                             transform_fn: Callable = None,
+                             neighbor_loader=None,
+                             num_neighbors: Dict[Union[str, Tuple], int] = None,
+                             add_metapaths: List[List[Tuple[str, str, str]]] = None,
+                             max_sample=30,
+                             num_workers=0,
+                             verbose=False,
+                             shuffle=True,
+                             **kwargs) -> DataLoader:
+        # Num neighbors
+        if neighbor_loader is None:
+            neighbor_loader = self.neighbor_loader
+        if neighbor_loader == "NeighborLoader":
+            n_neighbors = {metapath: self.neighbor_sizes for metapath in graph.edge_types}
+        elif neighbor_loader == "HGTLoader":
+            n_neighbors = {ntype: self.neighbor_sizes for ntype in self.node_types}
+        else:
+            raise Exception(f"self.neighbor_loader must be one of 'NeighborLoader' or 'HGTLoader'")
+        if num_neighbors:
+            n_neighbors.update(num_neighbors)
 
-        if self.neighbor_loader == "NeighborLoader":
-            self.num_neighbors = {metapath: self.neighbor_sizes \
-                                  for metapath in self.metapaths}
+        if verbose:
+            pprint(f"{neighbor_loader} neighbor_sizes: {n_neighbors}", width=350)
 
-        elif self.neighbor_loader == "HGTLoader":
-            self.num_neighbors = {ntype: self.neighbor_sizes \
-                                  for ntype in self.node_types}
+        # Add metapaths to hetero before
+        if add_metapaths and callable(transform_fn):
+            op = transforms.AddMetaPaths(add_metapaths, max_sample=max_sample, weighted=True)
+            transform = lambda x: transform_fn(x, op)
+        elif callable(transform_fn):
+            transform = transform_fn
+        else:
+            transform = None
 
-        print(f"{self.neighbor_loader} neighbor_sizes:") if verbose else None
-        pprint(self.num_neighbors, width=300) if verbose else None
-
-        args = dict(data=graph,
-                    num_neighbors=self.num_neighbors,
-                    batch_size=batch_size,
-                    transform=transform_fn,
-                    input_nodes=(node_type, node_mask),
-                    shuffle=shuffle,
-                    num_workers=num_workers,
-                    **kwargs)
+        args = dict(
+            data=graph,
+            num_neighbors=n_neighbors,
+            batch_size=batch_size,
+            transform=transform,
+            input_nodes=(node_type, node_mask),
+            shuffle=shuffle,
+            num_workers=num_workers,
+            **kwargs,
+        )
 
         if self.class_indices is not None and set(self.class_indices.keys()).intersection(self.node_types):
-            args['class_indices'] = self.class_indices
+            args["class_indices"] = self.class_indices
 
-        if self.neighbor_loader == "NeighborLoader":
+        if neighbor_loader == "NeighborLoader":
             dataset = NeighborLoaderX(**args)
-        elif self.neighbor_loader == "HGTLoader":
+        elif neighbor_loader == "HGTLoader":
             dataset = HGTLoaderX(**args)
+        else:
+            raise Exception()
 
         return dataset
 
-    def transform(self, hetero: HeteroData):
+    def transform(self, hetero: HeteroData, transform: Callable = None) \
+            -> Tuple[Dict[str, Dict], Dict, Optional[Dict]]:
+        if callable(transform):
+            hetero = transform(hetero)
+
         X = {}
-        X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in hetero.edge_index_dict.items()}
         X["global_node_index"] = {ntype: nid for ntype, nid in hetero.nid_dict.items() if nid.numel()}
         X['sizes'] = {ntype: size for ntype, size in hetero.num_nodes_dict.items() if size}
         X['batch_size'] = hetero.batch_size_dict
 
-        # Node featuers
+        # Edge-index dict
+        X["edge_index_dict"] = {}
+        for metapath, edge_index in hetero.edge_index_dict.items():
+            if hasattr(hetero, 'edge_weight_dict') and metapath in hetero.edge_weight_dict:
+                edge_weight = hetero.edge_weight_dict[metapath]
+            else:
+                edge_weight = None
+
+            if hasattr(hetero, 'metapath_dict') and metapath in hetero.metapath_dict:
+                # Concatenate metapaths
+                metapath = tuple(itertools.chain.from_iterable(
+                    [m[1:] if i > 0 else m for i, m in enumerate(hetero.metapath_dict[metapath])]))
+                edge_weight = None
+
+            if edge_weight is not None:
+                X["edge_index_dict"][metapath] = (edge_index, edge_weight)
+            else:
+                X["edge_index_dict"][metapath] = edge_index
+
+        # Node features
         X["x_dict"] = {ntype: x for ntype, x in hetero.x_dict.items() if x.numel()}
         for ntype, feat in X["x_dict"].items():
             nids = X["global_node_index"][ntype]
@@ -395,9 +444,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         assert weights is None or isinstance(weights, dict) or (isinstance(weights, Tensor) and weights.dim() == 1)
 
         return X, y_dict, weights
-
-    def full_batch(self):
-        return self.transform(self.G)
 
     def get_node_metadata(self, global_node_index: Dict[str, Tensor],
                           embeddings: Dict[str, Tensor],
@@ -621,7 +667,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     elif value.shape[0] == mask.shape[0]:
                         store[key] = value[mask]
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, add_metapaths=None, **kwargs):
         graph = self.G
         head_ntype = self.head_node_type
 
@@ -634,11 +680,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         logger.info(f'train_dataloader size: {node_mask.sum()}')
 
         dataset = self.create_graph_sampler(graph, batch_size, node_type=head_ntype, node_mask=node_mask,
-                                            transform_fn=self.transform, num_workers=num_workers, shuffle=True)
+                                            transform_fn=self.transform, add_metapaths=add_metapaths,
+                                            num_workers=num_workers, shuffle=True)
 
         return dataset
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, add_metapaths=None, **kwargs):
         graph = self.G
         head_ntype = self.head_node_type
 
@@ -650,11 +697,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         assert num_train_overlap == 0, f"num_train_overlap: {num_train_overlap}"
 
         dataset = self.create_graph_sampler(self.G, batch_size, node_type=head_ntype, node_mask=node_mask,
-                                            transform_fn=self.transform, num_workers=num_workers, shuffle=False)
+                                            transform_fn=self.transform, add_metapaths=add_metapaths,
+                                            num_workers=num_workers, shuffle=False)
 
         return dataset
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, add_metapaths=None, **kwargs):
         graph = self.G
         head_ntype = self.head_node_type
 
@@ -666,7 +714,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         assert num_train_overlap == 0, f"num_train_overlap: {num_train_overlap}"
 
         dataset = self.create_graph_sampler(self.G, batch_size, node_type=head_ntype, node_mask=node_mask,
-                                            transform_fn=self.transform, num_workers=num_workers, shuffle=False)
+                                            transform_fn=self.transform, add_metapaths=add_metapaths,
+                                            num_workers=num_workers, shuffle=False)
 
         return dataset
 

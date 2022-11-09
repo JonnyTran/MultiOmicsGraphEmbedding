@@ -2,7 +2,7 @@ import logging
 import math
 import traceback
 from argparse import Namespace
-from typing import Dict, Iterable, Union, Tuple, Any, List
+from typing import Dict, Iterable, Union, Tuple, List
 
 import dgl
 import numpy as np
@@ -24,7 +24,6 @@ from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
 from moge.model.PyG.latte import LATTE
 from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
-from moge.model.PyG.link_pred import LATTEFlatLinkPred
 from moge.model.PyG.relations import RelationAttention
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier, LabelNodeClassifer
 from moge.model.dgl.DeepGraphGO import pair_aupr, fmax
@@ -931,105 +930,3 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
                 "lr_scheduler": scheduler,
                 "monitor": "val_loss"}
 
-
-class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
-    dataset: HeteroNodeClfDataset
-    def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset,
-                 metrics: Dict[str, List[str]] = ["obgn-mag"], collate_fn=None) -> None:
-        dataset.pred_metapaths = [("_N", "_E", "_N")]
-        dataset.go_ntype = "GO_term"
-        super().__init__(hparams, dataset, metrics, collate_fn)
-
-    def forward(self, inputs: Dict[str, Any], **kwargs):
-        embeddings = super().forward(inputs, edges_true=None, return_embeddings=True, **kwargs)
-
-        logits = embeddings[self.head_node_type] @ embeddings[self.dataset.go_ntype].T
-        return logits
-
-    def training_step(self, batch, batch_nb):
-        X, y_true, weights = batch
-        y_pred = self.forward(X)
-
-        # y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
-
-        loss = self.criterion.forward(y_pred, y_true, neg_edges=weights)
-
-        self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights)
-
-        self.log("loss", loss, logger=True, on_step=True)
-
-        return loss
-
-    def validation_step(self, batch, batch_nb):
-        X, y_true, weights = batch
-        y_pred = self.forward(X)
-
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
-        if y_true.size(0) == 0:
-            return torch.tensor(0.0, requires_grad=False)
-
-        val_loss = self.criterion.forward(y_pred, y_true, neg_edges=weights)
-        self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
-
-        self.log("val_loss", val_loss, )
-
-        return val_loss
-
-    def test_step(self, batch, batch_nb):
-        X, y_true, weights = batch
-        y_pred = self.forward(X, save_betas=False)
-
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
-
-        test_loss = self.criterion(y_pred, y_true, weights=weights)
-
-        if batch_nb == 0:
-            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
-
-        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
-
-        self.log("test_loss", test_loss)
-
-        return test_loss
-
-    def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                y_pred: Tensor, y_true: Tensor, weights: Tensor):
-        if isinstance(metrics, dict):
-            y_pred_dict = self.dataset.split_array_by_namespace(y_pred)
-            y_true_dict = self.dataset.split_array_by_namespace(y_true)
-
-            for namespace in y_true_dict.keys():
-                go_type = "BPO" if namespace == 'biological_process' else \
-                    "CCO" if namespace == 'cellular_component' else \
-                        "MFO" if namespace == 'molecular_function' else namespace
-                metrics[go_type].update_metrics(y_pred_dict[namespace], y_true_dict[namespace], weights=weights)
-
-        else:
-            metrics.update_metrics(y_pred, y_true, weights=weights)
-
-    def on_validation_end(self) -> None:
-        super().on_validation_end()
-        if self.current_epoch % 50 == 1:
-            self.plot_sankey_flow(layer=-1)
-
-    def on_test_end(self):
-        try:
-            if self.wandb_experiment is not None:
-                X, y, weights = self.dataset.full_batch()
-                embs = self.cpu().forward(X, return_embs=True, save_betas=True)
-
-                self.plot_embeddings_tsne(X, embs, weights=weights)
-                self.plot_sankey_flow(layer=-1)
-                self.cleanup_artifacts()
-
-        except Exception as e:
-            traceback.print_exc()
-
-        finally:
-            super().on_test_end()

@@ -1,9 +1,10 @@
+import datetime
 import logging
 import random
 import sys
 from argparse import ArgumentParser, Namespace
 
-from run.utils import parse_yaml_config
+from run.utils import parse_yaml_config, select_empty_gpus
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -24,26 +25,36 @@ from run.load_data import load_node_dataset
 
 
 def train(hparams):
-    USE_AMP = False
-    CALLBACKS = None
     NUM_GPUS = hparams.num_gpus
-
-    pytorch_lightning.seed_everything(hparams.run)
-
-    if hparams.dataset in ["ACM", "IMDB", "DBLP"]:
-        hparams.neighbor_sizes = [-1, -1]
-    elif "ogbn" in hparams.dataset:
-        hparams.neighbor_sizes = [10, 10]
+    USE_AMP = True  # True if NUM_GPUS > 1 else False
+    MAX_EPOCHS = 500
+    MIN_EPOCHS = None if 'min_epochs' not in hparams else hparams.min_epochs
+    if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
+        GPUS = [hparams.gpu]
+    elif hparams.num_gpus == 1:
+        GPUS = select_empty_gpus()
     else:
-        hparams.neighbor_sizes = [10, 10]
+        GPUS = random.sample([0, 1, 2], NUM_GPUS)
+
+    pytorch_lightning.seed_everything(hparams.seed)
 
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
 
-    METRICS = ["micro_f1", "macro_f1",
-               "precision", "recall", "top_k", "auroc", "aupr"
-               # dataset.name() if "ogb" in dataset.name() else "accuracy"
-               ]
+    hparams.neighbor_sizes = [hparams.n_neighbors, ] * hparams.n_layers
+    callbacks = []
+    if "GO" in hparams.dataset or 'uniprot' in hparams.dataset.lower():
+        METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
+        early_stopping_args = dict(monitor='val_aupr', mode='max')
+    else:
+        METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
+        early_stopping_args = dict(monitor='val_loss', mode='min')
+    if hparams.early_stopping:
+        callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
+
+    hparams.loss_type = hparams.loss_type
+    hparams.n_classes = dataset.n_classes
+    hparams.head_node_type = dataset.head_node_type
 
     if hparams.method == "HAN":
         args = {
@@ -59,7 +70,6 @@ def train(hparams):
             'lr': 0.001,
             'weight_decay': 0.001,
         }
-        ModelClass = HANNodeClf
         model = HANNodeClf(args, dataset, metrics=METRICS)
 
     elif hparams.method == "GTN":
@@ -76,7 +86,6 @@ def train(hparams):
             "lr": 0.005 * NUM_GPUS,
             "epochs": 40,
         }
-        ModelClass = GTN
         model = GTN(Namespace(**args), dataset=dataset, metrics=METRICS)
 
     elif hparams.method == "MetaPath2Vec":
@@ -94,7 +103,6 @@ def train(hparams):
             "lr": 0.01 * NUM_GPUS,
             "epochs": 100
         }
-        ModelClass = MetaPath2Vec
         model = MetaPath2Vec(Namespace(**args), dataset=dataset, metrics=METRICS)
 
     elif hparams.method == "HGT":
@@ -117,7 +125,6 @@ def train(hparams):
             "weight_decay": 1e-2,
             'epochs': 100,
         }
-        ModelClass = HGTNodeClf
         model = HGTNodeClf(Namespace(**args), dataset, metrics=METRICS)
 
     elif hparams.method == "NARS":
@@ -179,7 +186,6 @@ def train(hparams):
             'patience': 50,
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
-        ModelClass = R_HGNN
         model = R_HGNN(args, dataset, metrics=METRICS)
 
     elif "LATTE" in hparams.method:
@@ -242,7 +248,7 @@ def train(hparams):
         args.update(hparams.__dict__)
         model = LATTENodeClf(Namespace(**args), dataset, collate_fn="neighbor_sampler", metrics=METRICS)
 
-        CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False),
+        callbacks = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False),
                      ModelCheckpoint(monitor='val_loss',
                                      filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'),
                      ]
@@ -250,37 +256,36 @@ def train(hparams):
     else:
         raise Exception(f"Unknown model {hparams.embedder}")
 
-    if CALLBACKS is None and "patience" in args:
-        CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False)]
+    tags = [] + hparams.dataset.split(" ")
+    if hasattr(hparams, "namespaces"):
+        tags.extend(hparams.namespaces)
+    if hasattr(dataset, 'tags'):
+        tags.extend(dataset.tags)
 
-    wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred", log_model=False)
-    wandb_logger.log_hyperparams(args)
+    logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
+    logger.log_hyperparams(hparams)
 
     trainer = Trainer(
-        gpus=random.sample([0, 1, 2], NUM_GPUS),
-        auto_select_gpus=True,
-        distributed_backend='ddp' if NUM_GPUS > 1 else None,
-        max_epochs=args["epochs"],
-        stochastic_weight_avg=args["stochastic_weight_avg"] if "stochastic_weight_avg" in args else False,
-        callbacks=CALLBACKS,
-        logger=wandb_logger,
-        weights_summary='top',
-        amp_level='O1' if USE_AMP else None,
+        accelerator='cuda',
+        devices=GPUS,
+        auto_lr_find=False,
+        # enable_progress_bar=False,
+        # auto_scale_batch_size=True if hparams.n_layers > 2 else False,
+        log_every_n_steps=1,
+        max_epochs=MAX_EPOCHS,
+        min_epochs=MIN_EPOCHS,
+        callbacks=callbacks,
+        logger=logger,
+        max_time=datetime.timedelta(hours=hparams.hours) \
+            if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
+        # plugins='deepspeed' if NUM_GPUS > 1 else None,
+        # accelerator='ddp_spawn',
+        # plugins='ddp_sharded'
         precision=16 if USE_AMP else 32
     )
-
+    trainer.tune(model)
     trainer.fit(model)
-
-    # model.register_hooks()
-    if "LATTE" in hparams.method and trainer.checkpoint_callback is not None and hasattr(
-            trainer.checkpoint_callback, "best_model_path"):
-        model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
-                                                  hparams=Namespace(**args),
-                                                  dataset=dataset,
-                                                  metrics=METRICS)
-        print(trainer.checkpoint_callback.best_model_path)
     trainer.test(model)
-    # wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
 
 
 if __name__ == "__main__":
@@ -289,7 +294,6 @@ if __name__ == "__main__":
     parser.add_argument('--method', type=str, default="HAN")
 
     parser.add_argument('--embedding_dim', type=int, default=128)
-    parser.add_argument('--run', type=int, default=0)
     parser.add_argument('--inductive', type=bool, default=False)
 
     parser.add_argument('--dataset', type=str, default="ACM")
@@ -306,6 +310,7 @@ if __name__ == "__main__":
     parser.add_argument('--disable_concat', type=bool, default=False)
 
     parser.add_argument('--num_gpus', type=int, default=1)
+    parser.add_argument('--seed', type=int, default=random.randint(0, int(1e4)))
 
 
     # add all the available options to the trainer

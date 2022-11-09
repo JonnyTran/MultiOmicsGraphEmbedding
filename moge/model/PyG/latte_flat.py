@@ -1,6 +1,7 @@
 import copy
 import traceback
 from argparse import Namespace
+from pprint import pprint
 from typing import List, Dict, Tuple, Union
 
 import torch
@@ -13,6 +14,7 @@ from torch_geometric.utils import softmax
 from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
+from moge.model.utils import tensor_sizes
 
 
 class LATTEConv(MessagePassing, RelationAttention):
@@ -242,6 +244,7 @@ class LATTEConv(MessagePassing, RelationAttention):
                                           batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
             except Exception as e:
                 traceback.print_exc()
+                pprint(tensor_sizes(edge_pred_dict=edge_pred_dict), width=400)
 
         return h_out, edge_pred_dicts
 
@@ -300,6 +303,7 @@ class LATTEConv(MessagePassing, RelationAttention):
 
         # Create high-order edge index for next layer (but may not be used for aggregation)
         if set(filter_metapaths(higher_relations, tail_type=ntype)).difference(edge_pred_dict):
+            # print(">>", self.layer, ntype, len(set(filter_metapaths(higher_relations, tail_type=ntype)).difference(edge_pred_dict)))
             higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
                                                         edge_index_dict_B=edge_index_dict,
                                                         sizes=sizes,

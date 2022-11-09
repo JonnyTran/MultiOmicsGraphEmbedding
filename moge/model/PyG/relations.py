@@ -14,7 +14,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
 
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values
+from moge.model.PyG.utils import filter_metapaths, get_edge_index_values, max_num_hops
 
 
 class MetapathGATConv(nn.Module):
@@ -198,9 +198,10 @@ class RelationAttention(ABC):
     @torch.no_grad()
     def update_edge_attn(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                          global_node_index: Dict[str, Tensor],
-                         batch_sizes: Dict[str, int] = None, save_count_only=False):
+                         batch_sizes: Dict[str, int] = None,
+                         save_count_only=False):
         """
-        Add
+        Save the edge-level attention values and the edge count for each node.
 
         Args:
             edge_index_dict ():
@@ -224,25 +225,15 @@ class RelationAttention(ABC):
                 metapath_name = ".".join(metapath)
                 head_type, tail_type = metapath[0], metapath[-1]
                 edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], )
-                if edge_index is None: continue
-
-                dst_nids, dst_edge_counts = edge_index[1].cpu().unique(return_counts=True)
-                dst_nids = nids[dst_nids].cpu().numpy()
-
-                # Edge counts
-                dst_counts = pd.concat([
-                    pd.Series(dst_edge_counts.cpu().numpy(), index=dst_nids, name=metapath_name, dtype=int),
-                    pd.Series(0, index=set(batch_nids).difference(dst_nids), name=metapath_name, dtype=int)])
-                dst_counts = dst_counts.loc[batch_nids]
-                counts_df.append(dst_counts)
+                if edge_values is None or (batch_sizes and tail_type not in batch_sizes): continue
 
                 # Edge attn
-                if edge_values is None or save_count_only or (batch_sizes and tail_type not in batch_sizes): continue
-                value, row, col = edge_values.cpu().max(1).values.numpy(), \
+                value, row, col = edge_values.mean(1).cpu().numpy(), \
                                   edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
                 csc_matrix = ssp.coo_matrix((value, (row, col)),
                                             shape=(global_node_index[head_type].shape[0],
                                                    global_node_index[tail_type].shape[0]))
+                # Create Sparse DataFrame of size (batch_nids, neighbor_nids)
                 edge_attn = pd.DataFrame.sparse.from_spmatrix(csc_matrix.transpose().tocsc())
                 edge_attn.index = pd.Index(global_node_index[tail_type].cpu().numpy(), name=f"{tail_type}_nid")
                 edge_attn.columns = pd.Index(global_node_index[head_type].cpu().numpy(), name=f"{head_type}_nid")
@@ -251,16 +242,28 @@ class RelationAttention(ABC):
                 if len(self._alphas) == 0 or metapath_name not in self._alphas:
                     self._alphas[metapath_name] = edge_attn
                 else:
-                    existing_cols = edge_attn.columns.intersection(self._alphas[metapath_name].columns)
-                    new_cols = edge_attn.columns.difference(self._alphas[metapath_name].columns)
-
+                    # Update the df
+                    old_cols = edge_attn.columns.intersection(self._alphas[metapath_name].columns)
                     if len(new_cols):
                         self._alphas[metapath_name] = self._alphas[metapath_name].join(
                             edge_attn.filter(new_cols, axis="columns"), how="left")
-                    # Fillna seq features
-                    if len(existing_cols):
+
+                    # Fillna attn values
+                    new_cols = edge_attn.columns.difference(self._alphas[metapath_name].columns)
+                    if len(old_cols):
                         self._alphas[metapath_name].update(
-                            edge_attn.filter(existing_cols, axis='columns'), overwrite=True)
+                            edge_attn.filter(old_cols, axis='columns'), overwrite=True)
+
+                # Edge counts
+                dst_nids, dst_edge_counts = edge_index[1].cpu().unique(return_counts=True)
+                dst_nids = nids[dst_nids].cpu().numpy()
+
+                dst_counts = pd.concat(
+                    [pd.Series(dst_edge_counts.cpu().numpy(), index=dst_nids, name=metapath_name, dtype=int),
+                     pd.Series(0, index=set(batch_nids).difference(dst_nids), name=metapath_name, dtype=int)],
+                    axis=0)
+                dst_counts = dst_counts.loc[batch_nids]
+                counts_df.append(dst_counts)
 
             if counts_df:
                 counts_df = pd.concat(counts_df, axis=1, join="outer", copy=False) \
@@ -455,6 +458,16 @@ def reindex_contiguous(layer_nodes: pd.DataFrame, layer_links: pd.DataFrame) -> 
 
 class RelationMultiLayerAgg:
     layers: List[RelationAttention]
+
+    def get_metapaths_chain(self) -> List[List[Tuple[str, str, str]]]:
+        metapaths_chain = {}
+        for layer in self.layers:
+            for metapath in layer.metapaths:
+                if max_num_hops([metapath]) <= 1: continue
+                chain = [metapath[i: i + 3] for i in range(0, len(metapath) - 1, 2)]
+                metapaths_chain[metapath] = chain
+
+        return list(metapaths_chain.values())
 
     @property
     def _beta_avg(self):
