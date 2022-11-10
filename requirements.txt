@@ -1,10 +1,11 @@
 numpy
 pandas
-scipy >= 1.7.1
+scipy >= 1.8
 networkx>=2.1
 boto3
 dask
 plotly
+pyvis
 python-igraph
 colorhash
 biopython

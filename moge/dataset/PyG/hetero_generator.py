@@ -8,6 +8,7 @@ from pathlib import Path
 from pprint import pprint
 from typing import List, Tuple, Union, Dict, Optional, Callable
 
+import colorhash
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -543,9 +544,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return df
 
     def to_networkx(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor] = None,
-                    alphas_adjacencies: Dict[str, pd.DataFrame]=None,
+                    alphas_adjacencies: Dict[str, pd.DataFrame] = None,
                     nodes_subgraph: Dict[str, Union[List[str], List[int]]] = None,
-                    min_value:float = None,
+                    min_value: float = None,
+                    weight_multiplier: float = 1,
                     global_node_idx: Dict[str, Tensor] = None,
                     sep="-") -> nx.MultiDiGraph:
         """
@@ -613,12 +615,13 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 head_type, tail_type = metapath[0], metapath[-1]
                 coo:coo_matrix = adj.sparse.to_coo()
 
-                if isinstance(min_value, (int,float)):
-                    coo = coo.multiply(coo >= min_value)
+                if isinstance(min_value, (int, float)):
+                    coo.data *= (coo.data >= min_value)
+                    coo.eliminate_zeros()
 
                 src_idx = adj.columns[coo.col]
                 dst_idx = adj.index[coo.row]
-                weight = coo.data
+                weights = coo.data
 
                 if sep:
                     src = head_type + "-" + self.nodes[head_type][src_idx]
@@ -630,14 +633,30 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 # Filter by `nodes` to get subgraph
                 if nodes_subgraph and tail_type in nodes_subgraph:
                     mask = self.nodes[tail_type][dst_idx].isin(nodes_subgraph[tail_type])
-                    src, dst, weight = src[mask], dst[mask], weight[mask]
+                    src, dst, weights = src[mask], dst[mask], weights[mask]
 
+                if weight_multiplier is not None and weight_multiplier != 1:
+                    weights = weights * weight_multiplier
+
+                # Edges
                 key = '.'.join(metapath[1::2])
-                G.add_edges_from(((u, v, key, {'weight': w}) for u,v, w in zip(src, dst, weight)))
+                G.add_edges_from(((u, v, key, {'weight': w, 'value': w})
+                                  for u, v, w in zip(src, dst, weights.tolist())),
+                                 label=key,
+                                 color=colorhash.ColorHash(key).hex)
+                # Nodes
+                for ntype, nodelist in zip([head_type, tail_type], [src, dst]):
+                    if ntype == "Protein" and 'protein_name' in self.network.annotations[ntype].columns:
+                        node_label = self.network.annotations[ntype]['protein_name']
+                        nx.set_node_attributes(G, {node: {'group': ntype,
+                                                          'label': node_label[node]} \
+                                                   for node in nodelist})
+                    else:
+                        nx.set_node_attributes(G, {node: {'group': ntype} \
+                                                   for node in nodelist})
+
         else:
             raise Exception('Must provide at least one of `edge_index_dict` or `alphas_adjacencies`')
-
-
 
         H = G.copy()
         H.remove_nodes_from(list(nx.isolates(H)))
@@ -1100,9 +1119,12 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return X, edge_pred, _
 
-    def to_networkx(self, edge_index_dict: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = None,
-                    nodes_subgraph: Dict[str, Union[List[str], List[int]]] = None, global_node_idx: Dict[str, Tensor] = None) -> nx.MultiDiGraph:
-        G = super().to_networkx(edge_index_dict, nodes_subgraph, global_node_idx=global_node_idx)
+    def to_networkx(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor] = None,
+                    pos_edges=None,
+                    nodes_subgraph: Dict[str, Union[List[str], List[int]]] = None,
+                    global_node_idx: Dict[str, Tensor] = None) \
+            -> nx.MultiDiGraph:
+        G = super().to_networkx(edge_index_dict, nodes_subgraph=nodes_subgraph, global_node_idx=global_node_idx)
 
         if pos_edges is not None:
             edge_list = convert_to_nx_edgelist(pos_edges, node_names=self.nodes,

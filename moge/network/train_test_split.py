@@ -8,7 +8,6 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import tqdm
-from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 from logzero import logger
 from networkx.classes.reportviews import EdgeView
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -19,6 +18,7 @@ from moge.model.utils import tensor_sizes
 def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):
     y_label_bin = MultiLabelBinarizer().fit_transform(y_label)
 
+    from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
     stratify = MultilabelStratifiedShuffleSplit(test_size=test_size, random_state=0)
 
     for train, test in stratify.split(y_label.index.to_list(), y_label_bin):

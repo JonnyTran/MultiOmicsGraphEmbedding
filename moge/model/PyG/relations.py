@@ -236,11 +236,11 @@ class RelationAttention(ABC):
                     adj_coo = ssp.coo_matrix((value, (row, col)),
                                                 shape=(global_node_index[head_type].shape[0],
                                                        global_node_index[tail_type].shape[0]))
-                    adj_coo = adj_coo[:, 0:len(batch_nids)]
+
 
                     # Create Sparse DataFrame of size (batch_nids, neighbor_nids)
                     edge_attn = pd.DataFrame.sparse.from_spmatrix(
-                        adj_coo.transpose(),
+                        adj_coo.transpose().tocsc()[0: len(batch_nids)],
                         index=pd.Index(batch_nids, name=f"{tail_type}_nid"),
                         columns=pd.Index(global_node_index[head_type].cpu().numpy(), name=f"{head_type}_nid"))
 
