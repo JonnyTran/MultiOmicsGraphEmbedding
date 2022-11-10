@@ -1,5 +1,5 @@
 program: run/latte_node.py
-method: grid
+method: random
 
 metric:
   goal: maximize

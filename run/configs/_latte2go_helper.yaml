@@ -25,6 +25,14 @@ head_node_type: "Protein"
 attn_activation: "LeakyReLU"
 activation: "relu"
 
+filter_metapaths:
+  - biological_process:
+      - [ 'is_a', 'is_a' ]
+  - molecular_function:
+      - [ 'is_a', 'is_a' ]
+  - cellular_component:
+      - [ 'is_a', 'is_a' ]
+
 input_dropout: false
 batch_size: 1024
 

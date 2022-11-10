@@ -113,12 +113,15 @@ def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tu
     return output_metapaths
 
 
-def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, List[int]] = None,
-                     head_type: Union[str, List[str]] = None, tail_type: Union[str, List[str]] = None,
+def filter_metapaths(metapaths: List[Tuple],
+                     order: Union[int, List[int]] = None,
+                     head_type: Union[str, List[str]] = None,
+                     tail_type: Union[str, List[str]] = None,
                      filter: Dict[str, Set[Tuple]] = None,
                      exclude: Dict[str, Set[Tuple]] = None) \
-        -> List[Tuple[str, str, str]]:
+        -> List[Tuple[str]]:
     """
+    A utility function to filter a set of given metapaths based on multiple conditions.
 
     Args:
         metapaths (list):
@@ -129,10 +132,10 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, Li
             If given, only select metapaths with source ntype equal to this.
         tail_type (str): default None
             If given, only select metapaths with target ntype equal to this.
-        filter (): default None
+        filter (dict): default None
             Contain the list of multi-hop etypes allowed if a metapath is multi-hop and its target ntype is in `filter`.
             Used to limit the size of metapath generation.
-        exclude (): default None
+        exclude (dict): default None
             Contain the list of multi-hop etypes not allowed if a metapath is multi-hop and its target ntype is in
             `exclude`. Used to limit the size of metapath generation.
 
@@ -155,21 +158,33 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, Li
             condition = condition & (metapath[-1] in tail_type)
 
         if num_hops > 1 and isinstance(exclude, dict) and metapath[-1] in exclude:
-            if tuple(metapath[1::2]) in exclude[metapath[-1]]:
+            if tuple(metapath[1::2]) in exclude[metapath[-1]] or list(metapath[1::2]) in exclude[metapath[-1]]:
                 condition = False
 
         if num_hops > 1 and isinstance(filter, dict) and metapath[-1] in filter:
-            if tuple(metapath[1::2]) not in filter[metapath[-1]]:
+            if tuple(metapath[1::2]) not in filter[metapath[-1]] or list(metapath[1::2]) not in filter[metapath[-1]]:
                 condition = False
 
         return condition
 
-    return [m for m in sorted(OrderedDict.fromkeys(metapaths)) if filter_func(m)]
+    uniq_metapaths = sorted(OrderedDict.fromkeys(metapaths))
+    return [m for m in uniq_metapaths if filter_func(m)]
 
 
 def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],
-                          filter_edge=False, threshold=0.3, use_edge_values=True) \
+                          filter_edge=False, threshold=0.0, drop_edge_value=True) \
         -> Tuple[Tensor, Optional[Tensor]]:
+    """
+
+    Args:
+        edge_index_tup ():
+        filter_edge ():
+        threshold ():
+        drop_edge_value ():
+
+    Returns:
+
+    """
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
 
@@ -190,7 +205,7 @@ def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],
 
     # if edge_values.dtype != torch.float:
     #     edge_values = edge_values.to(torch.float)
-    if not use_edge_values:
+    if not drop_edge_value:
         edge_values = None
 
     return edge_index, edge_values
@@ -217,7 +232,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
         edge_index_b, values_b = get_edge_index_values(edge_index_b,
                                                        filter_edge=True if edge_threshold else False,
                                                        threshold=edge_threshold,
-                                                       use_edge_values=use_edge_values)
+                                                       drop_edge_value=use_edge_values)
         if edge_index_b is None or edge_index_b.size(1) < 1: continue
 
         # In the current layer that calls this method, keep the non- higher-order metapath_b
@@ -233,7 +248,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
             edge_index_a, values_a = get_edge_index_values(edge_index_a,
                                                            filter_edge=True if edge_threshold else False,
                                                            threshold=edge_threshold,
-                                                           use_edge_values=use_edge_values)
+                                                           drop_edge_value=use_edge_values)
             if edge_index_a is None or edge_index_a.size(1) < 1 or is_negative(metapath_a): continue
 
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
