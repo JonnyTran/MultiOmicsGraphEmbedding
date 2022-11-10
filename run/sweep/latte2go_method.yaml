@@ -1,5 +1,5 @@
 program: run/latte_node.py
-method: bayes
+method: grid
 
 metric:
   goal: maximize
@@ -12,18 +12,18 @@ parameters:
     values:
       - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
   #      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
-  labels_dataset:
-    values:
-      - 'DGG'
-  add_parents:
-    values:
-      - false
+  #  labels_dataset:
+  #    values:
+  #      - 'DGG'
+  #  add_parents:
+  #    values:
+  #      - true
   #      - true
   pred_ntypes:
     values:
-      - 'molecular_function'
       - 'biological_process'
-      - 'cellular_component'
+  #      - 'molecular_function'
+  #      - 'cellular_component'
   #  go_etypes:
   #    values:
   #      - 'is_a part_of has_part'
@@ -33,20 +33,20 @@ parameters:
   #    values:
   #      - null
   #      - 'Protein.protein-protein.Protein'
-  feature:
-    values:
-      - true
+  #  feature:
+  #    values:
+  #      - true
   #      - false
   ntype_subset:
     values:
       - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'
-      #      - 'Protein MessengerRNA MicroRNA LncRNA'
-      #      - 'Protein MessengerRNA MicroRNA'
-      #      - 'Protein MessengerRNA'
+      - 'Protein MessengerRNA MicroRNA LncRNA'
+      - 'Protein MessengerRNA MicroRNA'
+      - 'Protein MessengerRNA'
       - 'Protein'
-  inductive:
-    values:
-      - false
+  #  inductive:
+  #    values:
+  #      - false
   #      - true
   embedding_dim:
     values: [ 256 ]
@@ -65,17 +65,13 @@ parameters:
 
   t_order:
     values: [ 1, 2 ]
-  n_neighbors:
-    values: [ 2048, 1024, 512 ]
-  attn_heads:
-    values: [ 1, 2, 4, 8 ]
-  attn_dropout:
-    min: 0.0
-    max: 0.5
-    distribution: uniform
-  dropout:
-    min: 0.0
-    max: 0.5
-    distribution: uniform
-  weight_decay:
-    values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
+#  n_neighbors:
+#    values: [ 1024 ]
+#  attn_heads:
+#    values: [ 4 ]
+#  attn_dropout:
+#    values: [ 0.5 ]
+#  dropout:
+#    values: [ 0.0, 0.5 ]
+#  weight_decay:
+#    values: [ 0.01 ]

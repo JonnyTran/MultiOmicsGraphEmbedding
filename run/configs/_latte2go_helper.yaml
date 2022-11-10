@@ -2,6 +2,7 @@
 deepgraphgo_data: '../DeepGraphGO/data'
 uniprotgoa_path: '~/Bioinformatics_ExternalData/UniProtGOA/goa_uniprot_all.processed.parquet'
 #root_path: "../Multiplex-Graph-Embedding/data/heteronetwork/HUMAN_gtex_uniprot_MirTarBase_LncBase_lncRNA2Target_STRING_mRNAprotein_network.pickle"
+labels_dataset: 'DGG'
 
 sequence: false
 
@@ -26,6 +27,16 @@ activation: "relu"
 
 input_dropout: false
 batch_size: 1024
+
+n_neighbors: 1024
+feature: true
+add_parents: true
+attn_heads: 4
+attn_dropout: 0.5
+dropout: 0.2
+weight_decay: 0.01
+
+inductive: false
 
 loss_type: "BCE_WITH_LOGITS"
 max_epochs: 1000

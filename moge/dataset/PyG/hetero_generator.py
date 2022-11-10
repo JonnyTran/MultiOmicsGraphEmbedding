@@ -19,10 +19,12 @@ import tqdm
 from logzero import logger
 from pandas import DataFrame, Series, Index
 from scipy.sparse import coo_matrix
+from six.moves import intern
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric import transforms
 from torch_geometric.data import HeteroData
+from torch_geometric.utils import remove_self_loops
 from torch_sparse.tensor import SparseTensor
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
@@ -377,18 +379,22 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         X["edge_index_dict"] = {}
         for metapath, edge_index in hetero.edge_index_dict.items():
             if hasattr(hetero, 'edge_weight_dict') and metapath in hetero.edge_weight_dict:
-                edge_weight = hetero.edge_weight_dict[metapath]
+                edge_attr = hetero.edge_weight_dict[metapath]
             else:
-                edge_weight = None
+                edge_attr = None
 
+            # Metapath was generated from `AddMetapaths`
             if hasattr(hetero, 'metapath_dict') and metapath in hetero.metapath_dict:
+                if metapath[0] == metapath[-1]:
+                    edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
+
                 # Concatenate metapaths
                 metapath = tuple(itertools.chain.from_iterable(
                     [m[1:] if i > 0 else m for i, m in enumerate(hetero.metapath_dict[metapath])]))
-                edge_weight = None
+                edge_attr = None
 
-            if edge_weight is not None:
-                X["edge_index_dict"][metapath] = (edge_index, edge_weight)
+            if edge_attr is not None:
+                X["edge_index_dict"][metapath] = (edge_index, edge_attr)
             else:
                 X["edge_index_dict"][metapath] = edge_index
 
@@ -546,21 +552,25 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def to_networkx(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor] = None,
                     alphas_adjacencies: Dict[str, pd.DataFrame] = None,
                     nodes_subgraph: Dict[str, Union[List[str], List[int]]] = None,
+                    num_hops: int = 2,
                     min_value: float = None,
-                    weight_multiplier: float = 1,
                     global_node_idx: Dict[str, Tensor] = None,
-                    sep="-") -> nx.MultiDiGraph:
+                    sep="-", ) -> nx.MultiDiGraph:
         """
 
         Args:
-            edge_index_dict ():
-            alphas_adjacencies (Dict[str, pd.DataFrame]):
+            edge_index_dict (Dict[Tuple[str, str, str], Tensor]): default None.
+
+            alphas_adjacencies (Dict[str, pd.DataFrame]): default None.
                 A dict of metapaths (joined str) to sparse DataFrames adjancecy matrix with index and columns containing
                 node index for self.nodes.
-            nodes_subgraph ():
-            min_value ():
+            nodes_subgraph (Dict[str, List[str]]): A dict of ntype and node lists.
+                Only select edges that have dst nodes provided in `nodes_subgraph`.
+            min_value (float): default None
+                If given a number, then only select edges with edge `weight` >= `min_value`.
             global_node_idx ():
-            sep ():
+            sep (str): default "-".
+                If given, then the node names in networkx will be
 
         Returns:
 
@@ -633,27 +643,30 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 # Filter by `nodes` to get subgraph
                 if nodes_subgraph and tail_type in nodes_subgraph:
                     mask = self.nodes[tail_type][dst_idx].isin(nodes_subgraph[tail_type])
+                    for i in range(1, num_hops):
+                        mask = mask | np.isin(dst, src[mask])
                     src, dst, weights = src[mask], dst[mask], weights[mask]
 
-                if weight_multiplier is not None and weight_multiplier != 1:
-                    weights = weights * weight_multiplier
-
                 # Edges
-                key = '.'.join(metapath[1::2])
-                G.add_edges_from(((u, v, key, {'weight': w, 'value': w})
+                key = intern('.'.join(metapath[1::2]))
+                G.add_edges_from(((u, v, key, {intern('weight'): w, intern('value'): w})
                                   for u, v, w in zip(src, dst, weights.tolist())),
-                                 label=key,
-                                 color=colorhash.ColorHash(key).hex)
+                                 title=key,
+                                 color=intern(colorhash.ColorHash(key).hex))
                 # Nodes
                 for ntype, nodelist in zip([head_type, tail_type], [src, dst]):
                     if ntype == "Protein" and 'protein_name' in self.network.annotations[ntype].columns:
                         node_label = self.network.annotations[ntype]['protein_name']
-                        nx.set_node_attributes(G, {node: {'group': ntype,
-                                                          'label': node_label[node]} \
-                                                   for node in nodelist})
+                        node_attrs = {node: {intern('group'): ntype,
+                                             intern('title'): ntype,
+                                             intern('label'): node_label[node]} \
+                                      for node in nodelist}
                     else:
-                        nx.set_node_attributes(G, {node: {'group': ntype} \
-                                                   for node in nodelist})
+                        node_attrs = {node: {intern('group'): ntype,
+                                             intern('title'): ntype} \
+                                      for node in nodelist}
+
+                    nx.set_node_attributes(G, node_attrs)
 
         else:
             raise Exception('Must provide at least one of `edge_index_dict` or `alphas_adjacencies`')
