@@ -26,12 +26,12 @@ attn_activation: "LeakyReLU"
 activation: "relu"
 
 filter_metapaths:
-  - biological_process:
-      - [ 'is_a', 'is_a' ]
-  - molecular_function:
-      - [ 'is_a', 'is_a' ]
-  - cellular_component:
-      - [ 'is_a', 'is_a' ]
+  biological_process:
+    - [ 'is_a', 'is_a' ]
+  molecular_function:
+    - [ 'is_a', 'is_a' ]
+  cellular_component:
+    - [ 'is_a', 'is_a' ]
 
 input_dropout: false
 batch_size: 1024
@@ -50,6 +50,6 @@ loss_type: "BCE_WITH_LOGITS"
 max_epochs: 1000
 sweep: true
 lr: 0.001
-min_epochs: 100
+min_epochs: 60
 #hours: 7
 early_stopping: 15

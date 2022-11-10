@@ -135,7 +135,7 @@ class LATTEConv(MessagePassing, RelationAttention):
         beta = (beta_l[:, None, :, :] * beta_r).sum(-1) + self.rel_attn_bias[ntype][None, :, None]
         beta = F.softmax(beta, dim=1)
         # beta = torch.relu(beta / beta.sum(1, keepdim=True))
-        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
     # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str):
@@ -406,8 +406,11 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
         for l in range(n_layers):
             is_last_layer = l + 1 == n_layers
 
+            while max_num_hops(higher_order_metapaths) < t_order:
+                higher_order_metapaths = join_metapaths(higher_order_metapaths, metapaths, skip_undirected=False)
+
             l_layer_metapaths = filter_metapaths(metapaths=metapaths + higher_order_metapaths,
-                                                 order=list(range(1, min(l + 1, t_order) + 1)),
+                                                 order=list(range(1, t_order + 1)),
                                                  tail_type=output_ntypes if is_last_layer else None,
                                                  filter=hparams.filter_metapaths if 'filter_metapaths' in hparams else None,
                                                  exclude=hparams.exclude_metapaths if 'exclude_metapaths' in hparams else None,
@@ -429,9 +432,6 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
                                     edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
                                     n_layers=n_layers,
                                     verbose=hparams.verbose if "verbose" in hparams else False))
-
-            if l + 1 < t_order:
-                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths, skip_undirected=False)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
         self.reset_parameters()

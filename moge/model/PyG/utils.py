@@ -158,11 +158,12 @@ def filter_metapaths(metapaths: List[Tuple],
             condition = condition & (metapath[-1] in tail_type)
 
         if num_hops > 1 and isinstance(exclude, dict) and metapath[-1] in exclude:
-            if tuple(metapath[1::2]) in exclude[metapath[-1]] or list(metapath[1::2]) in exclude[metapath[-1]]:
+            # Join the iterable of strings to be tuple or list agnostic
+            if '.'.join(metapath[1::2]) in {".".join(tup) for tup in exclude[metapath[-1]]}:
                 condition = False
 
         if num_hops > 1 and isinstance(filter, dict) and metapath[-1] in filter:
-            if tuple(metapath[1::2]) not in filter[metapath[-1]] or list(metapath[1::2]) not in filter[metapath[-1]]:
+            if '.'.join(metapath[1::2]) not in {".".join(tup) for tup in filter[metapath[-1]]}:
                 condition = False
 
         return condition

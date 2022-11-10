@@ -1,4 +1,3 @@
-import logging
 import os
 from argparse import ArgumentParser, Namespace
 from pprint import pprint
@@ -9,6 +8,7 @@ import dill
 import pynvml
 import torch
 import yaml
+from logzero import logger
 
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -16,6 +16,14 @@ from moge.model.utils import preprocess_input
 
 
 def parse_yaml_config(parser: ArgumentParser) -> Namespace:
+    """
+
+    Args:
+        parser ():
+
+    Returns:
+
+    """
     parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
     args = parser.parse_args()
     # yaml priority is higher than args
@@ -42,10 +50,8 @@ def adjust_batch_size(hparams):
         batch_size = batch_size // (hparams.embedding_dim // 128)
     if hparams.n_layers > 2:
         batch_size = batch_size // (hparams.n_layers - 1)
-    if hparams.neg_sampling_ratio != 1000:
-        batch_size = batch_size // (hparams.neg_sampling_ratio / 1000)
 
-    print(f"Adjusted batch_size to", batch_size)
+    logger.info(f"Adjusted batch_size to", batch_size)
 
     return int(batch_size)
 
@@ -85,7 +91,7 @@ def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeGenerator
 
     for ntype, ndata in node_emb.items():
         if skip_ntype == ntype:
-            logging.info(f"Use original features (not embeddings) for node type: {ntype}")
+            logger.info(f"Use original features (not embeddings) for node type: {ntype}")
             continue
 
         if "freeze_embeddings" in args and args.freeze_embeddings == False:

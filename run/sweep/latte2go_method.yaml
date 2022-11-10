@@ -44,6 +44,7 @@ parameters:
       - 'Protein MessengerRNA MicroRNA'
       - 'Protein MessengerRNA'
       - 'Protein'
+      - ''
   #  inductive:
   #    values:
   #      - false
@@ -56,6 +57,9 @@ parameters:
     values: [ 2 ]
   neighbor_loader:
     values: [ 'HGTLoader' ]
+  layer_norm:
+    values: [ true, false ]
+
   loss_type:
     values: [ "BCE_WITH_LOGITS" ]
   use_pos_weights:
