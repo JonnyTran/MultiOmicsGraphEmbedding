@@ -71,7 +71,7 @@ def graph_viz(g: nx.Graph,
     node_size = process_labels(node_size)
 
     node_x, node_y = zip(*[(pos[node][0], pos[node][1])
-                           for node in nodelist])
+                           for node in nodelist if len(pos[node])])
 
     if isinstance(node_color, pd.Series) and node_color.dtype == str and node_color.str.contains("#").any():
         express_mode = False
@@ -227,7 +227,8 @@ def process_pos(input: Union[DataFrame, Dict[str, Dict[str, float]]]) -> Dict[st
     elif isinstance(input, dict) and isinstance(input[list(input.keys())[0]], dict):
         pos = {node: [pos_dict["pos1"], pos_dict["pos2"], pos_dict["pos3"] if "pos3" in pos_dict else None] \
                for node, pos_dict in input.items()}
-    elif isinstance(input, dict) and isinstance(input[list(input.keys())[0]], list):
+
+    elif isinstance(input, dict) and isinstance(input[list(input.keys())[0]], (list, tuple, np.ndarray)):
         pos = input
 
     else:

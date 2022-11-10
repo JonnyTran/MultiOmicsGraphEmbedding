@@ -227,30 +227,32 @@ class RelationAttention(ABC):
                 head_type, tail_type = metapath[0], metapath[-1]
                 edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], )
                 if edge_values is None or (batch_sizes and tail_type not in batch_sizes): continue
+                elif isinstance(edge_values, Tensor) and edge_values.dim() < 2: continue
 
                 # Edge attn
                 if not save_count_only:
                     value, row, col = edge_values.mean(1).cpu().numpy(), \
                                       edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
-                    csc_matrix = ssp.coo_matrix((value, (row, col)),
+                    adj_coo = ssp.coo_matrix((value, (row, col)),
                                                 shape=(global_node_index[head_type].shape[0],
                                                        global_node_index[tail_type].shape[0]))
-                    # Create Sparse DataFrame of size (batch_nids, neighbor_nids)
-                    edge_attn = pd.DataFrame.sparse.from_spmatrix(csc_matrix.transpose().tocsc())
-                    edge_attn.index = pd.Index(global_node_index[tail_type].cpu().numpy(), name=f"{tail_type}_nid")
-                    edge_attn.columns = pd.Index(global_node_index[head_type].cpu().numpy(), name=f"{head_type}_nid")
-                    edge_attn = edge_attn.loc[batch_nids]
+                    adj_coo = adj_coo[:, 0:len(batch_nids)]
 
-                    if len(self._alphas) == 0 or metapath_name not in self._alphas:
+                    # Create Sparse DataFrame of size (batch_nids, neighbor_nids)
+                    edge_attn = pd.DataFrame.sparse.from_spmatrix(
+                        adj_coo.transpose(),
+                        index=pd.Index(batch_nids, name=f"{tail_type}_nid"),
+                        columns=pd.Index(global_node_index[head_type].cpu().numpy(), name=f"{head_type}_nid"))
+
+                    # Update the alphas dataframes
+                    if metapath_name not in self._alphas:
                         self._alphas[metapath_name] = edge_attn
                     else:
-                        # Update the df
                         old_cols = edge_attn.columns.intersection(self._alphas[metapath_name].columns)
                         if len(new_cols):
                             self._alphas[metapath_name] = self._alphas[metapath_name].join(
                                 edge_attn.filter(new_cols, axis="columns"), how="left")
 
-                        # Fillna attn values
                         new_cols = edge_attn.columns.difference(self._alphas[metapath_name].columns)
                         if len(old_cols):
                             self._alphas[metapath_name].update(
@@ -483,6 +485,19 @@ class RelationMultiLayerAgg:
     def _counts_sum(self):
         return {i: pd.concat(layer._counts.values(), axis=1).sum(0).astype(int).to_dict() for i, layer in
                 enumerate(self.layers)}
+
+    @property
+    def _counts_avg(self):
+        counts = {}
+        for i, layer in enumerate(self.layers):
+            if not layer._counts: continue
+            ntype_ecounts = pd.concat(layer._counts, axis=0).groupby(axis=0, level=0).agg(np.nanmean)
+            etype_counts = {}
+            for ntype, s in ntype_ecounts.iterrows():
+                etype_counts.update(s.dropna().to_dict())
+            counts[i] = etype_counts
+
+        return counts
 
     def get_sankey_flow(self, node_types=None, self_loop=True, agg="median"):
         """

@@ -452,7 +452,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X, save_betas=2 if batch_nb == 0 else True)
+        y_pred = self.forward(X, save_betas=2)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
@@ -469,7 +469,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X, save_betas=True)
+        y_pred = self.forward(X, save_betas=2)
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)

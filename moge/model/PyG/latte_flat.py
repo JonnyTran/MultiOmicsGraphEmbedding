@@ -310,8 +310,6 @@ class LATTEConv(MessagePassing, RelationAttention):
                                                         sizes=sizes,
                                                         filter_metapaths=higher_relations,
                                                         use_edge_values=False,
-                                                        # edge_threshold=0.5,
-                                                        # device="cpu",
                                                         )
         else:
             higher_order_edge_index = edge_pred_dict

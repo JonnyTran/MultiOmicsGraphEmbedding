@@ -265,7 +265,7 @@ class NodeEmbeddingEvaluator(LightningModule):
             if beta_avg:
                 self.wandb_experiment.log({'_betas': beta_avg, 'epoch': self.current_epoch, **kwargs})
 
-            edge_counts = self.embedder._counts_sum
+            edge_counts = self.embedder._counts_avg
             if edge_counts:
                 self.wandb_experiment.log({'_counts': edge_counts, 'epoch': self.current_epoch, **kwargs})
 

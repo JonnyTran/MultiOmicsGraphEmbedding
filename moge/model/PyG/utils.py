@@ -25,27 +25,57 @@ def max_num_hops(metapaths: List[Tuple[str, str, str]]):
         return None
 
 
-def convert_to_nx_edgelist(edge_index_dict: Dict[Tuple[str, str, str], Tensor], node_names: Dict[str, pd.Index],
-                           global_node_idx: Dict[str, Tensor] = None) -> Dict[str, List[Tuple[str, str]]]:
-    edge_list = {}
-    for metapath, edge_index in edge_index_dict.items():
-        head_type, etype, tail_type = metapath
+def convert_to_nx_edgelist(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor,Tensor]]],
+                           node_names: Dict[str, pd.Index],
+                           global_node_idx: Optional[Dict[str, Tensor]] = None,
+                           sep="-") \
+        -> Dict[str, List[Tuple[str, str]]]:
+    """
+    Convert edge_index_dict format to edgelist format
+    Args:
+        edge_index_dict ():
+        node_names ():
+        global_node_idx ():
+        sep (str): default "-"
+            If not None, then the node names in edgelists will contain the node type and the node name, separated by
+            this string. If None, then the edgelists only contain the node names.
+
+    Returns:
+
+    """
+    edgelists = {}
+    for metapath, edge_index_tup in edge_index_dict.items():
+        head_type, tail_type = metapath[0], metapath[-1]
+        etype = '.'.join(metapath[1::2])
+
         if "rev_" in metapath:
             continue
 
-        head_nodes = edge_index[0] if not global_node_idx else global_node_idx[head_type][edge_index[0]]
-        tail_nodes = edge_index[1] if not global_node_idx else global_node_idx[tail_type][edge_index[1]]
+        edge_index, edge_value = get_edge_index_values(edge_index_tup)
 
-        if isinstance(head_nodes, Tensor):
-            head_nodes = head_nodes.detach().numpy()
-        if isinstance(tail_nodes, Tensor):
-            tail_nodes = tail_nodes.detach().numpy()
+        head_nids = edge_index[0] if not global_node_idx else global_node_idx[head_type][edge_index[0]]
+        tail_nids = edge_index[1] if not global_node_idx else global_node_idx[tail_type][edge_index[1]]
 
-        head_nodes = head_type + "-" + node_names[head_type][head_nodes]
-        tail_nodes = tail_type + "-" + node_names[tail_type][tail_nodes]
-        edge_list[etype] = [(u, v) for u, v in zip(head_nodes, tail_nodes)]
+        if isinstance(head_nids, Tensor):
+            head_nids = head_nids.detach().numpy()
+        if isinstance(tail_nids, Tensor):
+            tail_nids = tail_nids.detach().numpy()
 
-    return edge_list
+        if sep:
+            head_nodes = head_type + sep + node_names[head_type][head_nids]
+            tail_nodes = tail_type + sep + node_names[tail_type][tail_nids]
+        else:
+            head_nodes = node_names[head_type][head_nids]
+            tail_nodes = node_names[tail_type][tail_nids]
+
+        if edge_value is not None:
+            assert edge_value.dim() == 1, f"edge_value.shape: {edge_value.shape}"
+            edgelists[etype] = [(u, v, {'weight': w}) for u, v, w in zip(head_nodes, tail_nodes,
+                                                                         edge_value.cpu().numpy())]
+        else:
+            edgelists[etype] = [(u, v) for u, v in zip(head_nodes, tail_nodes)]
+
+    return edgelists
 
 
 def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tuple[str, str, str]],
@@ -138,7 +168,8 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, Li
 
 
 def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],
-                          filter_edge=False, threshold=0.3, use_edge_values=True) -> Tuple[Tensor, Tensor]:
+                          filter_edge=False, threshold=0.3, use_edge_values=True) \
+        -> Tuple[Tensor, Optional[Tensor]]:
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
 

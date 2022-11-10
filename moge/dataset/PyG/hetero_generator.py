@@ -14,8 +14,10 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+import tqdm
 from logzero import logger
 from pandas import DataFrame, Series, Index
+from scipy.sparse import coo_matrix
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric import transforms
@@ -540,54 +542,105 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return df
 
-    def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
-                    edge_index_dict: Dict[Tuple[str, str, str], Tensor] = [],
-                    global_node_idx: Dict[str, Tensor] = None) -> nx.MultiDiGraph:
+    def to_networkx(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor] = None,
+                    alphas_adjacencies: Dict[str, pd.DataFrame]=None,
+                    nodes_subgraph: Dict[str, Union[List[str], List[int]]] = None,
+                    min_value:float = None,
+                    global_node_idx: Dict[str, Tensor] = None,
+                    sep="-") -> nx.MultiDiGraph:
+        """
+
+        Args:
+            edge_index_dict ():
+            alphas_adjacencies (Dict[str, pd.DataFrame]):
+                A dict of metapaths (joined str) to sparse DataFrames adjancecy matrix with index and columns containing
+                node index for self.nodes.
+            nodes_subgraph ():
+            min_value ():
+            global_node_idx ():
+            sep ():
+
+        Returns:
+
+        """
         G = nx.MultiDiGraph()
 
-        if edge_index_dict is None or len(edge_index_dict) == 0:
-            edge_index_dict = self.G.edge_index_dict
+        if edge_index_dict:
+            if isinstance(edge_index_dict, list):
+                # edge_index_dict is a list of metapaths
+                edge_index_dict = {m: eidx for m, eidx in self.G.edge_index_dict.items() if
+                                   m in edge_index_dict or m[1] in edge_index_dict}
 
-        elif isinstance(edge_index_dict, list):
-            # edge_index_dict is a list of metapaths
-            edge_index_dict = {m: eidx for m, eidx in self.G.edge_index_dict.items() if
-                               m in edge_index_dict or m[1] in edge_index_dict}
+            edge_index_dict = {m: eid for m, eid in edge_index_dict.items() if "rev_" not in m[1]}
 
-        edge_index_dict = {m: eid for m, eid in edge_index_dict.items() if "rev_" not in m[1]}
+            # Need sep in order to differentiate same node names between multiple ntypes
+            edgelists = convert_to_nx_edgelist(edge_index_dict, node_names=self.nodes,
+                                               global_node_idx=global_node_idx,
+                                               sep=sep)
+            for etype, edges in edgelists.items():
+                G.add_edges_from(edges, etype=etype)
 
-        edge_list = convert_to_nx_edgelist(edge_index_dict, node_names=self.nodes,
-                                           global_node_idx=global_node_idx)
-        for etype, edges in edge_list.items():
-            G.add_edges_from(edges, etype=etype)
+            # Filter by `nodes` to get subgraph
+            if nodes_subgraph:
+                filter_nodes = []
 
-        if nodes:
-            filter_nodes = []
+                for ntype, node_list in nodes_subgraph.items():
+                    if isinstance(node_list, Tensor):
+                        node_list = node_list.detach().cpu().numpy().tolist()
 
-            for ntype, node_list in nodes.items():
-                if isinstance(node_list, Tensor):
-                    node_list = node_list.detach().numpy().tolist()
+                    if all(isinstance(node, str) for node in node_list):
+                        select_nodes = pd.Index(node_list)
+                    elif all(isinstance(node, int) for node in node_list):
+                        select_nodes = self.nodes[ntype][nodes_subgraph[ntype]]
+                    else:
+                        print([type(node) for node in node_list])
+                        select_nodes = []
 
-                if all(isinstance(node, str) for node in node_list):
-                    select_nodes = ntype + "-" + pd.Index(node_list)
-                elif all(isinstance(node, int) for node in node_list):
-                    select_nodes = ntype + "-" + self.nodes[ntype][nodes[ntype]]
-                else:
-                    print([type(node) for node in node_list])
-                    select_nodes = []
+                    if sep and isinstance(select_nodes, pd.Index):
+                        select_nodes = ntype + "-" + select_nodes
 
-                if G.number_of_nodes() > 0 and set(select_nodes).issubset(set(G.nodes())):
+                    if set(select_nodes).difference(set(G.nodes())):
+                        G.add_nodes_from(set(select_nodes).difference(set(G.nodes())))
+
                     filter_nodes.extend(select_nodes)
-                else:
-                    G.add_nodes_from(select_nodes)
 
-            if len(filter_nodes):
-                H = G.copy()
-                H = G.subgraph(filter_nodes)
-            else:
-                H = G
+                if len(filter_nodes):
+                    G = G.copy().subgraph(filter_nodes)
+
+        elif alphas_adjacencies:
+            for etype, adj in tqdm.tqdm(alphas_adjacencies.items(), total=len(alphas_adjacencies)):
+                metapath = etype.split(".")
+                head_type, tail_type = metapath[0], metapath[-1]
+                coo:coo_matrix = adj.sparse.to_coo()
+
+                if isinstance(min_value, (int,float)):
+                    coo = coo.multiply(coo >= min_value)
+
+                src_idx = adj.columns[coo.col]
+                dst_idx = adj.index[coo.row]
+                weight = coo.data
+
+                if sep:
+                    src = head_type + "-" + self.nodes[head_type][src_idx]
+                    dst = tail_type + "-" + self.nodes[tail_type][dst_idx]
+                else:
+                    src = self.nodes[head_type][src_idx]
+                    dst = self.nodes[tail_type][dst_idx]
+
+                # Filter by `nodes` to get subgraph
+                if nodes_subgraph and tail_type in nodes_subgraph:
+                    mask = self.nodes[tail_type][dst_idx].isin(nodes_subgraph[tail_type])
+                    src, dst, weight = src[mask], dst[mask], weight[mask]
+
+                key = '.'.join(metapath[1::2])
+                G.add_edges_from(((u, v, key, {'weight': w}) for u,v, w in zip(src, dst, weight)))
         else:
-            H = G.copy()
-            H.remove_nodes_from(list(nx.isolates(H)))
+            raise Exception('Must provide at least one of `edge_index_dict` or `alphas_adjacencies`')
+
+
+
+        H = G.copy()
+        H.remove_nodes_from(list(nx.isolates(H)))
 
         return H
 
@@ -1047,11 +1100,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return X, edge_pred, _
 
-    def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
-                    edge_index_dict: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = [],
-                    global_node_idx: Dict[str, Tensor] = None,
-                    pos_edges: Dict[Tuple[str, str, str], Tensor] = None) -> nx.MultiDiGraph:
-        G = super().to_networkx(nodes, edge_index_dict, global_node_idx=global_node_idx)
+    def to_networkx(self, edge_index_dict: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = None,
+                    nodes_subgraph: Dict[str, Union[List[str], List[int]]] = None, global_node_idx: Dict[str, Tensor] = None) -> nx.MultiDiGraph:
+        G = super().to_networkx(edge_index_dict, nodes_subgraph, global_node_idx=global_node_idx)
 
         if pos_edges is not None:
             edge_list = convert_to_nx_edgelist(pos_edges, node_names=self.nodes,
