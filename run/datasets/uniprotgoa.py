@@ -243,6 +243,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # Save hparams attr
     hparams.min_count = min_count
+    hparams.n_classes = dataset.n_classes
     dataset.hparams = hparams
     dataset._name = os.path.basename(load_path)
 
@@ -272,7 +273,6 @@ def parse_options(hparams, dataset_path):
 
     # ntype_subset
     if 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, str):
-        assert len(hparams.ntype_subset)
         ntype_subset = hparams.ntype_subset.split(" ")
     elif 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, Iterable):
         ntype_subset = hparams.ntype_subset

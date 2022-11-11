@@ -227,6 +227,7 @@ class RelationAttention(ABC):
                 metapath_name = ".".join(metapath)
                 head_type, tail_type = metapath[0], metapath[-1]
                 edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], )
+                if edge_index is None or edge_index.size(1) == 0: continue
 
                 # Edge counts
                 dst_nids, dst_edge_counts = edge_index[1].cpu().unique(return_counts=True)

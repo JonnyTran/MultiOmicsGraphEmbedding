@@ -184,9 +184,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 assert not self.nodes[pred_ntype].duplicated().any()
 
             # Missing nodes_namespace
-            if ntype not in self.nodes_namespace:
-                self.nodes_namespace[ntype] = pd.Series([ntype for i in range(self.n_classes)],
-                                                        index=self.classes)
+            if pred_ntype not in self.nodes_namespace:
+                self.nodes_namespace[pred_ntype] = pd.Series([pred_ntype for i in range(self.n_classes)],
+                                                             index=self.classes)
 
         # Rename nodes_namespace
         self.nodes_namespace = {ntype: df.replace({'biological_process': 'BPO',
