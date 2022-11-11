@@ -481,6 +481,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         """
         for ntype in self.node_types:
             if ntype not in self.multiomics.get_omics_list(): continue
+            elif SEQUENCE_COL not in self.annotations[ntype].columns:
+                continue
 
             nodes_w_seq = self.annotations[ntype].index[self.annotations[ntype][SEQUENCE_COL].notnull()]
             self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)

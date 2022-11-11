@@ -48,14 +48,13 @@ def train(hparams: Namespace):
         model = MLP(hparams, dataset, metrics=METRICS)
     else:
         model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
+        hparams.method = f"'LATTE-{hparams.t_order}"
 
     tags = [] + hparams.dataset.split(" ")
     if hasattr(hparams, "namespaces"):
         tags.extend(hparams.namespaces)
     if hasattr(dataset, 'tags'):
         tags.extend(dataset.tags)
-
-    hparams.method = f"'LATTE-{hparams.t_order}"
 
     logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
     logger.log_hyperparams(hparams)
@@ -92,21 +91,7 @@ def train(hparams: Namespace):
     )
     trainer.tune(model)
     trainer.fit(model)
-
-    try:
-        if trainer.checkpoint_callback is not None:
-            model = LATTEFlatNodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
-                                                          hparams=hparams,
-                                                          dataset=dataset,
-                                                          metrics=METRICS)
-            print(trainer.checkpoint_callback.best_model_path)
-
-
-    except Exception as e:
-        print(e)
-        traceback.print_exc()
-    finally:
-        trainer.test(model)
+    trainer.test(model)
 
 if __name__ == "__main__":
     parser = ArgumentParser()

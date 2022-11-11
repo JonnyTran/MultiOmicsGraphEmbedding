@@ -1,5 +1,6 @@
 import os.path
 import pickle
+import traceback
 from argparse import Namespace
 from collections import defaultdict
 from collections.abc import Iterable
@@ -59,10 +60,14 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
                               exclude_etypes, feature, save_path)
 
     if os.path.exists(os.path.expanduser(join(load_path, "metadata.json"))):
-        logger.info(f'Loading saved HeteroNodeClfDataset at {load_path}')
-        dataset = HeteroNodeClfDataset.load(load_path, **hparams.__dict__)
+        try:
+            logger.info(f'Loading saved HeteroNodeClfDataset at {load_path}')
+            dataset = HeteroNodeClfDataset.load(load_path, **hparams.__dict__)
 
-        return dataset
+            return dataset
+        except Exception as e:
+            traceback.print_exc()
+            pass
     else:
         print("Building", os.path.basename(load_path))
 
