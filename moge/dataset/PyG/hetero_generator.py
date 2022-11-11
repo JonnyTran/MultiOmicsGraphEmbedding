@@ -233,7 +233,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 pickle.dump(nodes, f)
 
         for ntype, df in self.network.annotations.items():
-            prev_dir_node_ann_pickle = join(os.path.dirname(path), f'{ntype}.pickle')
+            if ntype not in self.G.node_types: continue
             node_ann_pickle = join(path, f'{ntype}.pickle')
 
             if not os.path.exists(node_ann_pickle):

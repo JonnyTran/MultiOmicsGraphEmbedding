@@ -278,13 +278,14 @@ def parse_options(hparams, dataset_path):
 
     # ntype_subset
     if 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, str):
-        ntype_subset = hparams.ntype_subset.split(" ")
+        if len(hparams.ntype_subset) == 0:
+            ntype_subset = [head_ntype]
+        else:
+            ntype_subset = hparams.ntype_subset.split(" ")
     elif 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, Iterable):
         ntype_subset = hparams.ntype_subset
     else:
         ntype_subset = None
-    if isinstance(ntype_subset, list) and len(ntype_subset) == 0 and head_ntype is not None:
-        ntype_subset = [head_ntype]
 
     # Pred ntypes
     if isinstance(hparams.pred_ntypes, str):
