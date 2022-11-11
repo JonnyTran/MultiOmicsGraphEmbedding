@@ -22,12 +22,12 @@ from scipy.sparse import coo_matrix
 from six.moves import intern
 from torch import Tensor
 from torch.utils.data import DataLoader
-from torch_geometric import transforms
 from torch_geometric.data import HeteroData
 from torch_geometric.utils import remove_self_loops
 from torch_sparse.tensor import SparseTensor
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
+from moge.dataset.PyG.utils import AddMetaPaths
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.io import get_attrs
 from moge.dataset.sequences import SequenceTokenizers
@@ -341,7 +341,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Add metapaths to hetero before
         if add_metapaths and callable(transform_fn):
-            op = transforms.AddMetaPaths(add_metapaths, max_sample=max_sample, weighted=True)
+            op = AddMetaPaths(add_metapaths, max_sample=max_sample, weighted=True)
             logger.info(f"AddMetaPaths {len(add_metapaths)}")
             transform = lambda x: transform_fn(x, op)
         elif callable(transform_fn):
@@ -562,6 +562,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     num_hops: int = 2,
                     min_value: float = None,
                     global_node_idx: Dict[str, Tensor] = None,
+                    node_title: Dict[str, str] = None,
                     sep="-", ) -> nx.MultiDiGraph:
         """
 
@@ -662,8 +663,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                  color=intern(colorhash.ColorHash(key).hex))
                 # Nodes
                 for ntype, nodelist in zip([head_type, tail_type], [src, dst]):
-                    if ntype == "Protein" and 'protein_name' in self.network.annotations[ntype].columns:
-                        node_label = self.network.annotations[ntype]['protein_name']
+                    if node_title and ntype in node_title and \
+                            node_title[ntype] in self.network.annotations[ntype].columns:
+                        node_label = self.network.annotations[ntype][node_title[ntype]]
+
                         node_attrs = {node: {intern('group'): ntype,
                                              intern('title'): ntype,
                                              intern('label'): node_label[node]} \

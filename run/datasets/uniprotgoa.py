@@ -47,7 +47,6 @@ def get_load_path(name, hparams: Namespace, labels_dataset, ntype_subset, pred_n
 
     return load_path
 
-
 def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
                           save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True) \
         -> HeteroNodeClfDataset:
@@ -325,7 +324,6 @@ def parse_options(hparams, dataset_path):
     return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
            pred_ntypes, uniprotgoa_path, use_reverse
 
-
 def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str, target='go_id',
                           pred_ntypes=['cc', 'bp', 'mf']):
     # Add GOA's from DeepGraphGO to UniProtGOA
@@ -351,7 +349,6 @@ def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str, target=
     test_nodes = set(annot_df.query('test_mask == True').index)
 
     return annot_df, train_nodes, valid_nodes, test_nodes
-
 
 def _replace_alt_id(li: List, mapper: Mapping[str, str]) -> List[str]:
     assert isinstance(mapper, dict), f"{type(mapper)}"

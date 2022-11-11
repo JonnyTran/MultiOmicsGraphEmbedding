@@ -12,6 +12,7 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
+from logzero import logger
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
@@ -294,7 +295,8 @@ class LATTENodeClf(NodeClfTrainer):
         try:
             if self.wandb_experiment is not None:
                 dataloader = self.test_dataloader()
-                y_true, scores, embeddings, global_node_index = self.predict(dataloader, save_betas=False)
+                self.eval()
+                y_true, scores, embeddings, global_node_index = self.predict(dataloader, save_betas=3)
 
                 if hasattr(self.dataset, "nodes_namespace"):
                     y_true_dict = self.dataset.split_array_by_namespace(y_true, axis=1)
@@ -315,6 +317,7 @@ class LATTENodeClf(NodeClfTrainer):
                             final_metrics = {
                                 f'test_{namespace}_aupr': pair_aupr(y_true_dict[namespace], y_pred_dict[namespace]),
                                 f'test_{namespace}_fmax': fmax(y_true_dict[namespace], y_pred_dict[namespace])[0], }
+                            logger.info(f"final metrics {final_metrics}")
                             self.wandb_experiment.log(final_metrics | {'epoch': self.current_epoch})
 
                         self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
@@ -365,7 +368,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
                                    attn_heads=hparams.attn_heads,
                                    attn_activation=hparams.attn_activation,
                                    attn_dropout=hparams.attn_dropout,
-                                   edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
+                                   edge_sampling=getattr(hparams, 'edge_sampling', False),
                                    hparams=hparams)
 
         # Output layer
@@ -380,12 +383,12 @@ class LATTEFlatNodeClf(LATTENodeClf):
 
         self.criterion = ClassificationLoss(
             loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                 'use_class_weights' in hparams and hparams.use_class_weights else None,
-            pos_weight=dataset.pos_weight if hasattr(dataset, "pos_weight") and
-                                             'use_pos_weights' in hparams and hparams.use_pos_weights else None,
+            class_weight=getattr(dataset, 'class_weight', None) \
+                if getattr(hparams, 'use_class_weights', False) else None,
+            pos_weight=getattr(dataset, 'pos_weight', None) \
+                if getattr(hparams, 'use_pos_weights', False) else None,
             multilabel=dataset.multilabel,
-            reduction=hparams.reduction if "reduction" in hparams else "mean")
+            reduction=getattr(hparams, 'reduction', 'mean'))
 
     def configure_sharded_model(self):
         # modules are sharded across processes
