@@ -404,25 +404,33 @@ class LATTEFlatNodeClf(LATTENodeClf):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
+        batch_sizes = inputs["batch_size"]
+        if isinstance(self.classifier, LabelNodeClassifer):
+            # Ensure we count betas and alpha values for the `pred_ntypes`
+            batch_sizes = batch_sizes | self.classifier.class_sizes
+
         h_out = {}
+        #  Node feature or embedding input
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
                                                   split_size=math.sqrt(self.hparams.batch_size // 4)))
-
+        # Node sequence features
         if len(h_out) < len(inputs["global_node_index"].keys()):
             embs = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
+        # GNN embedding
         h_out = self.embedder.forward(h_out,
                                       edge_index_dict=inputs["edge_index_dict"],
                                       global_node_index=inputs["global_node_index"],
-                                      batch_sizes=inputs["batch_size"],
+                                      batch_sizes=batch_sizes,
                                       **kwargs)
 
+        # Node classification
         if hasattr(self, "classifier"):
             head_ntype_embeddings = h_out[self.head_node_type]
-            if "batch_size" in inputs and self.head_node_type in inputs["batch_size"]:
-                head_ntype_embeddings = head_ntype_embeddings[:inputs["batch_size"][self.head_node_type]]
+            if "batch_size" in inputs and self.head_node_type in batch_sizes:
+                head_ntype_embeddings = head_ntype_embeddings[:batch_sizes[self.head_node_type]]
 
             logits = self.classifier.forward(head_ntype_embeddings, h_dict=h_out)
         else:

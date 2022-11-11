@@ -114,12 +114,11 @@ class LabelNodeClassifer(nn.Module):
             self.activation = nn.Softmax()
 
     def forward(self, emb: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
-        # TODO ensure cls_emb is same shape as self.n_classes
         for ntype in self.pred_ntypes:
             cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
 
         assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb.shape}) != n_classes ({self.n_classes})"
-        logits = emb @ cls_emb.T + self.bias
+        logits = (emb @ cls_emb.T) + self.bias
 
         if hasattr(self, 'activation'):
             logits = self.activation(logits)

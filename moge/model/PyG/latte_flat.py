@@ -1,7 +1,6 @@
 import copy
 import traceback
 from argparse import Namespace
-from pprint import pprint
 from typing import List, Dict, Tuple, Union
 
 import torch
@@ -14,7 +13,6 @@ from torch_geometric.utils import softmax
 from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
-from moge.model.utils import tensor_sizes
 
 
 class LATTEConv(MessagePassing, RelationAttention):
@@ -24,10 +22,13 @@ class LATTEConv(MessagePassing, RelationAttention):
                  layernorm=False, batchnorm=False, dropout=0.2,
                  edge_threshold=0.0, n_layers=False, verbose=False) -> None:
         super().__init__(aggr="add", flow="source_to_target", node_dim=0)
+        self.verbose = verbose
+
         self.layer = layer
         self.n_layers = n_layers
+        self.is_last_layer = (self.layer + 1) == self.n_layers
         self.t_order = t_order
-        self.verbose = verbose
+
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
         print(f"LATTE {self.layer + 1}, metapaths {len(metapaths)}, max_order {max_num_hops(metapaths)}")
@@ -238,14 +239,14 @@ class LATTEConv(MessagePassing, RelationAttention):
             try:
                 self.update_relation_attn(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
                                           global_node_index=global_node_index,
-                                          batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None)
+                                          batch_sizes=batch_sizes if self.is_last_layer else None)
                 if save_betas >= 2:
-                    self.update_edge_attn(edge_index_dict=edge_pred_dict, global_node_index=global_node_index,
-                                          batch_sizes=batch_sizes if (self.layer + 1) == self.n_layers else None,
+                    self.update_edge_attn(edge_index_dict=edge_pred_dict,
+                                          global_node_index=global_node_index,
+                                          batch_sizes=batch_sizes if self.is_last_layer else None,
                                           save_count_only=save_betas == 2)
             except Exception as e:
                 traceback.print_exc()
-                pprint(tensor_sizes(edge_pred_dict=edge_pred_dict), width=400)
 
         return h_out, edge_pred_dicts
 
@@ -405,12 +406,13 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
         layers = []
         for l in range(n_layers):
             is_last_layer = l + 1 == n_layers
+            layer_t_order = l + 1 if n_layers >= t_order else t_order
 
-            while max_num_hops(higher_order_metapaths) < t_order:
+            while max_num_hops(higher_order_metapaths) < layer_t_order:
                 higher_order_metapaths = join_metapaths(higher_order_metapaths, metapaths, skip_undirected=False)
 
             l_layer_metapaths = filter_metapaths(metapaths=metapaths + higher_order_metapaths,
-                                                 order=list(range(1, t_order + 1)),
+                                                 order=list(range(1, layer_t_order + 1)),
                                                  tail_type=output_ntypes if is_last_layer else None,
                                                  filter=hparams.filter_metapaths if 'filter_metapaths' in hparams else None,
                                                  exclude=hparams.exclude_metapaths if 'exclude_metapaths' in hparams else None,

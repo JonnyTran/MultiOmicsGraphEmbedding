@@ -168,7 +168,8 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
                       weights: Optional[Dict[str, Tensor]] = None) \
         -> Tuple[Tensor, Tensor, Tensor]:
     # Filter out node types which have no labels and ensure same order of ntypes
-    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items()})
+    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items() \
+                              if not isinstance(y_true, dict) or ntype in y_true})
 
     if isinstance(y_true, dict):
         y_trues = [y_true[ntype][:size] for ntype, size in batch_size.items()]

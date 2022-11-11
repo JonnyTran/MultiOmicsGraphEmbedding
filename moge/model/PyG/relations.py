@@ -215,6 +215,7 @@ class RelationAttention(ABC):
         if not hasattr(self, "_alphas"):
             self._alphas = {}
 
+        # print(tensor_sizes(global_node_index=global_node_index, batch_sizes=batch_sizes))
         for ntype, nids in global_node_index.items():
             if batch_sizes and ntype in batch_sizes:
                 batch_nids = nids[:batch_sizes[ntype]].cpu().numpy()
@@ -226,17 +227,29 @@ class RelationAttention(ABC):
                 metapath_name = ".".join(metapath)
                 head_type, tail_type = metapath[0], metapath[-1]
                 edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], )
-                if edge_values is None or (batch_sizes and tail_type not in batch_sizes): continue
-                elif isinstance(edge_values, Tensor) and edge_values.dim() < 2: continue
+
+                # Edge counts
+                dst_nids, dst_edge_counts = edge_index[1].cpu().unique(return_counts=True)
+                dst_nids = nids[dst_nids].cpu().numpy()
+
+                dst_counts = pd.concat(
+                    [pd.Series(dst_edge_counts.cpu().numpy(), index=dst_nids, name=metapath_name, dtype=int),
+                     pd.Series(0, index=set(batch_nids).difference(dst_nids), name=metapath_name, dtype=int)],
+                    axis=0)
+                dst_counts = dst_counts.loc[batch_nids]
+                counts_df.append(dst_counts)
 
                 # Edge attn
                 if not save_count_only:
+                    if edge_values is None or (batch_sizes and tail_type not in batch_sizes):
+                        continue
+                    elif isinstance(edge_values, Tensor) and edge_values.dim() < 2:
+                        continue
                     value, row, col = edge_values.mean(1).cpu().numpy(), \
                                       edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
                     adj_coo = ssp.coo_matrix((value, (row, col)),
-                                                shape=(global_node_index[head_type].shape[0],
-                                                       global_node_index[tail_type].shape[0]))
-
+                                             shape=(global_node_index[head_type].shape[0],
+                                                    global_node_index[tail_type].shape[0]))
 
                     # Create Sparse DataFrame of size (batch_nids, neighbor_nids)
                     edge_attn = pd.DataFrame.sparse.from_spmatrix(
@@ -257,17 +270,6 @@ class RelationAttention(ABC):
                         if len(old_cols):
                             self._alphas[metapath_name].update(
                                 edge_attn.filter(old_cols, axis='columns'), overwrite=True)
-
-                # Edge counts
-                dst_nids, dst_edge_counts = edge_index[1].cpu().unique(return_counts=True)
-                dst_nids = nids[dst_nids].cpu().numpy()
-
-                dst_counts = pd.concat(
-                    [pd.Series(dst_edge_counts.cpu().numpy(), index=dst_nids, name=metapath_name, dtype=int),
-                     pd.Series(0, index=set(batch_nids).difference(dst_nids), name=metapath_name, dtype=int)],
-                    axis=0)
-                dst_counts = dst_counts.loc[batch_nids]
-                counts_df.append(dst_counts)
 
             if counts_df:
                 counts_df = pd.concat(counts_df, axis=1, join="outer", copy=False) \
