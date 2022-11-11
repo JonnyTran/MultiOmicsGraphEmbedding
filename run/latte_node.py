@@ -55,6 +55,8 @@ def train(hparams: Namespace):
     if hasattr(dataset, 'tags'):
         tags.extend(dataset.tags)
 
+    hparams.method = f"'LATTE-{hparams.t_order}"
+
     logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
     logger.log_hyperparams(hparams)
 

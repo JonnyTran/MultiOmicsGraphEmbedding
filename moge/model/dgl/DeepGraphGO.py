@@ -20,7 +20,6 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
-from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
@@ -28,6 +27,8 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -237,7 +238,7 @@ class GcnNet(nn.Module):
         for update in self.layers:
             update.reset_parameters()
 
-    def forward(self, blocks: List[DGLBlock], h):
+    def forward(self, blocks: List[DGLBlock], h: Tensor) -> Tensor:
         for i, layer in enumerate(self.layers):
             blocks[i].srcdata['h'] = h
 
@@ -319,11 +320,11 @@ class DeepGraphGO(LightningModule):
         self.log("loss", loss, logger=True, prog_bar=True, on_step=False, on_epoch=True)
 
         # self.train_metrics.update_metrics(torch.sigmoid(logits), y_true)
-        scores = torch.sigmoid(logits).detach().cpu().numpy()
-        y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), pair_aupr(y_true, scores)
-        self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True,
-                      on_step=False, on_epoch=True)
+        # scores = torch.sigmoid(logits).detach().cpu().numpy()
+        # y_true = y_true.detach().cpu().numpy()
+        # (fmax_, t_), aupr_ = fmax(y_true, scores), pair_aupr(y_true, scores)
+        # self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True,
+        #               on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
@@ -390,25 +391,25 @@ class DeepGraphGO(LightningModule):
         return torch.sigmoid(self.forward(blocks)).cpu().numpy()
 
     def training_epoch_end(self, outputs):
-        super().training_epoch_end(outputs)
         if hasattr(self, 'train_metrics'):
             metrics_dict = self.train_metrics.compute_metrics()
             self.train_metrics.reset_metrics()
             self.log_dict(metrics_dict, prog_bar=True)
+        super().training_epoch_end(outputs)
 
     def validation_epoch_end(self, outputs):
-        super().validation_epoch_end(outputs)
         if hasattr(self, 'valid_metrics'):
             metrics_dict = self.valid_metrics.compute_metrics()
             self.valid_metrics.reset_metrics()
             self.log_dict(metrics_dict, prog_bar=True)
+        super().validation_epoch_end(outputs)
 
     def test_epoch_end(self, outputs):
-        super().test_epoch_end(outputs)
         if hasattr(self, 'test_metrics'):
             metrics_dict = self.test_metrics.compute_metrics()
             self.test_metrics.reset_metrics()
             self.log_dict(metrics_dict, prog_bar=True)
+        super().test_epoch_end(outputs)
 
     def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
@@ -558,8 +559,9 @@ def load_dgl_graph(data_cnf, model_cnf, model_id=None, subset_pid: List[str] = N
     # Binarize multilabel GO annotations
     mlb = get_mlb(data_cnf['mlb'], train_go_labels)
     num_labels = len(mlb.classes_)
-    train_y, valid_y, test_y = mlb.transform(train_go_labels).astype(np.float32), mlb.transform(valid_go_labels).astype(
-        np.float32), mlb.transform(test_go_labels).astype(np.float32)
+    train_y, valid_y, test_y = mlb.transform(train_go_labels).astype(np.float32), \
+                               mlb.transform(valid_go_labels).astype(np.float32), \
+                               mlb.transform(test_go_labels).astype(np.float32)
 
     # Get train/valid/test index split and labels index_list
     *_, train_idx, train_y = get_ppi_idx(train_pid_list, train_y, net_pid_map)

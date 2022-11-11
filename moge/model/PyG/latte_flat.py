@@ -69,9 +69,8 @@ class LATTEConv(MessagePassing, RelationAttention):
             for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
 
         # self.relation_conv: Dict[str, MetapathGATConv] = nn.ModuleDict({
-        #     ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=2,
-        #                            attn_heads=attn_heads,
-        #                            attn_dropout=attn_dropout) \
+        #     ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=1,
+        #                            attn_heads=attn_heads, attn_dropout=attn_dropout) \
         #     for ntype in self.node_types})
 
         if attn_activation == "sharpening":

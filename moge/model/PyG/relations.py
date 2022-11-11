@@ -26,7 +26,8 @@ class MetapathGATConv(nn.Module):
         self.n_relations = len(metapaths) + 1
         self.self_index = self.n_relations - 1
 
-        self.edge_indexes = {n: self.generate_fc_edge_index(num_src_nodes=n) for n in range(1, self.n_relations + 1)}
+        self.edge_indexes = {n: self.generate_fc_edge_index(num_src_nodes=n) \
+                             for n in range(1, self.n_relations + 1)}
 
         self.n_layers = n_layers
         self.attn_heads = attn_heads
@@ -47,8 +48,7 @@ class MetapathGATConv(nn.Module):
                                   device=device, dtype=torch.long, requires_grad=False).T
         return edge_index
 
-    def construct_multigraph(self, relation_embs: Tensor) \
-            -> Data:
+    def construct_multigraph(self, relation_embs: Tensor) -> Data:
         num_nodes = relation_embs.size(0)
         nid = torch.arange(self.n_relations, device=relation_embs.device)
 
@@ -109,8 +109,8 @@ class MetapathGATConv(nn.Module):
             if hasattr(self, 'norm'):
                 h = self.norm(h)
 
-        node_embs, betas = self.deconstruct_multigraph(batch, h, alpha_edges, alpha_values)
-        return node_embs, betas
+        h_out, betas = self.deconstruct_multigraph(batch, h, alpha_edges, alpha_values)
+        return h_out, betas
 
 
 class RelationAttention(ABC):

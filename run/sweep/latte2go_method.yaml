@@ -11,10 +11,9 @@ parameters:
   root_path:
     values:
       - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
-  #      - '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
-  #  labels_dataset:
-  #    values:
-  #      - 'DGG'
+  labels_dataset:
+    values:
+      - 'DGG'
   #  add_parents:
   #    values:
   #      - true
@@ -57,7 +56,7 @@ parameters:
     values: [ 2 ]
   neighbor_loader:
     values: [ 'HGTLoader' ]
-  layer_norm:
+  layernorm:
     values: [ true, false ]
 
   loss_type:
