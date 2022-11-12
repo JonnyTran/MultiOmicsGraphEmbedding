@@ -1,5 +1,4 @@
 import itertools
-import json
 import os
 import pickle
 from argparse import Namespace
@@ -16,6 +15,7 @@ import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 import tqdm
+import yaml
 from logzero import logger
 from pandas import DataFrame, Series, Index
 from scipy.sparse import coo_matrix
@@ -23,7 +23,7 @@ from six.moves import intern
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
-from torch_geometric.utils import remove_self_loops
+from torch_geometric.utils import remove_self_loops, to_undirected
 from torch_sparse.tensor import SparseTensor
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
@@ -50,16 +50,21 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def __init__(self, dataset: HeteroData, seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
-                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
-                 metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
+                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
+                 node_types: List[str] = None,
+                 metapaths: List[Tuple[str, str, str]] = None,
+                 head_node_type: str = None,
                  pred_ntypes: List[str] = None,
-                 edge_dir: str = "in", add_reverse_metapaths: bool = False, inductive: bool = False, **kwargs):
+                 edge_dir: str = "in",
+                 add_reverse_metapaths: bool = False,
+                 undirected_ntypes: List[str] = None,
+                 inductive: bool = False, **kwargs):
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
                          pred_ntypes=pred_ntypes,
                          edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         if seq_tokenizer:
             self.seq_tokenizer = seq_tokenizer
-
+        self.undirected_ntypes = undirected_ntypes
         self.neighbor_loader = neighbor_loader
         self.neighbor_sizes = neighbor_sizes
 
@@ -78,6 +83,17 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if self.use_reverse and not any('rev_' in metapath[1] for metapath in hetero.edge_index_dict):
             transform = T.ToUndirected(merge=False)
             hetero: HeteroData = transform(hetero)
+
+        # Remove the reverse etype for undirected edge type
+        if self.use_reverse and self.undirected_ntypes:
+            for ntype in self.undirected_ntypes:
+                undirected_metapaths = [metapath for metapath in hetero.edge_types \
+                                        if metapath[0] == ntype == metapath[-1]]
+                for metapath in undirected_metapaths:
+                    reversed_metapath = reverse_metapath_name(metapath)
+                    if reversed_metapath in hetero.edge_types:
+                        del hetero[reversed_metapath]
+                        hetero[metapath].edge_index = to_undirected(hetero[metapath].edge_index)
 
         self.metapaths = hetero.edge_types
         self.edge_index_dict = hetero.edge_index_dict
@@ -248,24 +264,25 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             pickle.dump(attrs, f)
 
         # Write metadata to JSON so can be readable
-        def dumper(obj):
-            try:
-                if hasattr(obj, 'toJSON'):
-                    return obj.toJSON()
-                elif isinstance(obj, np.ndarray):
-                    return obj.shape
-                elif isinstance(obj, (pd.Series, pd.Index)):
-                    return obj.shape
-                elif isinstance(obj, pd.DataFrame):
-                    return obj.shape
-            except:
-                return obj.__dict__
+        # def dumper(obj):
+        #     try:
+        #         if hasattr(obj, 'toJSON'):
+        #             return obj.toJSON()
+        #         elif isinstance(obj, np.ndarray):
+        #             return obj.shape
+        #         elif isinstance(obj, (pd.Series, pd.Index)):
+        #             return obj.shape
+        #         elif isinstance(obj, pd.DataFrame):
+        #             return obj.shape
+        #     except:
+        #         return obj.__dict__
+        #
+        # metadata = json.dumps(attrs, indent=4, default=dumper)
+        # with open(join(path, "metadata.json"), "w") as outfile:
+        #     outfile.write(metadata)
 
-        metadata = json.dumps(attrs, indent=4, default=dumper)
-
-        # Writing to metadata.json
-        with open(join(path, "metadata.json"), "w") as outfile:
-            outfile.write(metadata)
+        with open('metadata.yml', 'w') as outfile:
+            yaml.dump(attrs, outfile, default_flow_style=False)
 
     @property
     def name(self) -> str:

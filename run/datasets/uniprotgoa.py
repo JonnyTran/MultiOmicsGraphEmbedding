@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 from logzero import logger
 from sklearn.preprocessing import MultiLabelBinarizer
-from torch_geometric.utils import to_undirected
 
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -48,6 +47,7 @@ def get_load_path(name, hparams: Namespace, labels_dataset, ntype_subset, pred_n
     return load_path
 
 def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
+                          undirected_ntypes: List[str] = ['Protein'],
                           save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True) \
         -> HeteroNodeClfDataset:
     target = 'go_id'
@@ -216,6 +216,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         sequence=True if sequence_tokenizers is not None else False,
         seq_tokenizer=sequence_tokenizers,
         add_reverse_metapaths=use_reverse,
+        undirected_ntypes=getattr(hparams, 'undirected_ntypes', ['Protein']),
         head_node_type=head_ntype,
         neighbor_loader=hparams.neighbor_loader,
         neighbor_sizes=hparams.neighbor_sizes,
@@ -224,13 +225,6 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         pred_ntypes=pred_ntypes,
         ntype_subset=ntype_subset,
         exclude_etypes=exclude_etypes, )
-
-    # Remove the reverse etype for undirected edge type
-    if use_reverse and ('Protein', 'rev_protein-protein', 'Protein') in dataset.G.edge_types:
-        del dataset.G[('Protein', 'rev_protein-protein', 'Protein')]
-        dataset.G[('Protein', 'protein-protein', 'Protein')].edge_index = to_undirected(
-            dataset.G[('Protein', 'protein-protein', 'Protein')].edge_index)
-        dataset.metapaths.pop(dataset.metapaths.index(('Protein', 'rev_protein-protein', 'Protein')))
 
     # Post-processing
     for ntype in pred_ntypes:

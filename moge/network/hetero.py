@@ -240,8 +240,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         elif isinstance(edgelist, nx.Graph):
             self.networks[etype].add_edges_from(edgelist.edges.data(), source=src_type, target=dst_type,
-                                                database=database,
-                                                **kwargs)
+                                                database=database, **kwargs)
 
         src_nodes, dst_nodes = {u for u, v, *_ in edgelist}, {v for u, v, *_ in edgelist}
         src_nodes = src_nodes.intersection(self.nodes[src_type])
