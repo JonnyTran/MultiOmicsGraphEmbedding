@@ -37,7 +37,11 @@ def get_load_path(name, hparams: Namespace, labels_dataset, ntype_subset, pred_n
         options = f"{hparams.species}.{options}"
 
     metapaths = ''.join([e[0] for e in go_etypes] if go_etypes else [])
-    ex_etypes = ''.join(e.lower()[0] for s, e, d in exclude_etypes)
+    try:
+        ex_etypes = ''.join(etype.lower()[0] if isinstance(etype, str) else etype[1].lower()[0] \
+                            for etype in exclude_etypes)
+    except:
+        print(exclude_etypes)
     pntypes = ''.join(''.join(s[0] for s in ntype.split("_")) for ntype in pred_ntypes)
 
     slug = f'{ntypes}-{metapaths}{ex_etypes}-{pntypes}'
@@ -47,7 +51,6 @@ def get_load_path(name, hparams: Namespace, labels_dataset, ntype_subset, pred_n
     return load_path
 
 def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
-                          undirected_ntypes: List[str] = ['Protein'],
                           save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True) \
         -> HeteroNodeClfDataset:
     target = 'go_id'
@@ -58,7 +61,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     load_path = get_load_path(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
                               exclude_etypes, feature, save_path)
 
-    if os.path.exists(os.path.expanduser(join(load_path, "metadata.json"))):
+    if os.path.exists(os.path.expanduser(load_path)):
         try:
             logger.info(f'Loading saved HeteroNodeClfDataset at {load_path}')
             dataset = HeteroNodeClfDataset.load(load_path, **hparams.__dict__)
@@ -292,7 +295,7 @@ def parse_options(hparams, dataset_path):
     # Exclude etype
     exclude_etypes = [(head_ntype, 'associated', go_ntype) for go_ntype in pred_ntypes]
     if 'exclude_etypes' in hparams and hparams.exclude_etypes:
-        exclude_etypes_ = [etype.split(".") if isinstance(etype, str) else etype \
+        exclude_etypes_ = [etype.split(".") if isinstance(etype, str) and '.' in etype else etype \
                            for etype in (hparams.exclude_etypes.split(" ") \
                                              if isinstance(hparams.exclude_etypes, str) \
                                              else hparams.exclude_etypes)]

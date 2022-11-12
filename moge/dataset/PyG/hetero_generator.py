@@ -15,9 +15,9 @@ import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 import tqdm
-import yaml
 from logzero import logger
 from pandas import DataFrame, Series, Index
+from ruamel import yaml
 from scipy.sparse import coo_matrix
 from six.moves import intern
 from torch import Tensor
@@ -59,14 +59,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                  add_reverse_metapaths: bool = False,
                  undirected_ntypes: List[str] = None,
                  inductive: bool = False, **kwargs):
-        super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
-                         pred_ntypes=pred_ntypes,
-                         edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         if seq_tokenizer:
             self.seq_tokenizer = seq_tokenizer
         self.undirected_ntypes = undirected_ntypes
         self.neighbor_loader = neighbor_loader
         self.neighbor_sizes = neighbor_sizes
+
+        super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
+                         pred_ntypes=pred_ntypes,
+                         edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
 
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.x_dict = hetero.x_dict
@@ -281,8 +282,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # with open(join(path, "metadata.json"), "w") as outfile:
         #     outfile.write(metadata)
 
-        with open('metadata.yml', 'w') as outfile:
-            yaml.dump(attrs, outfile, default_flow_style=False)
+        with open(join(path, 'metadata.yml'), 'w') as outfile:
+            yaml.dump(tensor_sizes(attrs), outfile, default_flow_style=False)
 
     @property
     def name(self) -> str:
@@ -576,7 +577,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def to_networkx(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor] = None,
                     alphas_adjacencies: Dict[str, pd.DataFrame] = None,
                     nodes_subgraph: Dict[str, Union[List[str], List[int]]] = None,
-                    num_hops: int = 2,
+                    num_hops: int = 1,
                     min_value: float = None,
                     global_node_idx: Dict[str, Tensor] = None,
                     node_title: Dict[str, str] = None,

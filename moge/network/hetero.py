@@ -226,8 +226,16 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         logger.info(f"Added {len(nodes)} {ntype} nodes")
 
     def add_edges(self, edgelist: Union[nx.Graph, List[Tuple[str, str, Dict]]], etype: Tuple[str, str, str],
-                  database: str,
-                  directed=True, **kwargs):
+                  database: str, directed=True, **kwargs):
+        """
+
+        Args:
+            edgelist ():
+            etype ():
+            database ():
+            directed ():
+            **kwargs (): Attributes to add to all edges
+        """
         src_type, dst_type = etype[0], etype[-1]
         if etype not in self.networks:
             if directed:
@@ -236,11 +244,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 self.networks[etype] = nx.Graph()
 
         if isinstance(edgelist, Iterable):
-            self.networks[etype].add_edges_from(edgelist, source=src_type, target=dst_type, database=database, **kwargs)
+            self.networks[etype].add_edges_from(edgelist, database=database, **kwargs)
 
         elif isinstance(edgelist, nx.Graph):
-            self.networks[etype].add_edges_from(edgelist.edges.data(), source=src_type, target=dst_type,
-                                                database=database, **kwargs)
+            self.networks[etype].add_edges_from(edgelist.edges.data(), database=database, **kwargs)
 
         src_nodes, dst_nodes = {u for u, v, *_ in edgelist}, {v for u, v, *_ in edgelist}
         src_nodes = src_nodes.intersection(self.nodes[src_type])

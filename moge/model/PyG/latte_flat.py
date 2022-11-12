@@ -405,7 +405,7 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
         layers = []
         for l in range(n_layers):
             is_last_layer = l + 1 == n_layers
-            layer_t_order = l + 1 if n_layers >= t_order else t_order
+            layer_t_order = min(l + 1, t_order) if n_layers >= t_order else t_order
 
             while max_num_hops(higher_order_metapaths) < layer_t_order:
                 higher_order_metapaths = join_metapaths(higher_order_metapaths, metapaths, skip_undirected=False)
