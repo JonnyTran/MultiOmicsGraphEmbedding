@@ -2,6 +2,7 @@ import logging
 import math
 import traceback
 from argparse import Namespace
+from collections import defaultdict
 from typing import Dict, Iterable, Union, Tuple, List
 
 import dgl
@@ -103,7 +104,8 @@ class LATTENodeClf(NodeClfTrainer):
             for ntype in self.feature_projection:
                 nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
 
-    def forward(self, inputs: Dict[str, Union[Tensor, Dict[str, Tensor]]], return_embeddings=False, **kwargs):
+    def forward(self, inputs: Dict[str, Union[Tensor, Dict[str, Tensor]]], return_embeddings=False, **kwargs) \
+            -> Union[Tensor, Tuple[Dict[str, Tensor], Tensor]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
@@ -225,7 +227,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     @torch.no_grad()
     def predict(self, dataloader: DataLoader, node_names: pd.Index = None, save_betas=False, **kwargs) \
-            -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, np.ndarray]]:
+            -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, pd.DataFrame], Dict[str, np.ndarray]]:
         """
 
         Args:
@@ -236,13 +238,15 @@ class LATTENodeClf(NodeClfTrainer):
         Returns:
             targets, scores, embeddings, ntype_nids
         """
-        if isinstance(self, RelationAttention):
-            self.reset()
+        if isinstance(self.embedder, RelationMultiLayerAgg):
+            self.embedder.reset()
+
+        head_ntype = self.head_node_type
 
         y_trues = []
         y_preds = []
-        embs = []
-        nids = []
+        ntype_embs = defaultdict(lambda: [])
+        ntype_nids = defaultdict(lambda: [])
 
         for batch in tqdm.tqdm(dataloader, desc='Predict dataloader'):
             X, y_true, weights = to_device(batch, device=self.device)
@@ -255,34 +259,39 @@ class LATTENodeClf(NodeClfTrainer):
 
             y_true = y_true[idx]
             y_pred = y_pred[idx]
-            emb: Tensor = h_dict[self.head_node_type][idx]
 
             global_node_index = X["global_node_index"][-1] \
                 if isinstance(X["global_node_index"], (list, tuple)) else X["global_node_index"]
-            nid = global_node_index[self.head_node_type][idx]
 
             # Convert all to CPU device
             y_trues.append(y_true.cpu().numpy())
             y_preds.append(y_pred.cpu().numpy())
-            embs.append(emb.cpu().numpy())
-            nids.append(nid.cpu().numpy())
+            # Select index and add embeddings and nids
+            for ntype, emb in h_dict.items():
+                nid = global_node_index[ntype]
+                if ntype == head_ntype:
+                    emb = emb[idx]
+                    nid = nid[idx]
 
+                ntype_embs[ntype].append(emb.cpu().numpy())
+                ntype_nids[ntype].append(nid.cpu().numpy())
+
+        # Concat all batches
         targets = np.concatenate(y_trues, axis=0)
         scores = np.concatenate(y_preds, axis=0)
-        embeddings = np.concatenate(embs, axis=0)
-        node_ids = np.concatenate(nids, axis=0)
+        ntype_embs = {ntype: np.concatenate(emb, axis=0) for ntype, emb in ntype_embs.items()}
+        ntype_nids = {ntype: np.concatenate(nid, axis=0) for ntype, nid in ntype_nids.items()}
 
         if node_names is not None:
-            index = node_names[node_ids]
+            index = node_names[ntype_nids[head_ntype]]
         else:
-            index = pd.Index(node_ids, name="nid")
+            index = pd.Index(ntype_nids[head_ntype], name="nid")
 
         targets = pd.DataFrame(targets, index=index, columns=self.dataset.classes)
         scores = pd.DataFrame(scores, index=index, columns=self.dataset.classes)
-        embeddings = pd.DataFrame(embeddings, index=index)
-        ntype_nids = {self.head_node_type: node_ids}
+        ntype_embs = {ntype: pd.DataFrame(emb, index=ntype_nids[ntype]) for ntype, emb in ntype_embs.items()}
 
-        return targets, scores, embeddings, ntype_nids
+        return targets, scores, ntype_embs, ntype_nids
 
     def on_validation_end(self) -> None:
         super().on_validation_end()
@@ -326,7 +335,7 @@ class LATTENodeClf(NodeClfTrainer):
                 self.log_relation_atten_values()
 
                 self.plot_embeddings_tsne(global_node_index=global_node_index,
-                                          embeddings={self.head_node_type: embeddings},
+                                          embeddings=embeddings,
                                           targets=y_true, y_pred=scores)
                 self.cleanup_artifacts()
 

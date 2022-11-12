@@ -262,12 +262,11 @@ class RelationAttention(ABC):
                     if metapath_name not in self._alphas:
                         self._alphas[metapath_name] = edge_attn
                     else:
-                        old_cols = edge_attn.columns.intersection(self._alphas[metapath_name].columns)
+                        new_cols = edge_attn.columns.difference(self._alphas[metapath_name].columns)
                         if len(new_cols):
                             self._alphas[metapath_name] = self._alphas[metapath_name].join(
                                 edge_attn.filter(new_cols, axis="columns"), how="left")
-
-                        new_cols = edge_attn.columns.difference(self._alphas[metapath_name].columns)
+                        old_cols = edge_attn.columns.intersection(self._alphas[metapath_name].columns)
                         if len(old_cols):
                             self._alphas[metapath_name].update(
                                 edge_attn.filter(old_cols, axis='columns'), overwrite=True)
@@ -501,6 +500,10 @@ class RelationMultiLayerAgg:
             counts[i] = etype_counts
 
         return counts
+
+    def reset(self):
+        for layer in self.layers:
+            layer.reset()
 
     def get_sankey_flow(self, node_types=None, self_loop=True, agg="median"):
         """

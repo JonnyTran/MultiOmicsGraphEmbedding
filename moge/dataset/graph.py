@@ -28,6 +28,7 @@ from moge.network.sequence import BertSequenceTokenizer
 class Graph:
     edge_index_dict: Dict[Tuple[str, str, str], Tensor]
     num_nodes_dict: Dict[str, Tensor]
+    nodes_namespace: Dict[str, pd.Index]
     node_degrees: DataFrame
     node_metadata: DataFrame
 
@@ -93,7 +94,8 @@ class Graph:
             self,
             annotations: Dict[str, pd.DataFrame],
             nodes: Dict[str, Union[pd.Index, List[str]]],
-            columns=["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
+            columns=["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "depth", "disease_associations",
+                     "class",
                      "gene_name", "species_id", "RNA type", "gene_biotype", "transcript_biotype", "seqname", "length"],
             rename_mapper={"name": "node", "Chromosome": "seqname", "Protein class": "class"}) \
             -> DataFrame:

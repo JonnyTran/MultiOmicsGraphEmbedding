@@ -2,6 +2,7 @@ import itertools
 import os
 import pickle
 from argparse import Namespace
+from collections import OrderedDict
 from os.path import join
 from pathlib import Path
 from pprint import pprint
@@ -480,7 +481,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return X, y_dict, weights
 
-    def get_node_metadata(self, global_node_index: Dict[str, Tensor],
+    def get_node_metadata(self, ntype_nids: Dict[str, Tensor],
                           embeddings: Dict[str, Tensor],
                           weights: Optional[Dict[str, Series]] = None,
                           losses: Dict[str, Tensor] = None) -> DataFrame:
@@ -495,44 +496,43 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         Returns:
             node_metadata (DataFrame)
         """
-        # if not hasattr(self, "node_metadata"):
         self.create_node_metadata(self.network.annotations, nodes=self.nodes)
 
-        global_node_index = {ntype: nids.numpy() if isinstance(nids, Tensor) else nids \
-                             for ntype, nids in global_node_index.items() \
-                             if ntype in embeddings}
+        ntype_nids = OrderedDict({ntype: nids.numpy() if isinstance(nids, Tensor) else nids \
+                                  for ntype, nids in ntype_nids.items() \
+                                  if ntype in embeddings})
 
         # Concatenated list of node embeddings and other metadata
-        nodes_emb = {ntype: embeddings[ntype].detach().numpy() \
-            if isinstance(embeddings[ntype], Tensor) else embeddings[ntype] \
-                     for ntype in embeddings}
-        nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
+        nodes_emb = {ntype: emb.detach().cpu().numpy() if isinstance(emb, Tensor) else emb \
+                     for ntype, emb in embeddings.items()}
+        nodes_emb = np.concatenate([nodes_emb[ntype][:len(nids)] for ntype, nids in ntype_nids.items()])
 
         node_train_valid_test = np.vstack([
-            np.concatenate([self.G[ntype].train_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
-            np.concatenate([self.G[ntype].valid_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
-            np.concatenate([self.G[ntype].test_mask[nids].numpy() for ntype, nids in global_node_index.items()])],
+            np.concatenate([self.G[ntype].train_mask[nids].numpy() for ntype, nids in ntype_nids.items()]),
+            np.concatenate([self.G[ntype].valid_mask[nids].numpy() for ntype, nids in ntype_nids.items()]),
+            np.concatenate([self.G[ntype].test_mask[nids].numpy() for ntype, nids in ntype_nids.items()])],
         ).T
         node_train_valid_test = np.array(["Train", "Valid", "Test"])[node_train_valid_test.argmax(1)]
 
         if losses:
-            node_losses = np.concatenate([losses[ntype] if ntype in losses else \
-                                              [None for i in range(global_node_index[ntype].size)] \
-                                          for ntype in global_node_index])
+            node_losses = np.concatenate([losses[ntype] \
+                                              if ntype in losses else \
+                                              [None for i in range(ntype_nids[ntype].size)] \
+                                          for ntype in ntype_nids])
         else:
             node_losses = None
 
         # Metadata
         # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
         df = pd.DataFrame(
-            {"node": np.concatenate([self.nodes[ntype][global_node_index[ntype]] \
-                                     for ntype in global_node_index]),
-             "ntype": np.concatenate([[ntype for i in range(global_node_index[ntype].shape[0])] \
-                                      for ntype in global_node_index]),
+            {"node": np.concatenate([self.nodes[ntype][ntype_nids[ntype]] \
+                                     for ntype in ntype_nids]),
+             "ntype": np.concatenate([[ntype for i in range(ntype_nids[ntype].shape[0])] \
+                                      for ntype in ntype_nids]),
              "train_valid_test": node_train_valid_test,
              "loss": node_losses},
-            index=pd.Index(np.concatenate([global_node_index[ntype] for \
-                                           ntype in global_node_index]), name="nid"))
+            index=pd.Index(np.concatenate([ntype_nids[ntype] for \
+                                           ntype in ntype_nids]), name="nid"))
 
         # Get TSNE 2d position from embeddings
         try:
@@ -568,7 +568,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             nodes_weight = {ntype: weights[ntype].detach().numpy() \
                 if isinstance(weights[ntype], Tensor) else weights[ntype] \
                             for ntype in weights}
-            nodes_weight = np.concatenate([nodes_weight[ntype] for ntype in global_node_index]).astype(bool)
+            nodes_weight = np.concatenate([nodes_weight[ntype] for ntype in ntype_nids]).astype(bool)
 
             return df.loc[nodes_weight]
 

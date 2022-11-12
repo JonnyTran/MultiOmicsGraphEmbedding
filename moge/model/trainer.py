@@ -166,7 +166,8 @@ class NodeEmbeddingEvaluator(LightningModule):
     def plot_embeddings_tsne(self, global_node_index: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
-                             columns=["node", "ntype", "gene_name", "species_id", "pos1", "pos2", "loss"],
+                             columns=["node", "ntype", "protein_name", "gene_name", "species_id", "pos1", "pos2",
+                                      "loss"],
                              n_samples: int = 1000) -> DataFrame:
         """
 
@@ -517,17 +518,22 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             metrics.update_metrics(y_pred, y_true, weights=weights, subset=subset)
 
     @torch.no_grad()
-    def get_node_loss(self, targets: Tensor, y_pred: Tensor, global_node_index: Dict[str, Tensor] = None):
-        y_pred = torch.from_numpy(y_pred.values if isinstance(y_pred, pd.DataFrame) else y_pred) \
-            if not isinstance(y_pred, Tensor) else y_pred
+    def get_node_loss(self, targets: Tensor, scores: Tensor, global_node_index: Dict[str, Tensor] = None):
+        scores = torch.from_numpy(scores.values if isinstance(scores, pd.DataFrame) else scores) \
+            if not isinstance(scores, Tensor) else scores
         target = torch.from_numpy(targets.values if isinstance(targets, pd.DataFrame) else targets) \
             if not isinstance(targets, Tensor) else targets
 
-        losses = F.binary_cross_entropy(y_pred, target=target.float(), reduce=False).mean(dim=1).numpy()
+        losses = F.binary_cross_entropy(scores, target=target.float(), reduce=False)
 
-        losses = {self.head_node_type: losses}
+        ntype_losses = {}
+        for ntype, nids in global_node_index.items():
+            if ntype == self.head_node_type:
+                ntype_losses[ntype] = losses.mean(dim=1).numpy()[:len(nids)]
+            elif ntype in self.dataset.pred_ntypes:
+                ntype_losses[ntype] = losses.mean(dim=0).numpy()[:len(nids)]
 
-        return losses
+        return ntype_losses
 
     def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         dataset = self.dataset.train_dataloader(collate_fn=self.collate_fn if hasattr(self, 'collate_fn') else None,
