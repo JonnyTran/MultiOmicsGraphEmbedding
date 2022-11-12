@@ -20,7 +20,7 @@ from torch_geometric.data import HeteroData
 from torch_sparse import SparseTensor
 
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
-    untag_negative_metapath
+    untag_negative_metapath, get_edge_attr_keys
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
@@ -712,11 +712,13 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if exclude_etypes and (metapath in exclude_etypes or etype in exclude_etypes or
                                    untag_negative_metapath(metapath) in exclude_etypes): continue
 
+            edge_attrs = ["train_mask", "valid_mask", "test_mask"] if 'edge' in train_test_split or inductive else []
+            if 'weight' in get_edge_attr_keys(self.networks[metapath]):
+                edge_attrs.append('weight')
             hetero[metapath].edge_index, edge_attrs = get_edge_index_values(
                 self.networks[metapath],
                 nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
-                edge_attrs=["train_mask", "valid_mask", "test_mask"] \
-                    if 'edge' in train_test_split or inductive else None,
+                edge_attrs=edge_attrs,
                 format='pyg',
             )
 

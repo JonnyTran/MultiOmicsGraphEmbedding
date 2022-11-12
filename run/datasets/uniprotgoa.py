@@ -50,6 +50,76 @@ def get_load_path(name, hparams: Namespace, labels_dataset, ntype_subset, pred_n
 
     return load_path
 
+
+def parse_options(hparams, dataset_path):
+    # Set arguments
+    use_reverse = hparams.use_reverse
+    head_ntype = hparams.head_node_type
+    add_parents = hparams.add_parents
+    feature = hparams.feature
+    assert isinstance(feature, bool)
+    uniprotgoa_path = hparams.uniprotgoa_path
+    deepgraphgo_path = hparams.deepgraphgo_data
+    labels_dataset = hparams.labels_dataset
+
+    # Species-specific dataset
+    if isinstance(dataset_path, str) and 'HUMAN_MOUSE' in dataset_path:
+        hparams.species = 'HUMAN_MOUSE'
+    elif isinstance(dataset_path, str) and 'HUMAN' in dataset_path:
+        hparams.species = 'HUMAN'
+    elif isinstance(dataset_path, str) and not 'HUMAN' in dataset_path:
+        hparams.species = 'MULTISPECIES'
+
+    # ntype_subset
+    if 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, str):
+        if len(hparams.ntype_subset) == 0:
+            ntype_subset = [head_ntype]
+        else:
+            ntype_subset = hparams.ntype_subset.split(" ")
+    elif 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, Iterable):
+        ntype_subset = hparams.ntype_subset
+    else:
+        ntype_subset = None
+
+    # Pred ntypes
+    if isinstance(hparams.pred_ntypes, str):
+        assert len(hparams.pred_ntypes)
+        pred_ntypes = hparams.pred_ntypes.split(" ")
+    elif isinstance(hparams.pred_ntypes, Iterable):
+        pred_ntypes = hparams.pred_ntypes
+    else:
+        raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
+
+    # Exclude etype
+    exclude_etypes = [(head_ntype, 'associated', go_ntype) for go_ntype in pred_ntypes]
+    if 'exclude_etypes' in hparams and hparams.exclude_etypes:
+        exclude_etypes_ = [etype.split(".") if isinstance(etype, str) and '.' in etype else etype \
+                           for etype in (hparams.exclude_etypes.split(" ") \
+                                             if isinstance(hparams.exclude_etypes, str) \
+                                             else hparams.exclude_etypes)]
+        exclude_etypes.extend(exclude_etypes_)
+
+    # Set GO etypes to include
+    if 'go_etypes' in hparams and isinstance(hparams.go_etypes, str):
+        go_etypes = hparams.go_etypes.split(" ") if len(hparams.go_etypes) else []
+    elif 'go_etypes' in hparams and isinstance(hparams.go_etypes, Iterable):
+        go_etypes = hparams.go_etypes
+    else:
+        go_etypes = None
+
+    # Determine whether to include or exclude go_etypes
+    if ntype_subset:
+        pred_ntypes_in_graph = {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
+            ntype_subset)
+        if not pred_ntypes_in_graph and go_etypes:
+            hparams.go_etypes = go_etypes = None
+        elif pred_ntypes_in_graph and not go_etypes:
+            hparams.go_etypes = go_etypes = ['is_a', 'part_of', 'has_part']  # TODO add 'regulates'
+
+    return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
+           pred_ntypes, uniprotgoa_path, use_reverse
+
+
 def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
                           save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True) \
         -> HeteroNodeClfDataset:
@@ -252,74 +322,6 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         dataset.save(load_path, add_slug=False)
 
     return dataset
-
-def parse_options(hparams, dataset_path):
-    # Set arguments
-    use_reverse = hparams.use_reverse
-    head_ntype = hparams.head_node_type
-    add_parents = hparams.add_parents
-    feature = hparams.feature
-    assert isinstance(feature, bool)
-    uniprotgoa_path = hparams.uniprotgoa_path
-    deepgraphgo_path = hparams.deepgraphgo_data
-    labels_dataset = hparams.labels_dataset
-
-    # Species-specific dataset
-    if isinstance(dataset_path, str) and 'HUMAN_MOUSE' in dataset_path:
-        hparams.species = 'HUMAN_MOUSE'
-    elif isinstance(dataset_path, str) and 'HUMAN' in dataset_path:
-        hparams.species = 'HUMAN'
-    elif isinstance(dataset_path, str) and not 'HUMAN' in dataset_path:
-        hparams.species = 'MULTISPECIES'
-
-    # ntype_subset
-    if 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, str):
-        if len(hparams.ntype_subset) == 0:
-            ntype_subset = [head_ntype]
-        else:
-            ntype_subset = hparams.ntype_subset.split(" ")
-    elif 'ntype_subset' in hparams and isinstance(hparams.ntype_subset, Iterable):
-        ntype_subset = hparams.ntype_subset
-    else:
-        ntype_subset = None
-
-    # Pred ntypes
-    if isinstance(hparams.pred_ntypes, str):
-        assert len(hparams.pred_ntypes)
-        pred_ntypes = hparams.pred_ntypes.split(" ")
-    elif isinstance(hparams.pred_ntypes, Iterable):
-        pred_ntypes = hparams.pred_ntypes
-    else:
-        raise Exception("Must provide `hparams.pred_ntypes` as a space-delimited string")
-
-    # Exclude etype
-    exclude_etypes = [(head_ntype, 'associated', go_ntype) for go_ntype in pred_ntypes]
-    if 'exclude_etypes' in hparams and hparams.exclude_etypes:
-        exclude_etypes_ = [etype.split(".") if isinstance(etype, str) and '.' in etype else etype \
-                           for etype in (hparams.exclude_etypes.split(" ") \
-                                             if isinstance(hparams.exclude_etypes, str) \
-                                             else hparams.exclude_etypes)]
-        exclude_etypes.extend(exclude_etypes_)
-
-    # Set GO etypes to include
-    if 'go_etypes' in hparams and isinstance(hparams.go_etypes, str):
-        go_etypes = hparams.go_etypes.split(" ") if len(hparams.go_etypes) else []
-    elif 'go_etypes' in hparams and isinstance(hparams.go_etypes, Iterable):
-        go_etypes = hparams.go_etypes
-    else:
-        go_etypes = None
-
-    # Determine whether to include or exclude go_etypes
-    if ntype_subset:
-        pred_ntypes_in_graph = {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
-            ntype_subset)
-        if not pred_ntypes_in_graph and go_etypes:
-            hparams.go_etypes = go_etypes = None
-        elif pred_ntypes_in_graph and not go_etypes:
-            hparams.go_etypes = go_etypes = ['is_a', 'part_of', 'has_part']  # TODO add 'regulates'
-
-    return add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
-           pred_ntypes, uniprotgoa_path, use_reverse
 
 def get_DeepGraphGO_split(annot_df: pd.DataFrame, deepgraphgo_data: str, target='go_id',
                           pred_ntypes=['cc', 'bp', 'mf']):
