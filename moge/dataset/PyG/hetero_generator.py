@@ -95,7 +95,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     reversed_metapath = reverse_metapath_name(metapath)
                     if reversed_metapath in hetero.edge_types:
                         del hetero[reversed_metapath]
-                        hetero[metapath].edge_index = to_undirected(hetero[metapath].edge_index)
+                        if hasattr(hetero[metapath], 'edge_weight'):
+                            hetero[metapath].edge_index, hetero[metapath].edge_weight = \
+                                to_undirected(hetero[metapath].edge_index, hetero[metapath].edge_weight)
+                        else:
+                            hetero[metapath].edge_index = to_undirected(hetero[metapath].edge_index)
 
         self.metapaths = hetero.edge_types
         self.edge_index_dict = hetero.edge_index_dict

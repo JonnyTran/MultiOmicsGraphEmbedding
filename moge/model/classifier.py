@@ -1,7 +1,7 @@
 from argparse import Namespace
 from collections import OrderedDict
 from copy import deepcopy
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Mapping, Any
 
 import dgl
 import networkx as nx
@@ -161,6 +161,9 @@ class DenseClassification(nn.Module):
             print("INFO: [Else Case] Output of `classifier` is logits")
 
         self.reset_parameters()
+
+    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True):
+        return super().load_state_dict(state_dict, strict)
 
     def reset_parameters(self):
         for linear in self.linears:

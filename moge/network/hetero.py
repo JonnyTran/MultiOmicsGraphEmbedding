@@ -723,6 +723,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             )
 
             for edge_attr, edge_value in edge_attrs.items():
+                if edge_attr == 'weight':
+                    edge_attr = 'edge_weight'
                 hetero[metapath][edge_attr] = edge_value
 
         # Add node attributes
