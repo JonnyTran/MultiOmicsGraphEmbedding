@@ -1,6 +1,7 @@
 import itertools
 import logging
 import os
+from abc import abstractmethod
 from collections import defaultdict
 from typing import Union, Iterable, Dict, Tuple, List, Any, Optional
 
@@ -163,9 +164,21 @@ class NodeEmbeddingEvaluator(LightningModule):
         self.score_avg_table_name = "score_avgs"
         self.beta_degree_corr_table_name = "beta_degree_correlation"
 
+    @abstractmethod
+    def get_node_loss(self, targets: Union[Tensor, Dict[Any, Any]], y_pred: Union[Tensor, Dict[Any, Any]],
+                      global_node_index: Dict[str, Tensor]) -> DataFrame:
+        """
+        Compute the loss for each nodes given targets and predicted values for either node_clf or link_pred tasks.
+        Args:
+            targets ():
+            y_pred ():
+            global_node_index ():
+        """
+        raise NotImplementedError
+
     def plot_embeddings_tsne(self, global_node_index: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
-                             targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
+                             targets: Tensor = None, y_pred: Tensor = None, weights: Dict[str, Tensor] = None,
                              columns=["node", "ntype", "protein_name", "gene_name", "species_id", "pos1", "pos2",
                                       "loss"],
                              n_samples: int = 1000) -> DataFrame:
@@ -184,6 +197,8 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         """
         if self.wandb_experiment is not None and self.wandb_experiment.sweep_id is not None: return
+        elif not hasattr(self.dataset, 'get_node_metadata'):
+            return
 
         node_losses = self.get_node_loss(targets, y_pred, global_node_index=global_node_index)
         df = self.dataset.get_node_metadata(global_node_index, embeddings, weights=weights, losses=node_losses)
@@ -199,19 +214,8 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         return df
 
-    def get_node_loss(self, targets: Union[Tensor, Dict[Any, Any]], y_pred: Union[Tensor, Dict[Any, Any]],
-                      global_node_index: Dict[str, Tensor]) -> DataFrame:
-        """
-        Compute the loss for each nodes given targets and predicted values for either node_clf or link_pred tasks.
-        Args:
-            targets ():
-            y_pred ():
-            global_node_index ():
-        """
-        raise NotImplementedError
-
     def plot_pr_curve(self, targets: Union[Tensor, pd.DataFrame], scores: Union[Tensor, pd.DataFrame],
-                      split_samples: Union[pd.Series, np.ndarray] = None, n_thresholds=200, title="PR_Curve",
+                      split_samples: pd.Series = None, n_thresholds=200, title="PR_Curve",
                       xaxis_title="recall_micro", yaxis_title="precision_micro", scores_thresh=1e-3) \
             -> None:
         if self.wandb_experiment is None:
@@ -223,6 +227,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         targets = (targets.values if isinstance(targets, pd.DataFrame) else targets)
 
         if split_samples is not None:
+            assert preds.shape[0] == len(split_samples), f"{preds.shape[0]} != {len(split_samples)}"
             if isinstance(split_samples, pd.Series):
                 split_samples = split_samples.fillna("")
                 stroke = split_samples.name

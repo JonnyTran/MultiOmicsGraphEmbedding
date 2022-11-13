@@ -5,8 +5,6 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Union
 
-import dgl
-import numpy as np
 import pandas as pd
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
@@ -22,6 +20,7 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
 from moge.network.hetero import HeteroNetwork
 from openomics.database.ontology import GeneOntology
+from run.datasets.deepgraphgo import build_deepgraphgo_model
 from run.datasets.uniprotgoa import build_uniprot_dataset
 from run.utils import add_node_embeddings
 
@@ -58,40 +57,6 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
             add_node_embeddings(dataset, path=os.path.join(hparams.use_emb, "TransE_l2_ogbn-proteins/"), args=hparams)
         else:
             print(f"Cannot load embeddings for {dataset} at {hparams.use_emb}")
-
-    elif name == "GTeX":
-        with open(os.path.join(dataset_path, 'gtex_rna_ppi_multiplex_network.pickle'), "rb") as file:
-            network = pickle.load(file)
-
-        min_count = 50
-        label_col = 'go_id'
-        dataset = DGLNodeGenerator.from_heteronetwork(
-            *network.to_dgl_heterograph(target=label_col, min_count=min_count, sequence=False),
-            sampler="MultiLayerNeighborSampler",
-            neighbor_sizes=hparams.neighbor_sizes,
-            head_node_type=head_node_type,  # network.node_types if "LATTE" in method else "MessengerRNA",
-            edge_dir="in",
-            add_reverse_metapaths=use_reverse,
-            inductive=False,
-            classes=network.feature_transformer[label_col].classes_)
-        dataset._name = f"GTeX-{label_col}@{dataset.n_classes}"
-
-        add_node_embeddings(dataset, path=os.path.join(hparams.use_emb, "TransE_l2_GTeX/"), args=hparams)
-
-        # Set up graph of the clasification labels
-        if "LATTE" in method and "cls_graph" in method:
-            print("adding cls_graph")
-            geneontology = GeneOntology()
-
-            all_go = set(geneontology.network.nodes)
-            next_go = set(all_go) - set(dataset.classes)
-            nodes = np.concatenate([dataset.classes, np.array(list(next_go))])
-
-            edge_types = {e for u, v, e in geneontology.network.edges}
-            edge_index_dict = geneontology.to_scipy_adjacency(nodes=nodes, edge_types=edge_types)
-
-            hparams.classes = dataset.classes
-            hparams.cls_graph = dgl.heterograph(edge_index_dict)
 
     elif name == "ACM":
         dataset = DGLNodeGenerator.from_heteronetwork(
@@ -144,10 +109,12 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                           head_node_type="user", resample_train=train_ratio,
                                           inductive=hparams.inductive)
 
-    elif 'uniprot' in name.lower() and (
+    elif 'UNIPROT' in name.upper() and (
             isinstance(dataset_path, HeteroNetwork) or (isinstance(dataset_path, str) and ".pickle" in dataset_path)):
         dataset = build_uniprot_dataset(name, dataset_path=dataset_path, hparams=hparams)
 
+    elif method == 'DeepGraphGO':
+        dataset = build_deepgraphgo_model(hparams)
     else:
         raise Exception(f"dataset {name} not found")
 

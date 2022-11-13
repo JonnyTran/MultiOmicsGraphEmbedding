@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import List, Dict, Tuple
 
+import dask.dataframe as dd
 import dgl
 import dgl.function as fn
 import joblib
@@ -20,7 +21,6 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
-from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -29,6 +29,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from moge.model.metrics import Metrics
+from moge.model.trainer import NodeEmbeddingEvaluator
 
 
 def get_pid_list(pid_list_file):
@@ -252,12 +253,27 @@ class GcnNet(nn.Module):
         return h
 
 
-class DeepGraphGO(LightningModule):
+class DeepGraphGO(NodeEmbeddingEvaluator):
     def __init__(self, hparams: Namespace, model_path: Path, dgl_graph: dgl.DGLGraph, node_feats: ssp.csr_matrix,
                  metrics: List[str] = None):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__()
+
+        # Protein - species mapping
+        if hasattr(hparams, 'protein_data') and isinstance(hparams.protein_data, str):
+            df = dd.read_table(hparams.protein_data,
+                               names=['pid', "go_id", 'namespace', 'species_id'],
+                               usecols=['pid', 'species_id'])
+            groupby = df.groupby('pid')
+            proteins = groupby['species_id'].first().to_frame()
+            self.node_namespace = proteins.compute()
+        elif hasattr(hparams, 'protein_data') and isinstance(hparams.protein_data, pd.DataFrame):
+            self.node_namespace = hparams.protein_data
+
+        if hasattr(hparams, 'nodes'):
+            self.nodes = hparams.nodes
+
         if metrics:
             self.train_metrics = Metrics(prefix="", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
                                          multilabel=True, metrics=metrics)
@@ -311,12 +327,12 @@ class DeepGraphGO(LightningModule):
 
         return logits
 
-    def training_step(self, batch, batch_nb):
+    def training_step(self, batch: Tuple[Tensor, Tensor, List[DGLBlock]], batch_nb):
         input_nodes, seeds, blocks = batch
-        y_true = blocks[-1].dstdata["label"]
+        target = blocks[-1].dstdata["label"]
 
         logits = self.forward(blocks)
-        loss = self.criterion(logits, y_true)
+        loss = self.criterion.forward(logits, target)
         self.log("loss", loss, logger=True, prog_bar=True, on_step=False, on_epoch=True)
 
         # self.train_metrics.update_metrics(torch.sigmoid(logits), y_true)
@@ -327,61 +343,37 @@ class DeepGraphGO(LightningModule):
         #               on_step=False, on_epoch=True)
         return loss
 
-    def validation_step(self, batch, batch_nb):
+    def validation_step(self, batch: Tuple[Tensor, Tensor, List[DGLBlock]], batch_nb):
         input_nodes, seeds, blocks = batch
-        y_true = blocks[-1].dstdata["label"]
+        target = blocks[-1].dstdata["label"]
 
         logits = self.forward(blocks)
-        loss = self.criterion(logits, y_true)
+        loss = self.criterion(logits, target)
         self.log("val_loss", loss, logger=True, on_step=False, on_epoch=True)
 
         # self.valid_metrics.update_metrics(torch.sigmoid(logits), y_true)
         scores = torch.sigmoid(logits).detach().cpu().numpy()
-        y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), pair_aupr(y_true, scores)
+        target = target.detach().cpu().numpy()
+        (fmax_, t_), aupr_ = fmax(target, scores), pair_aupr(target, scores)
         self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True,
                       on_step=False, on_epoch=True)
         return loss
 
-    def test_step(self, batch, batch_nb):
+    def test_step(self, batch: Tuple[Tensor, Tensor, List[DGLBlock]], batch_nb):
         input_nodes, seeds, blocks = batch
-        y_true = blocks[-1].dstdata["label"]
+        target = blocks[-1].dstdata["label"]
 
         logits = self.forward(blocks)
-        loss = self.criterion(logits, y_true)
+        loss = self.criterion(logits, target)
         self.log("test_loss", loss, logger=True, on_step=False, on_epoch=True)
 
         # self.test_metrics.update_metrics(torch.sigmoid(logits), y_true)
         scores = torch.sigmoid(logits).detach().cpu().numpy()
-        y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), pair_aupr(y_true, scores)
+        target = target.detach().cpu().numpy()
+        (fmax_, t_), aupr_ = fmax(target, scores), pair_aupr(target, scores)
         self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True,
                       on_step=False, on_epoch=True)
         return loss
-
-    # def train(self, train_data:Tuple[np.ndarray, ssp.csr_matrix], valid_data:Tuple[np.ndarray, ssp.csr_matrix],
-    #           loss_params=(), opt_params=(), epochs_num=10, batch_size=40, **kwargs):
-    #     self.get_optimizer(**dict(opt_params))
-    #     self.batch_size = batch_size
-    #
-    #     (train_ppi, train_y), (valid_ppi, valid_y) = train_data, valid_data
-    #     ppi_train_idx = np.full(self.node_feats.shape[0], -1, dtype=np.int)
-    #     ppi_train_idx[train_ppi] = np.arange(train_ppi.shape[0])
-    #     best_fmax = 0.0
-    #     for epoch_idx in range(epochs_num):
-    #         train_loss = 0.0
-    #         for nf in tqdm(dgl.contrib.sampling.sampler.NeighborSampler(self.dgl_graph, batch_size,
-    #                                                                     self.dgl_graph.number_of_nodes(),
-    #                                                                     num_hops=self.model.num_gcn,
-    #                                                                     seed_nodes=train_ppi,
-    #                                                                     prefetch=True, shuffle=True),
-    #                        desc=F'Epoch {epoch_idx}', leave=False, dynamic_ncols=True,
-    #                        total=(len(train_ppi) + batch_size - 1) // batch_size):
-    #             batch_y = train_y[ppi_train_idx[nf.layer_parent_nid(-1).numpy()]].toarray()
-    #
-    #             train_loss += self.train_step(train_x=nf, train_y=torch.from_numpy(batch_y), update=True)
-    #         best_fmax = self.valid_step(valid_loader=valid_ppi, targets=valid_y, epoch_idx=epoch_idx,
-    #                                     train_loss=train_loss / len(train_ppi), best_fmax=best_fmax)
 
     @torch.no_grad()
     def predict_step(self, data_x):
@@ -410,6 +402,28 @@ class DeepGraphGO(LightningModule):
             self.test_metrics.reset_metrics()
             self.log_dict(metrics_dict, prog_bar=True)
         super().test_epoch_end(outputs)
+
+    def on_test_end(self) -> None:
+        super().on_test_end()
+
+        self.eval()
+        targets = []
+        scores = []
+        nids = []
+        for batch in self.test_dataloader():
+            input_nodes, seeds, blocks = batch
+            target = blocks[-1].dstdata["label"]
+            logits = self.forward(blocks)
+            score = torch.sigmoid(logits)
+
+            targets.append(target)
+            scores.append(score)
+            nids.append(blocks[-1].dstdata["_ID"])
+
+        targets = torch.cat(targets, dim=0).detach().cpu()
+        scores = torch.cat(scores, dim=0).detach().cpu()
+        nids = torch.cat(nids, dim=0).detach().cpu().numpy()
+        self.plot_pr_curve(targets, scores, split_samples=self.node_namespace.iloc[nids]['species_id'])
 
     def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
@@ -442,11 +456,11 @@ class DeepGraphGO(LightningModule):
         return dataloader
 
     def configure_optimizers(self):
-        weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
+        weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 1e-2
         lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
         lr = self.hparams.lr if 'lr' in self.hparams else 1e-3
 
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=lr, weight_decay=weight_decay)
 
         return {"optimizer": optimizer}
 
