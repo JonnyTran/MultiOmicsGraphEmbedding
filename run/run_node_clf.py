@@ -1,24 +1,27 @@
 import datetime
+import os
 import random
 import sys
+import warnings
+
+warnings.filterwarnings("ignore")
+
+from logzero import logger
 from argparse import ArgumentParser, Namespace
-
-from run.datasets.deepgraphgo import build_deepgraphgo_model
-from run.utils import parse_yaml_config, select_empty_gpus
-
-sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
+from pytorch_lightning.loggers import WandbLogger
 
 import pytorch_lightning
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 
+sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
+
 from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf, HGTNodeClf, MLP
 from moge.model.dgl.node_clf import HANNodeClf, HGConv, R_HGNN
 
+from run.datasets.deepgraphgo import build_deepgraphgo_model
+from run.utils import parse_yaml_config, select_empty_gpus
 from run.load_data import load_node_dataset
-import warnings
-
-warnings.filterwarnings("ignore")
 
 
 def train(hparams):
@@ -35,11 +38,6 @@ def train(hparams):
         GPUS = select_empty_gpus()
     else:
         GPUS = random.sample([0, 1, 2], NUM_GPUS)
-
-        # Path to set MultiLabelBinarizer
-        results = []
-    if results:
-        hparams.mlb_path = results[0]
 
     ### Dataset
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
@@ -128,6 +126,7 @@ def train(hparams):
             "weight_decay": 1e-2,
             'epochs': 100,
         }
+
         model = HGTNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
     elif hparams.method == "HGConv":
         default_args = {
@@ -190,6 +189,7 @@ def train(hparams):
 
             "n_layers": len(dataset.neighbor_sizes),
             "t_order": t_order,
+            'neighbor_sizes': dataset.neighbor_sizes,
             "batch_size": int(2 ** batch_order),
 
             "attn_heads": 4,
@@ -217,7 +217,6 @@ def train(hparams):
             "weight_decay": 1e-2,
             "lr_annealing": None,
         }
-
         default_args.update(hparams.__dict__)
         model = LATTEFlatNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
 
@@ -238,9 +237,9 @@ def train(hparams):
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
             "lr": 1e-3,
-            "momentum": 0.9,
             "weight_decay": 1e-2,
         })
+
         model = MLP(hparams, dataset=dataset, metrics=METRICS)
 
     else:
@@ -252,8 +251,8 @@ def train(hparams):
     if hasattr(dataset, 'tags'):
         tags.extend(dataset.tags)
 
-    # logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
-    # logger.log_hyperparams(hparams)
+    logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
+    logger.log_hyperparams(hparams)
 
     if hparams.early_stopping:
         callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
@@ -266,7 +265,7 @@ def train(hparams):
         max_epochs=MAX_EPOCHS,
         min_epochs=MIN_EPOCHS,
         callbacks=callbacks,
-        # logger=logger,
+        logger=logger,
         max_time=datetime.timedelta(hours=hparams.hours) \
             if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
         # plugins='deepspeed' if NUM_GPUS > 1 else None,
@@ -277,6 +276,26 @@ def train(hparams):
     trainer.tune(model)
     trainer.fit(model)
     trainer.test(model)
+
+
+def update_hparams_from_env(hparams: Namespace, dataset=None):
+    updates = {}
+    if 'batch_size'.upper() in os.environ:
+        updates['batch_size'] = int(os.environ['batch_size'.upper()])
+        if hasattr(dataset, 'neighbor_sizes'):
+            dataset.neighbor_sizes = [int(n * (updates['batch_size'] / hparams['batch_size'])) \
+                                      for n in dataset.neighbor_sizes]
+
+    if 'n_neighbors'.upper() in os.environ:
+        updates['n_neighbors'] = int(os.environ['n_neighbors'.upper()])
+
+    logger.info(f"Hparams updates from ENV: {updates}")
+
+    if isinstance(hparams, Namespace):
+        hparams.__dict__.update(updates)
+    elif isinstance(hparams, dict):
+        hparams.update(updates)
+    return hparams
 
 
 if __name__ == "__main__":

@@ -22,7 +22,6 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
 from moge.network.hetero import HeteroNetwork
 from openomics.database.ontology import GeneOntology
-from run.datasets.deepgraphgo import build_deepgraphgo_model
 from run.datasets.uniprotgoa import build_uniprot_dataset
 from run.utils import add_node_embeddings
 
@@ -133,8 +132,6 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
             isinstance(dataset_path, HeteroNetwork) or (isinstance(dataset_path, str) and ".pickle" in dataset_path)):
         dataset = build_uniprot_dataset(name, dataset_path=dataset_path, hparams=hparams)
 
-    elif method == 'DeepGraphGO':
-        dataset = build_deepgraphgo_model(hparams)
     else:
         raise Exception(f"dataset {name} not found")
 

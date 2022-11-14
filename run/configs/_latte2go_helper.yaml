@@ -24,8 +24,6 @@ sequence: false
 head_node_type: "Protein"
 ntype_subset: "Protein"
 
-
-
 filter_metapaths:
   biological_process:
     - [ 'is_a', 'is_a' ]

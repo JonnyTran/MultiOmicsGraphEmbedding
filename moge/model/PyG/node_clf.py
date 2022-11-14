@@ -569,8 +569,8 @@ class MLP(NodeClfTrainer):
         X, y_true, weights = batch
         scores = self.forward(X)
 
-        scores, y_true, weights = stack_tensor_dicts(scores, y_true, weights)
-        scores, y_true, weights = filter_samples_weights(y_pred=scores, y_true=y_true, weights=weights)
+        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], scores, y_true, weights)
+        y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         loss = self.criterion.forward(scores, y_true, weights=weights)
@@ -588,9 +588,9 @@ class MLP(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X)
+        scores = self.forward(X)
 
-        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], scores, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
@@ -603,9 +603,9 @@ class MLP(NodeClfTrainer):
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred = self.forward(X)
+        scores = self.forward(X)
 
-        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], scores, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(y_pred=y_pred, y_true=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 

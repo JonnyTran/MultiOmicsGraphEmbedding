@@ -1,4 +1,4 @@
-import pprint
+import collections
 import pprint
 import warnings
 from collections import defaultdict
@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 import tqdm
+from joblib import Parallel, delayed
 from logzero import logger
 from pandas import Series, Index, DataFrame
 from scipy.sparse import csr_matrix
@@ -21,6 +22,7 @@ from torch_sparse import SparseTensor
 
 from moge.dataset.utils import nx_to_edge_index, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath, get_edge_attr_keys
+from moge.model.utils import tensor_sizes
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
@@ -703,25 +705,37 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Edge index
         hetero = HeteroData()
-        networks_prog = tqdm.tqdm(self.networks, desc="Adding edge_index's to HeteroData")
-        for metapath in networks_prog:
-            networks_prog.set_description(f"Adding edge_index's to HeteroData: {metapath}")
+
+        # Extract edge_index for each edge type in parallel
+        def extract_edge_index(metapath) -> Dict[Tuple, Tuple[Tensor, Optional[Tensor]]]:
             head_type, etype, tail_type = metapath[0], metapath[1], metapath[-1]
-            if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
-            if exclude_ntypes and (head_type in exclude_ntypes or tail_type in exclude_ntypes): continue
+            if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset):
+                return {}
+            if exclude_ntypes and (head_type in exclude_ntypes or tail_type in exclude_ntypes):
+                return {}
             if exclude_etypes and (metapath in exclude_etypes or etype in exclude_etypes or
-                                   untag_negative_metapath(metapath) in exclude_etypes): continue
+                                   untag_negative_metapath(metapath) in exclude_etypes):
+                return {}
 
             edge_attrs = ["train_mask", "valid_mask", "test_mask"] if 'edge' in train_test_split or inductive else []
             if 'weight' in get_edge_attr_keys(self.networks[metapath]):
                 edge_attrs.append('weight')
-            hetero[metapath].edge_index, edge_attrs = nx_to_edge_index(
+            edge_index, edge_attrs = nx_to_edge_index(
                 self.networks[metapath],
                 nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
                 edge_attrs=edge_attrs,
                 format='pyg',
             )
+            logger.info(
+                f'Adding edge_index to HeteroData: {metapath} {tensor_sizes(edge_index)} {tensor_sizes(edge_attrs)}')
+            return {metapath: (edge_index, edge_attrs)}
 
+        parallel = Parallel(n_jobs=len(self.networks), prefer="threads")
+        outputs = parallel(delayed(extract_edge_index)(m) for m in self.networks)
+        edge_index_dict = dict(collections.ChainMap(*outputs))
+
+        for metapath, (edge_index, edge_attrs) in edge_index_dict.items():
+            hetero[metapath].edge_index = edge_index
             for edge_attr, edge_value in edge_attrs.items():
                 if edge_attr == 'weight':
                     edge_attr = 'edge_weight'
