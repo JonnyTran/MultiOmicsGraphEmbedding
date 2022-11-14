@@ -6,30 +6,31 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import List, Dict, Tuple
 
-import dask.dataframe as dd
 import dgl
 import dgl.function as fn
 import joblib
 import numpy as np
 import pandas as pd
-import scipy.sparse as ssp
 import torch
-import torch.nn.functional as F
 from Bio import SeqIO
 from Bio.Blast import NCBIXML
 from Bio.Blast.Applications import NcbipsiblastCommandline
+from dask import dataframe as dd
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
 from ruamel.yaml import YAML
+from scipy import sparse as ssp
 from sklearn.metrics import average_precision_score
 from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from moge.model.metrics import Metrics
+from moge.model.metrics import Metrics, add_common_metrics
 from moge.model.trainer import NodeEmbeddingEvaluator
+from moge.model.utils import to_device
 
 
 def get_pid_list(pid_list_file):
@@ -255,7 +256,7 @@ class GcnNet(nn.Module):
 
 class DeepGraphGO(NodeEmbeddingEvaluator):
     def __init__(self, hparams: Namespace, model_path: Path, dgl_graph: dgl.DGLGraph, node_feats: ssp.csr_matrix,
-                 metrics: List[str] = None):
+                 metrics: List[str] = ["aupr", "fmax"]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__()
@@ -275,12 +276,13 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
             self.nodes = hparams.nodes
 
         if metrics:
-            self.train_metrics = Metrics(prefix="", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
-                                         multilabel=True, metrics=metrics)
-            self.valid_metrics = Metrics(prefix="val_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
-                                         multilabel=True, metrics=metrics)
-            self.test_metrics = Metrics(prefix="test_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
-                                        multilabel=True, metrics=metrics)
+            self.metric_prefix = {'bp': "BPO", 'cc': 'CCO', 'mf': 'MFO'}[hparams.namespace]
+            self.train_metrics = Metrics(prefix=f"{self.metric_prefix}_", metrics=metrics, loss_type='BCE_WITH_LOGITS',
+                                         n_classes=hparams.n_classes, multilabel=True)
+            self.valid_metrics = Metrics(prefix=f"val_{self.metric_prefix}_", metrics=metrics,
+                                         loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes, multilabel=True)
+            self.test_metrics = Metrics(prefix=f"test_{self.metric_prefix}_", metrics=metrics,
+                                        loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes, multilabel=True)
 
         self.input = nn.EmbeddingBag(hparams.input_size, hparams.hidden_size, mode='sum', include_last_offset=True)
         self.input_bias = nn.Parameter(torch.zeros(hparams.hidden_size))
@@ -329,13 +331,13 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
 
     def training_step(self, batch: Tuple[Tensor, Tensor, List[DGLBlock]], batch_nb):
         input_nodes, seeds, blocks = batch
-        target = blocks[-1].dstdata["label"]
+        targets = blocks[-1].dstdata["label"]
 
         logits = self.forward(blocks)
-        loss = self.criterion.forward(logits, target)
+        loss = self.criterion.forward(logits, targets)
         self.log("loss", loss, logger=True, prog_bar=True, on_step=False, on_epoch=True)
 
-        # self.train_metrics.update_metrics(torch.sigmoid(logits), y_true)
+        # self.train_metrics.update_metrics(torch.sigmoid(logits), targets)
         # scores = torch.sigmoid(logits).detach().cpu().numpy()
         # y_true = y_true.detach().cpu().numpy()
         # (fmax_, t_), aupr_ = fmax(y_true, scores), pair_aupr(y_true, scores)
@@ -345,34 +347,24 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, List[DGLBlock]], batch_nb):
         input_nodes, seeds, blocks = batch
-        target = blocks[-1].dstdata["label"]
+        targets = blocks[-1].dstdata["label"]
 
         logits = self.forward(blocks)
-        loss = self.criterion(logits, target)
+        loss = self.criterion(logits, targets)
         self.log("val_loss", loss, logger=True, on_step=False, on_epoch=True)
 
-        # self.valid_metrics.update_metrics(torch.sigmoid(logits), y_true)
-        scores = torch.sigmoid(logits).detach().cpu().numpy()
-        target = target.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(target, scores), pair_aupr(target, scores)
-        self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True,
-                      on_step=False, on_epoch=True)
+        self.valid_metrics.update_metrics(torch.sigmoid(logits), targets)
         return loss
 
     def test_step(self, batch: Tuple[Tensor, Tensor, List[DGLBlock]], batch_nb):
         input_nodes, seeds, blocks = batch
-        target = blocks[-1].dstdata["label"]
+        targets = blocks[-1].dstdata["label"]
 
         logits = self.forward(blocks)
-        loss = self.criterion(logits, target)
+        loss = self.criterion(logits, targets)
         self.log("test_loss", loss, logger=True, on_step=False, on_epoch=True)
 
-        # self.test_metrics.update_metrics(torch.sigmoid(logits), y_true)
-        scores = torch.sigmoid(logits).detach().cpu().numpy()
-        target = target.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(target, scores), pair_aupr(target, scores)
-        self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True,
-                      on_step=False, on_epoch=True)
+        self.test_metrics.update_metrics(torch.sigmoid(logits), targets)
         return loss
 
     @torch.no_grad()
@@ -386,44 +378,58 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
         if hasattr(self, 'train_metrics'):
             metrics_dict = self.train_metrics.compute_metrics()
             self.train_metrics.reset_metrics()
-            self.log_dict(metrics_dict, prog_bar=True)
+            metrics_dict = add_common_metrics(metrics_dict, prefix='', metrics_suffixes=['aupr', 'fmax'])
+            self.log_dict(metrics_dict, prog_bar=True, on_step=False, on_epoch=True)
         super().training_epoch_end(outputs)
 
     def validation_epoch_end(self, outputs):
         if hasattr(self, 'valid_metrics'):
             metrics_dict = self.valid_metrics.compute_metrics()
             self.valid_metrics.reset_metrics()
-            self.log_dict(metrics_dict, prog_bar=True)
+            metrics_dict = add_common_metrics(metrics_dict, prefix='val_', metrics_suffixes=['aupr', 'fmax'])
+            self.log_dict(metrics_dict, prog_bar=True, on_step=False, on_epoch=True)
         super().validation_epoch_end(outputs)
 
     def test_epoch_end(self, outputs):
         if hasattr(self, 'test_metrics'):
             metrics_dict = self.test_metrics.compute_metrics()
             self.test_metrics.reset_metrics()
-            self.log_dict(metrics_dict, prog_bar=True)
+            metrics_dict = add_common_metrics(metrics_dict, prefix='test_', metrics_suffixes=['aupr', 'fmax'])
+            self.log_dict(metrics_dict, prog_bar=True, on_step=False, on_epoch=True)
         super().test_epoch_end(outputs)
 
     def on_test_end(self) -> None:
         super().on_test_end()
-
         self.eval()
+
         targets = []
         scores = []
         nids = []
         for batch in self.test_dataloader():
             input_nodes, seeds, blocks = batch
-            target = blocks[-1].dstdata["label"]
-            logits = self.forward(blocks)
+            logits = self.forward(to_device(blocks, self.device))
             score = torch.sigmoid(logits)
 
-            targets.append(target)
+            targets.append(blocks[-1].dstdata["label"])
             scores.append(score)
             nids.append(blocks[-1].dstdata["_ID"])
 
-        targets = torch.cat(targets, dim=0).detach().cpu()
-        scores = torch.cat(scores, dim=0).detach().cpu()
+        targets = torch.cat(targets, dim=0).detach().cpu().numpy()
+        scores = torch.cat(scores, dim=0).detach().cpu().numpy()
         nids = torch.cat(nids, dim=0).detach().cpu().numpy()
-        self.plot_pr_curve(targets, scores, split_samples=self.node_namespace.iloc[nids]['species_id'])
+
+        if self.wandb_experiment is not None:
+            (fmax_, t_), aupr_ = fmax(targets, scores), pair_aupr(targets, scores)
+            final_metrics = {f"test_{self.metric_prefix}_fmax": fmax_, f"test_{self.metric_prefix}_aupr": aupr_}
+            final_metrics = add_common_metrics(final_metrics, prefix='test_', metrics_suffixes=['aupr', 'fmax'])
+            print('final_metrics', final_metrics)
+            self.wandb_experiment.log(final_metrics | {'epoch': self.current_epoch})
+
+            # Plot PR curve
+            if hasattr(self, 'node_namespace'):
+                mask = nids < self.node_namespace.size
+                self.plot_pr_curve(targets[mask], scores[mask],
+                                   split_samples=self.node_namespace.iloc[nids[mask]]['species_id'])
 
     def train_dataloader(self, batch_size=None, num_workers=0, **kwargs):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)

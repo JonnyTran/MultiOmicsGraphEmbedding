@@ -9,6 +9,7 @@ from pprint import pprint
 from typing import List, Tuple, Union, Dict, Optional, Callable
 
 import colorhash
+import joblib
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -249,11 +250,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         nodes = self.nodes if hasattr(self, "nodes") and self.nodes != None else self.network.nodes
         if isinstance(nodes, (pd.Index, pd.Series)):
             nodes.to_pickle(join(path, 'nodes.pickle'))
-
         elif isinstance(nodes, dict):
             with open(join(path, 'nodes.pickle'), 'wb') as f:
                 pickle.dump(nodes, f)
 
+        # Write ntype annotations
         for ntype, df in self.network.annotations.items():
             if ntype not in self.G.node_types: continue
             node_ann_pickle = join(path, f'{ntype}.pickle')
@@ -261,8 +262,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             if not os.path.exists(node_ann_pickle):
                 df.to_pickle(node_ann_pickle)
 
+        # Write ntype feature_transformer
+        for target, mlb in self.network.feature_transformer.items():
+            mlb_path = join(path, f'{target}.mlb')
+            if not os.path.exists(mlb_path):
+                joblib.dump(mlb, mlb_path)
+
+        # Write PyG HeteroData
         torch.save(self.G, join(path, 'heterodata.pt'))
 
+        # Write metadata
         attrs = get_attrs(self, exclude={'x_dict', 'y_dict', 'edge_index_dict', 'global_node_index',
                                          'nodes', 'node_attr_shape', 'node_attr_sparse', 'num_nodes_dict',
                                          'node_degrees', 'node_mask_counts', 'node_metadata', 'class_indices'})
@@ -270,23 +279,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             pickle.dump(attrs, f)
 
         # Write metadata to JSON so can be readable
-        # def dumper(obj):
-        #     try:
-        #         if hasattr(obj, 'toJSON'):
-        #             return obj.toJSON()
-        #         elif isinstance(obj, np.ndarray):
-        #             return obj.shape
-        #         elif isinstance(obj, (pd.Series, pd.Index)):
-        #             return obj.shape
-        #         elif isinstance(obj, pd.DataFrame):
-        #             return obj.shape
-        #     except:
-        #         return obj.__dict__
-        #
-        # metadata = json.dumps(attrs, indent=4, default=dumper)
-        # with open(join(path, "metadata.json"), "w") as outfile:
-        #     outfile.write(metadata)
-
         with open(join(path, 'metadata.yml'), 'w') as outfile:
             yaml.dump(tensor_sizes(attrs), outfile, default_flow_style=False)
 

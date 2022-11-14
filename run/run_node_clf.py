@@ -4,6 +4,7 @@ import random
 import sys
 from argparse import ArgumentParser, Namespace
 
+from run.datasets.deepgraphgo import build_deepgraphgo_model
 from run.utils import parse_yaml_config, select_empty_gpus
 
 logger = logging.getLogger("wandb")
@@ -13,11 +14,11 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 import pytorch_lightning
 from pytorch_lightning.trainer import Trainer
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.model.PyG.node_clf import MetaPath2Vec, LATTENodeClf
+from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf
 from moge.model.cogdl.node_clf import GTN
-from moge.model.dgl.node_clf import HANNodeClf, HGTNodeClf, NARSNodeCLf, HGConv, R_HGNN
+from moge.model.dgl.node_clf import HANNodeClf, HGTNodeClf, HGConv, R_HGNN
 
 from pytorch_lightning.loggers import WandbLogger
 
@@ -25,10 +26,13 @@ from run.load_data import load_node_dataset
 
 
 def train(hparams):
+    pytorch_lightning.seed_everything(hparams.seed)
+
     NUM_GPUS = hparams.num_gpus
-    USE_AMP = True  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 500
-    MIN_EPOCHS = None if 'min_epochs' not in hparams else hparams.min_epochs
+    USE_AMP = True
+    MAX_EPOCHS = 1000
+    MIN_EPOCHS = getattr(hparams, 'min_epochs', None)
+
     if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
         GPUS = [hparams.gpu]
     elif hparams.num_gpus == 1:
@@ -36,12 +40,16 @@ def train(hparams):
     else:
         GPUS = random.sample([0, 1, 2], NUM_GPUS)
 
-    pytorch_lightning.seed_everything(hparams.seed)
-
+    ### Dataset
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
+    if dataset is not None:
+        hparams.n_classes = dataset.n_classes
+        hparams.head_node_type = dataset.head_node_type
 
     hparams.neighbor_sizes = [hparams.n_neighbors, ] * hparams.n_layers
+
+    ### Callbacks
     callbacks = []
     if "GO" in hparams.dataset or 'uniprot' in hparams.dataset.lower():
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
@@ -49,12 +57,6 @@ def train(hparams):
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
-    if hparams.early_stopping:
-        callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
-
-    hparams.loss_type = hparams.loss_type
-    hparams.n_classes = dataset.n_classes
-    hparams.head_node_type = dataset.head_node_type
 
     if hparams.method == "HAN":
         args = {
@@ -71,7 +73,6 @@ def train(hparams):
             'weight_decay': 0.001,
         }
         model = HANNodeClf(args, dataset, metrics=METRICS)
-
     elif hparams.method == "GTN":
         USE_AMP = True
         args = {
@@ -87,7 +88,6 @@ def train(hparams):
             "epochs": 40,
         }
         model = GTN(Namespace(**args), dataset=dataset, metrics=METRICS)
-
     elif hparams.method == "MetaPath2Vec":
         USE_AMP = True
         args = {
@@ -104,7 +104,6 @@ def train(hparams):
             "epochs": 100
         }
         model = MetaPath2Vec(Namespace(**args), dataset=dataset, metrics=METRICS)
-
     elif hparams.method == "HGT":
         args = {
             "embedding_dim": 128,
@@ -126,26 +125,6 @@ def train(hparams):
             'epochs': 100,
         }
         model = HGTNodeClf(Namespace(**args), dataset, metrics=METRICS)
-
-    elif hparams.method == "NARS":
-        args = {
-            'R': 2,
-            'ff_layer': 2,
-            'num_subsets': min(8, len(dataset.G.etypes) ** len(dataset.G.etypes) - 1),
-            'num_hidden': 256,
-            #     'use_relation_subsets': "../MultiOmicsGraphEmbedding/moge/module/dgl/NARS/sample_relation_subsets/examples/mag",
-            'input_dropout': True,
-            'dropout': 0.5,
-            'head_node_type': dataset.head_node_type,
-            'batch_size': 10000,
-            'epochs': 200,
-            'patience': 10,
-            'lr': 0.001,
-            'weight_decay': 0.0,
-        }
-        ModelClass = NARSNodeCLf
-        model = NARSNodeCLf(Namespace(**args), dataset, metrics=METRICS)
-
     elif hparams.method == "HGConv":
         args = {
             'seed': hparams.run,
@@ -166,7 +145,6 @@ def train(hparams):
         }
         ModelClass = HGConv
         model = HGConv(args, dataset, metrics=METRICS)
-
     elif hparams.method == "R_HGNN":
         args = {
             "head_node_type": dataset.head_node_type,
@@ -187,7 +165,6 @@ def train(hparams):
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
         model = R_HGNN(args, dataset, metrics=METRICS)
-
     elif "LATTE" in hparams.method:
         USE_AMP = False
 
@@ -202,9 +179,6 @@ def train(hparams):
         elif "-3" in hparams.method:
             t_order = 3
             batch_order = 10
-
-            extra_args["fanouts"] = [10, 10, 10]
-        else:
             t_order = 2
 
         args = {
@@ -218,16 +192,16 @@ def train(hparams):
 
             "attn_heads": 4,
             "attn_activation": "LeakyReLU",
-            "attn_dropout": 0.3,
+            "attn_dropout": 0.5,
 
             "batchnorm": False,
             "layernorm": False,
             "activation": "relu",
-            "dropout": 0.3,
-            "input_dropout": True,
+            "dropout": 0.5,
+            "input_dropout": False,
 
             "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0.5,
+            "nb_cls_dropout": 0.0,
 
             "edge_threshold": 0.0,
             "edge_sampling": False,
@@ -241,17 +215,16 @@ def train(hparams):
             "lr": 0.001,
             "epochs": 300,
             "patience": 10,
-            "weight_decay": 0.0,
+            "weight_decay": 1e-2,
             "lr_annealing": None,
         }
 
         args.update(hparams.__dict__)
-        model = LATTENodeClf(Namespace(**args), dataset, collate_fn="neighbor_sampler", metrics=METRICS)
+        model = LATTEFlatNodeClf(Namespace(**args), dataset, metrics=METRICS)
 
-        callbacks = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False),
-                     ModelCheckpoint(monitor='val_loss',
-                                     filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'),
-                     ]
+    elif 'DeepGraphGO' == hparams.method:
+        USE_AMP = False
+        model = build_deepgraphgo_model(hparams, base_path='')
 
     else:
         raise Exception(f"Unknown model {hparams.embedder}")
@@ -265,13 +238,14 @@ def train(hparams):
     logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
     logger.log_hyperparams(hparams)
 
+    if hparams.early_stopping:
+        callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
+
     trainer = Trainer(
         accelerator='cuda',
         devices=GPUS,
-        auto_lr_find=False,
         # enable_progress_bar=False,
         # auto_scale_batch_size=True if hparams.n_layers > 2 else False,
-        log_every_n_steps=1,
         max_epochs=MAX_EPOCHS,
         min_epochs=MIN_EPOCHS,
         callbacks=callbacks,
@@ -291,7 +265,7 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
 
-    parser.add_argument('--method', type=str, default="HAN")
+    parser.add_argument('--method', type=str, default="LATTE")
 
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--inductive', type=bool, default=False)
@@ -303,6 +277,7 @@ if __name__ == "__main__":
                         default="/home/jonny/Bioinformatics_ExternalData/OGB/")
 
     parser.add_argument('--train_ratio', type=float, default=None)
+    parser.add_argument('--early_stopping', type=int, default=5)
 
     # Ablation study
     parser.add_argument('--disable_alpha', type=bool, default=False)

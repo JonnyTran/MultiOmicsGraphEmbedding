@@ -20,16 +20,10 @@ from .utils import filter_samples, tensor_sizes, activation
 
 
 class Metrics(torch.nn.Module):
-    def __init__(
-        self,
-        prefix: str,
-        loss_type: str,
-        threshold: float = 0.5,
-        top_k: List[int] = [5, 10, 50],
-        n_classes: int = None,
-        multilabel: bool = None,
-        metrics: List[Union[str, Tuple[str]]] = ["precision", "recall", "top_k", "accuracy"],
-    ):
+    def __init__(self, prefix: str,
+                 metrics: List[Union[str, Tuple[str]]] = ["precision", "recall", "top_k", "accuracy"],
+                 loss_type: str = "BCE_WITH_LOGITS", threshold: float = 0.5, top_k: List[int] = [5, 10, 50],
+                 n_classes: int = None, multilabel: bool = None):
         super().__init__()
 
         self.loss_type = loss_type.upper()
@@ -575,3 +569,12 @@ def precision_recall_curve(y_true: Tensor, y_pred: Tensor, n_thresholds=100, ave
     pr_curve = BinnedPrecisionRecallCurve(num_classes=1, thresholds=n_thresholds)
     precision, recall, thresholds = pr_curve(preds=scores, target=targets)
     return precision, recall, thresholds
+
+
+def add_common_metrics(metrics_dict: Dict[str, Any],
+                       prefix: str = '', metrics_suffixes: List[str] = ['aupr', 'fmax']):
+    for suffix in metrics_suffixes:
+        if suffix not in metrics_dict and any(suffix in key for key in metrics_dict):
+            metrics_dict[prefix + suffix] = next((val for key, val in metrics_dict.items() \
+                                                  if suffix in key), None)
+    return metrics_dict

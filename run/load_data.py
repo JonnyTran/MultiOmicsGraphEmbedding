@@ -31,7 +31,6 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
         use_reverse = False
     else:
         use_reverse = True
-    head_node_type = hparams.head_node_type
 
     if "ogbn" in name and method == "NARS":
         dataset = DGLNodeGenerator.from_heteronetwork(*load_mag(args=hparams),
@@ -108,6 +107,9 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                           node_types=["user", "tag"],
                                           head_node_type="user", resample_train=train_ratio,
                                           inductive=hparams.inductive)
+
+    elif method == 'DeepGraphGO':
+        dataset = None  # will load in method
 
     elif 'UNIPROT' in name.upper() and (
             isinstance(dataset_path, HeteroNetwork) or (isinstance(dataset_path, str) and ".pickle" in dataset_path)):

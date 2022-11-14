@@ -25,7 +25,7 @@ from moge.dataset.dgl.node_generator import DGLNodeGenerator
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import edge_index_to_adjs
 from moge.model.PyG.relations import RelationAttention
-from moge.model.metrics import Metrics, precision_recall_curve
+from moge.model.metrics import Metrics, precision_recall_curve, add_common_metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
 
@@ -176,7 +176,8 @@ class NodeEmbeddingEvaluator(LightningModule):
         """
         raise NotImplementedError
 
-    def plot_embeddings_tsne(self, global_node_index: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
+    def plot_embeddings_tsne(self,
+                             global_node_index: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              embeddings: Dict[str, Union[Tensor, pd.DataFrame, np.ndarray]],
                              targets: Tensor = None, y_pred: Tensor = None, weights: Dict[str, Tensor] = None,
                              columns=["node", "ntype", "protein_name", "gene_name", "species_id", "pos1", "pos2",
@@ -243,8 +244,7 @@ class NodeEmbeddingEvaluator(LightningModule):
                 mask = split_samples == split
                 if mask.sum() < 10: continue
 
-                pred = preds[mask]
-                target = targets[mask]
+                pred, target = preds[mask], targets[mask]
                 # row, col = ((pred + target) > scores_thresh).nonzero()
                 precisions, recalls, _ = precision_recall_curve(  # y_true=target[row, col], y_pred=pred[row, col],
                     y_true=target.ravel(), y_pred=pred.ravel(),
@@ -254,6 +254,7 @@ class NodeEmbeddingEvaluator(LightningModule):
             df = pd.concat(dfs, names=[stroke, None], axis=0).reset_index(level=0)
 
         else:
+            # Select entries that are nonzero either in preds or targets
             row, col = ((preds + targets) > scores_thresh).nonzero()
             precisions, recalls, _ = precision_recall_curve(y_true=targets[row, col], y_pred=preds[row, col],
                                                             n_thresholds=n_thresholds, average='micro')
@@ -405,26 +406,24 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         if isinstance(metrics, dict):
             self.train_metrics = {
-                subtype: Metrics(prefix="" + subtype + "_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                 multilabel=dataset.multilabel, metrics=keywords) \
+                subtype: Metrics(prefix="" + subtype + "_", metrics=keywords, loss_type=hparams.loss_type,
+                                 n_classes=dataset.n_classes, multilabel=dataset.multilabel) \
                 for subtype, keywords in metrics.items()}
             self.valid_metrics = {
-                subtype: Metrics(prefix="val_" + subtype + "_", loss_type=hparams.loss_type,
-                                 n_classes=dataset.n_classes,
-                                 multilabel=dataset.multilabel, metrics=keywords) \
+                subtype: Metrics(prefix="val_" + subtype + "_", metrics=keywords, loss_type=hparams.loss_type,
+                                 n_classes=dataset.n_classes, multilabel=dataset.multilabel) \
                 for subtype, keywords in metrics.items()}
             self.test_metrics = {
-                subtype: Metrics(prefix="test_" + subtype + "_", loss_type=hparams.loss_type,
-                                 n_classes=dataset.n_classes,
-                                 multilabel=dataset.multilabel, metrics=keywords) \
+                subtype: Metrics(prefix="test_" + subtype + "_", metrics=keywords, loss_type=hparams.loss_type,
+                                 n_classes=dataset.n_classes, multilabel=dataset.multilabel) \
                 for subtype, keywords in metrics.items()}
         else:
-            self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                         multilabel=dataset.multilabel, metrics=metrics)
-            self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                         multilabel=dataset.multilabel, metrics=metrics)
-            self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                        multilabel=dataset.multilabel, metrics=metrics)
+            self.train_metrics = Metrics(prefix="", metrics=metrics, loss_type=hparams.loss_type,
+                                         n_classes=dataset.n_classes, multilabel=dataset.multilabel)
+            self.valid_metrics = Metrics(prefix="val_", metrics=metrics, loss_type=hparams.loss_type,
+                                         n_classes=dataset.n_classes, multilabel=dataset.multilabel)
+            self.test_metrics = Metrics(prefix="test_", metrics=metrics, loss_type=hparams.loss_type,
+                                        n_classes=dataset.n_classes, multilabel=dataset.multilabel)
 
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
@@ -450,16 +449,12 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             for subtype, metrics in self.train_metrics.items():
                 metrics.reset_metrics()
 
-        if 'aupr' not in metrics_dict and any('aupr' in key for key in metrics_dict):
-            metrics_dict['aupr'] = next((val for key, val in metrics_dict.items() \
-                                         if 'aupr' in key), None)
-        if 'fmax' not in metrics_dict and any('fmax' in key for key in metrics_dict):
-            metrics_dict['fmax'] = next((val for key, val in metrics_dict.items() \
-                                         if 'fmax' in key), None)
+        metrics_dict = add_common_metrics(metrics_dict, prefix='', metrics_suffixes=['aupr', 'fmax'])
 
         self.log_dict(metrics_dict, prog_bar=True)
 
         return None
+
 
     def validation_epoch_end(self, outputs):
         metrics_dict = {}
@@ -474,12 +469,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             for subtype, metrics in self.valid_metrics.items():
                 metrics.reset_metrics()
 
-        if 'val_aupr' not in metrics_dict and any('aupr' in key for key in metrics_dict):
-            metrics_dict['val_aupr'] = next((val for key, val in metrics_dict.items() \
-                                             if 'aupr' in key), None)
-        if 'val_fmax' not in metrics_dict and any('fmax' in key for key in metrics_dict):
-            metrics_dict['val_fmax'] = next((val for key, val in metrics_dict.items() \
-                                             if 'fmax' in key), None)
+        metrics_dict = add_common_metrics(metrics_dict, prefix='val_', metrics_suffixes=['aupr', 'fmax'])
 
         self.log_dict(metrics_dict, prog_bar=True)
 
@@ -497,13 +487,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
             for subtype, metrics in self.test_metrics.items():
                 metrics.reset_metrics()
-
-        if 'test_aupr' not in metrics_dict and any('aupr' in key for key in metrics_dict):
-            metrics_dict['test_aupr'] = next((val for key, val in metrics_dict.items() \
-                                              if 'aupr' in key), None)
-        if 'test_fmax' not in metrics_dict and any('fmax' in key for key in metrics_dict):
-            metrics_dict['test_fmax'] = next((val for key, val in metrics_dict.items() \
-                                              if 'fmax' in key), None)
+        metrics_dict = add_common_metrics(metrics_dict, prefix='test_', metrics_suffixes=['aupr', 'fmax'])
 
         self.log_dict(metrics_dict, prog_bar=True)
         return None
@@ -695,12 +679,12 @@ class GraphClfTrainer(LightningModule):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
+        self.train_metrics = Metrics(prefix="", metrics=metrics, loss_type=hparams.loss_type,
+                                     n_classes=dataset.n_classes, multilabel=dataset.multilabel)
+        self.valid_metrics = Metrics(prefix="val_", metrics=metrics, loss_type=hparams.loss_type,
+                                     n_classes=dataset.n_classes, multilabel=dataset.multilabel)
+        self.test_metrics = Metrics(prefix="test_", metrics=metrics, loss_type=hparams.loss_type,
+                                    n_classes=dataset.n_classes, multilabel=dataset.multilabel)
 
         hparams.name = self.name()
         hparams.inductive = dataset.inductive

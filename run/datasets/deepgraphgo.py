@@ -3,7 +3,7 @@ from collections.abc import Iterable
 
 import dask.dataframe as dd
 
-from moge.model.dgl.DeepGraphGO import load_dgl_graph
+from moge.model.dgl.DeepGraphGO import load_dgl_graph, DeepGraphGO
 
 
 def build_deepgraphgo_model(hparams, base_path="../DeepGraphGO"):
@@ -26,6 +26,14 @@ def build_deepgraphgo_model(hparams, base_path="../DeepGraphGO"):
     groupby = df.groupby('pid')
     proteins = groupby['species_id'].first().to_frame().compute()
 
+    if hparams.dataset == 'HUMAN_MOUSE':
+        subset_pid = proteins.query(f'species_id in [9606, 10090]').index
+    elif hparams.dataset == 'MULTISPECIES':
+        subset_pid = None
+    else:
+        subset_pid = None
+
+    # Hparams
     data_cnf = {'mlb': f'{base_path}/data/{namespace}_go.mlb',
                 'model_path': 'models',
                 'name': namespace,
@@ -56,19 +64,31 @@ def build_deepgraphgo_model(hparams, base_path="../DeepGraphGO"):
                  'test': {'batch_size': batch_size},
                  'train': {'batch_size': batch_size, 'epochs_num': 10}}
 
+    # Load dataset
     dgl_graph, node_feats, net_pid_list, train_idx, valid_idx, test_idx = load_dgl_graph(
         data_cnf, model_cnf,
-        # subset_pid=subset_pid
+        subset_pid=subset_pid
     )
 
     hparams = Namespace(**(model_cnf["model"] | model_cnf["train"]),
+                        namespace=namespace,
+                        nodes=net_pid_list,
+                        protein_data=data_cnf['protein_data'],
+                        input_size=node_feats.shape[1],
                         n_classes=dgl_graph.ndata["label"].size(1),
                         dropout=0.5,
                         residual=True,
-                        input_size=node_feats.shape[1],
-                        nodes=net_pid_list,
                         training_idx=train_idx,
                         validation_idx=valid_idx,
                         testing_idx=test_idx,
+                        lr=1e-3,
                         )
-    tensor_sizes(hparams)
+    # load model
+    model = DeepGraphGO(hparams,
+                        model_path=model_cnf["model"]["model_path"],
+                        dgl_graph=dgl_graph,
+                        node_feats=node_feats,
+                        metrics=["aupr", "fmax"],
+                        )
+
+    return model

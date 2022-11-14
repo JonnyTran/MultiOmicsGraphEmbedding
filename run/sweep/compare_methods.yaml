@@ -1,16 +1,16 @@
 program: run/run_node_clf.py
 method: grid
 metric:
-  name: val_micro_f1
+  name: val_fmax
   goal: maximize
 parameters:
   seed:
-    values: [ 1,2,3,4,5,6,7,8,9,10 ]
+    values: [ 1, 2, 3, 4, 5 ]
   dataset:
     values: [ "MULTISPECIES", "HUMAN_MOUSE" ]
   method:
-    values: [ "LATTE-1", "LATTE-2", "HAN", "HGT", "NARS", "HGConv", "R_HGNN", "LATTE-3", "LATTE-2-cls_graph" ]
-  train_ratio:
-    values: [ 0.0 ]
+    values: [ "LATTE-1", "LATTE-2", "HGT", "DeepGraphGO" ]
   inductive:
-    values: [ False ]
+    values: [ false ]
+  early_stopping:
+    values: [ 10 ]
