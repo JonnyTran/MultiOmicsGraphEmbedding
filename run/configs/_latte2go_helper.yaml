@@ -22,8 +22,9 @@ sequence: false
 #  GO_term: 150
 
 head_node_type: "Protein"
-attn_activation: "LeakyReLU"
-activation: "relu"
+ntype_subset: "Protein"
+
+
 
 filter_metapaths:
   biological_process:
@@ -33,16 +34,20 @@ filter_metapaths:
   cellular_component:
     - [ 'is_a', 'is_a' ]
 
-input_dropout: false
-batch_size: 1024
-
-n_neighbors: 1024
-feature: true
+use_reverse: true
 add_parents: true
+batch_size: 1024
+feature: true
+neighbor_loader: 'HGTLoader'
+n_neighbors: 1024
+
 attn_heads: 4
+attn_activation: "LeakyReLU"
+activation: "relu"
+n_layers: 2
 attn_dropout: 0.5
 dropout: 0.2
-weight_decay: 0.01
+layer_pooling: 'concat'
 
 inductive: false
 
@@ -50,6 +55,7 @@ loss_type: "BCE_WITH_LOGITS"
 max_epochs: 1000
 sweep: true
 lr: 0.001
+weight_decay: 0.01
 min_epochs: 60
 #hours: 7
 early_stopping: 15

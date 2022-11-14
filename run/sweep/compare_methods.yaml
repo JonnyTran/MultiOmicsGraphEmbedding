@@ -11,7 +11,7 @@ parameters:
   pred_ntypes:
     values: [ 'molecular_function', 'biological_process', 'cellular_component' ]
   method:
-    values: [ "LATTE-1", "LATTE-2", "HGT", "DeepGraphGO" ]
+    values: [ "LATTE-1", "LATTE-2", "HGT", "DeepGraphGO", "MLP" ]
   inductive:
     values: [ false ]
   early_stopping:

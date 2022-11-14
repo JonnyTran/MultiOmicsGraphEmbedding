@@ -19,7 +19,7 @@ from torch import Tensor
 from torch_geometric.data import HeteroData
 from torch_sparse import SparseTensor
 
-from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
+from moge.dataset.utils import nx_to_edge_index, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath, get_edge_attr_keys
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
@@ -446,11 +446,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if all_metapaths and metapath not in all_metapaths: continue
             metapath_idx = all_metapaths.index(metapath)
 
-            edge_index, edge_attr = get_edge_index_values(self.networks[metapath],
-                                                          nodes_A=self.nodes[head_type],
-                                                          nodes_B=self.nodes[tail_type],
-                                                          edge_attrs=["train_mask", "valid_mask", "test_mask"],
-                                                          format="pyg")
+            edge_index, edge_attr = nx_to_edge_index(self.networks[metapath],
+                                                     nodes_A=self.nodes[head_type],
+                                                     nodes_B=self.nodes[tail_type],
+                                                     edge_attrs=["train_mask", "valid_mask", "test_mask"],
+                                                     format="pyg")
             num_edges = edge_index.size(1)
 
             triples["head" if positive else "head_neg"].append(edge_index[0])
@@ -529,7 +529,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if exclude_etypes and (metapath in exclude_etypes or etype in exclude_etypes or
                                    untag_negative_metapath(metapath) in exclude_etypes): continue
 
-            edge_index, edge_attr = get_edge_index_values(
+            edge_index, edge_attr = nx_to_edge_index(
                 etype_graph, nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
                 # edge_attrs=["train_mask", "valid_mask", "test_mask"] \
                 #     if "edge" in train_test_split or inductive else None,
@@ -715,7 +715,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             edge_attrs = ["train_mask", "valid_mask", "test_mask"] if 'edge' in train_test_split or inductive else []
             if 'weight' in get_edge_attr_keys(self.networks[metapath]):
                 edge_attrs.append('weight')
-            hetero[metapath].edge_index, edge_attrs = get_edge_index_values(
+            hetero[metapath].edge_index, edge_attrs = nx_to_edge_index(
                 self.networks[metapath],
                 nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
                 edge_attrs=edge_attrs,

@@ -24,12 +24,13 @@ def parse_yaml_config(parser: ArgumentParser) -> Namespace:
     Returns:
 
     """
-    parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
     args = parser.parse_args()
     # yaml priority is higher than args
-    if isinstance(args.config, str) and os.path.exists(args.config):
+    if isinstance(getattr(args, 'config', None), str) and os.path.exists(args.config):
         opt = yaml.load(open(args.config), Loader=yaml.FullLoader)
         args_dict = args.__dict__
+
+        opt = {k: v for k, v in opt.items if k not in args}
         args_dict.update(opt)
         args = Namespace(**args_dict)
 

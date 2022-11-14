@@ -23,8 +23,8 @@ from moge.network.utils import to_list_of_strs
 from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 
 
-def get_load_path(name, hparams: Namespace, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
-                  exclude_etypes, feature, save_path):
+def get_slug(name, hparams: Namespace, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
+             exclude_etypes, feature, save_path):
     node_types = ['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein', 'biological_process', 'molecular_function',
                   'cellular_component']
     if ntype_subset:
@@ -128,8 +128,8 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
     pred_ntypes, uniprotgoa_path, use_reverse = parse_options(hparams, dataset_path)
 
-    load_path = get_load_path(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
-                              exclude_etypes, feature, save_path)
+    load_path = get_slug(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
+                         exclude_etypes, feature, save_path)
 
     if os.path.exists(os.path.expanduser(load_path)):
         try:
@@ -170,18 +170,20 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     # Replace alt_id for go_id labels
     alt_id2go_id = geneontology.get_mapper('alt_id', target).to_dict()
 
-    if not ntype_subset or {'biological_process', 'cellular_component', 'molecular_function'}.intersection(
-            ntype_subset):
-        # Add GO ontology interactions
-        if go_etypes:
-            network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=go_etypes)
+    if ntype_subset is not None:
+        go_ntypes = {'biological_process', 'cellular_component', 'molecular_function'}.intersection(ntype_subset)
+    else:
+        go_ntypes = {'biological_process', 'cellular_component', 'molecular_function'}
+    if go_ntypes:
+        # Add ontology interactions for all 3 ontologies
+        network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=go_etypes)
 
         to_replace = geneontology.annotations['go_id'].isin(alt_id2go_id)
         geneontology.annotations.loc[to_replace, 'go_id'] = geneontology.annotations.loc[to_replace, 'go_id'].replace(
             alt_id2go_id)
 
         # Add Protein-GO annotations
-        for dst_ntype in {'biological_process', 'molecular_function', 'cellular_component'}.difference(pred_ntypes):
+        for dst_ntype in go_ntypes.difference(pred_ntypes):
             network.add_edges_from_annotations(geneontology, filter_dst_nodes=network.nodes[dst_ntype],
                                                src_ntype=head_ntype, dst_ntype=dst_ntype,
                                                src_node_col='protein_id',
@@ -189,7 +191,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
                                                valid_date=hparams.valid_date,
                                                test_date=hparams.test_date,
                                                use_neg_annotations=False)
-            # TODO whether to add annotation edges with parents
+            # TODO whether to add annotation edges from UniProtKB annotations
 
     # Set the go_id label and train/valid/test node split for head_node_type
     if labels_dataset.startswith('DGG'):
@@ -225,9 +227,13 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     go_classes = []
     rename_dict = {'molecular_function': 'mf', 'biological_process': 'bp', 'cellular_component': 'cc',
                    'mf': 'mf', 'bp': 'bp', 'cc': 'cc'}
+
     for pred_ntype in pred_ntypes:
         namespace = rename_dict[pred_ntype]
-        mlb: MultiLabelBinarizer = joblib.load(os.path.join(deepgraphgo_path, f'{namespace}_go.mlb'))
+        if getattr(hparams, 'mlb_path', None):
+            mlb: MultiLabelBinarizer = joblib.load(hparams.mlb_path)
+        else:
+            mlb: MultiLabelBinarizer = joblib.load(os.path.join(deepgraphgo_path, f'{namespace}_go.mlb'))
         go_classes.append(mlb.classes_)
 
     go_classes = np.hstack(go_classes) if len(go_classes) > 1 else go_classes[0]
@@ -256,7 +262,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     #     network.set_edge_traintest_mask()
 
     # Neighbor loader
-    max_order = max(hparams.n_layers, hparams.t_order if 't_order' in hparams else 0)
+    max_order = max(getattr(hparams, 'n_layers', 2), getattr(hparams, 't_order', 1))
 
     if hparams.neighbor_loader == "NeighborLoader":
         hparams.neighbor_sizes = [8] * max_order

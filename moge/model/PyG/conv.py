@@ -4,6 +4,8 @@ import torch
 from torch import Tensor
 from torch_geometric.nn import GATConv, HGTConv, FastRGCNConv, HeteroConv
 
+from moge.model.PyG.utils import get_edge_index_values
+
 
 class HGT(torch.nn.Module):
     def __init__(self, embedding_dim, num_heads, num_layers, node_types: List[str],
@@ -16,6 +18,9 @@ class HGT(torch.nn.Module):
             self.layers.append(conv)
 
     def forward(self, x_dict: Dict[str, Tensor], edge_index_dict: Dict[Tuple[str, str, str], Tensor], **kwargs):
+        edge_index_dict = {etype: get_edge_index_values(tup)[0] \
+                           for etype, tup in edge_index_dict.items()}
+
         for conv in self.layers:
             x_dict = conv(x_dict, edge_index_dict)
 

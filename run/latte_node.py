@@ -1,7 +1,6 @@
 import datetime
 import random
 import sys
-import traceback
 from argparse import ArgumentParser, Namespace
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
@@ -16,7 +15,6 @@ from run.load_data import load_node_dataset
 from run.utils import parse_yaml_config, select_empty_gpus
 
 import warnings
-
 warnings.filterwarnings("ignore")
 
 
@@ -164,5 +162,6 @@ if __name__ == "__main__":
     parser.add_argument('--min_epochs', type=int, default=5)
     parser.add_argument('--seed', type=int, default=random.randint(0, int(1e4)))
 
+    parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
     args = parse_yaml_config(parser)
     train(args)

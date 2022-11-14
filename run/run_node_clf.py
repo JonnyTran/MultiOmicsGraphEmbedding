@@ -1,7 +1,4 @@
 import datetime
-import glob
-import logging
-import os
 import random
 import sys
 from argparse import ArgumentParser, Namespace
@@ -9,22 +6,19 @@ from argparse import ArgumentParser, Namespace
 from run.datasets.deepgraphgo import build_deepgraphgo_model
 from run.utils import parse_yaml_config, select_empty_gpus
 
-logger = logging.getLogger("wandb")
-logger.setLevel(logging.ERROR)
-
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 import pytorch_lightning
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf
-from moge.model.cogdl.node_clf import GTN
-from moge.model.dgl.node_clf import HANNodeClf, HGTNodeClf, HGConv, R_HGNN
-
-from pytorch_lightning.loggers import WandbLogger
+from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf, HGTNodeClf, MLP
+from moge.model.dgl.node_clf import HANNodeClf, HGConv, R_HGNN
 
 from run.load_data import load_node_dataset
+import warnings
+
+warnings.filterwarnings("ignore")
 
 
 def train(hparams):
@@ -42,6 +36,11 @@ def train(hparams):
     else:
         GPUS = random.sample([0, 1, 2], NUM_GPUS)
 
+        # Path to set MultiLabelBinarizer
+        results = []
+    if results:
+        hparams.mlb_path = results[0]
+
     ### Dataset
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
@@ -49,30 +48,18 @@ def train(hparams):
         hparams.n_classes = dataset.n_classes
         hparams.head_node_type = dataset.head_node_type
 
-    hparams.neighbor_sizes = [hparams.n_neighbors, ] * hparams.n_layers
-
     ### Callbacks
     callbacks = []
-    if "GO" in hparams.dataset or 'uniprot' in hparams.dataset.lower():
+    if hparams.dataset.upper() in ['UNIPROT', "MULTISPECIES", "HUMAN_MOUSE"]:
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
         early_stopping_args = dict(monitor='val_aupr', mode='max')
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
 
-    # Path to set MultiLabelBinarizer
-    mlb_path = os.path.expanduser('~/Bioinformatics_ExternalData/LATTE2GO')
-    if 'MULTISPECIES' in hparams.dataset:
-        results = glob.glob(f'{mlb_path}/{hparams.dataset}-{hparams.pred_ntypes}/go_id.mlb')
-    elif 'HUMAN_MOUSE' in hparams.dataset:
-        results = glob.glob(f'{mlb_path}/{hparams.dataset}-{hparams.pred_ntypes}/go_id.mlb')
-    else:
-        results = []
-    if results:
-        hparams.mlb_path = results[0]
 
     if hparams.method == "HAN":
-        args = {
+        default_args = {
             'num_neighbors': 20,
             'hidden_units': 32,
             'num_heads': [8],
@@ -85,10 +72,12 @@ def train(hparams):
             'lr': 0.001,
             'weight_decay': 0.001,
         }
-        model = HANNodeClf(args, dataset, metrics=METRICS)
+        model = HANNodeClf(default_args, dataset, metrics=METRICS)
     elif hparams.method == "GTN":
+        from moge.model.cogdl.node_clf import GTN
+
         USE_AMP = True
-        args = {
+        default_args = {
             "embedding_dim": 128,
             "num_channels": len(dataset.metapaths),
             "num_layers": 2,
@@ -100,10 +89,10 @@ def train(hparams):
             "lr": 0.005 * NUM_GPUS,
             "epochs": 40,
         }
-        model = GTN(Namespace(**args), dataset=dataset, metrics=METRICS)
+        model = GTN(Namespace(**default_args), dataset=dataset, metrics=METRICS)
     elif hparams.method == "MetaPath2Vec":
         USE_AMP = True
-        args = {
+        default_args = {
             "embedding_dim": 128,
             "walk_length": 50,
             "context_size": 7,
@@ -116,30 +105,32 @@ def train(hparams):
             "lr": 0.01 * NUM_GPUS,
             "epochs": 100
         }
-        model = MetaPath2Vec(Namespace(**args), dataset=dataset, metrics=METRICS)
+        model = MetaPath2Vec(Namespace(**default_args), dataset=dataset, metrics=METRICS)
     elif hparams.method == "HGT":
-        args = {
+        default_args = {
             "embedding_dim": 128,
-            "fanouts": [10, 10],
+            "n_layers": 2,
+            # "fanouts": [10, 10],
             "batch_size": 2 ** 11,
             "activation": "relu",
             "attn_heads": 4,
             "attn_activation": "sharpening",
             "attn_dropout": 0.2,
+            "dropout": 0.5,
             "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0.2,
-            "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "nb_cls_dropout": 0,
+            "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "use_norm": True,
             "use_class_weights": False,
-            "lr": 0.001,
+            "lr": 1e-3,
             "momentum": 0.9,
             "weight_decay": 1e-2,
             'epochs': 100,
         }
-        model = HGTNodeClf(Namespace(**args), dataset, metrics=METRICS)
+        model = HGTNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
     elif hparams.method == "HGConv":
-        args = {
+        default_args = {
             'seed': hparams.run,
             'head_node_type': dataset.head_node_type,
             'num_heads': 8,  # Number of attention heads
@@ -157,9 +148,9 @@ def train(hparams):
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
         ModelClass = HGConv
-        model = HGConv(args, dataset, metrics=METRICS)
+        model = HGConv(default_args, dataset, metrics=METRICS)
     elif hparams.method == "R_HGNN":
-        args = {
+        default_args = {
             "head_node_type": dataset.head_node_type,
             'seed': hparams.run,
             'learning_rate': 0.001,
@@ -177,14 +168,14 @@ def train(hparams):
             'patience': 50,
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
-        model = R_HGNN(args, dataset, metrics=METRICS)
+        model = R_HGNN(default_args, dataset, metrics=METRICS)
     elif "LATTE" in hparams.method:
         USE_AMP = False
 
-        extra_args = {}
         if "-1" in hparams.method:
             t_order = 1
             batch_order = 12
+
         elif "-2" in hparams.method:
             t_order = 2
             batch_order = 11
@@ -192,23 +183,21 @@ def train(hparams):
         elif "-3" in hparams.method:
             t_order = 3
             batch_order = 10
-            t_order = 2
 
-        args = {
+        default_args = {
             "embedding_dim": 128,
             "layer_pooling": "order_concat",
 
             "n_layers": len(dataset.neighbor_sizes),
             "t_order": t_order,
             "batch_size": int(2 ** batch_order),
-            **extra_args,
 
             "attn_heads": 4,
             "attn_activation": "LeakyReLU",
             "attn_dropout": 0.5,
 
             "batchnorm": False,
-            "layernorm": False,
+            "layernorm": True,
             "activation": "relu",
             "dropout": 0.5,
             "input_dropout": False,
@@ -218,26 +207,41 @@ def train(hparams):
 
             "edge_threshold": 0.0,
             "edge_sampling": False,
-
             "head_node_type": dataset.head_node_type,
 
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
-            "stochastic_weight_avg": False,
-            "lr": 0.001,
+            "lr": 1e-3,
             "epochs": 300,
-            "patience": 10,
             "weight_decay": 1e-2,
             "lr_annealing": None,
         }
 
-        args.update(hparams.__dict__)
-        model = LATTEFlatNodeClf(Namespace(**args), dataset, metrics=METRICS)
+        default_args.update(hparams.__dict__)
+        model = LATTEFlatNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
 
     elif 'DeepGraphGO' == hparams.method:
         USE_AMP = False
         model = build_deepgraphgo_model(hparams, base_path='../DeepGraphGO')
+
+    elif 'MLP' == hparams.method:
+        hparams.__dict__.update({
+            "embedding_dim": 256,
+            "n_layers": len(dataset.neighbor_sizes),
+            'neighbor_sizes': dataset.neighbor_sizes,
+            "batch_size": 2 ** 11,
+            "dropout": 0.5,
+            "nb_cls_dense_size": 0,
+            "nb_cls_dropout": 0,
+            "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "n_classes": dataset.n_classes,
+            "use_class_weights": False,
+            "lr": 1e-3,
+            "momentum": 0.9,
+            "weight_decay": 1e-2,
+        })
+        model = MLP(hparams, dataset=dataset, metrics=METRICS)
 
     else:
         raise Exception(f"Unknown model {hparams.embedder}")
@@ -248,8 +252,8 @@ def train(hparams):
     if hasattr(dataset, 'tags'):
         tags.extend(dataset.tags)
 
-    logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
-    logger.log_hyperparams(hparams)
+    # logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
+    # logger.log_hyperparams(hparams)
 
     if hparams.early_stopping:
         callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
@@ -262,7 +266,7 @@ def train(hparams):
         max_epochs=MAX_EPOCHS,
         min_epochs=MIN_EPOCHS,
         callbacks=callbacks,
-        logger=logger,
+        # logger=logger,
         max_time=datetime.timedelta(hours=hparams.hours) \
             if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
         # plugins='deepspeed' if NUM_GPUS > 1 else None,
@@ -302,7 +306,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_gpus', type=int, default=1)
     parser.add_argument('--seed', type=int, default=random.randint(0, int(1e4)))
 
-
+    parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
     # add all the available options to the trainer
     args = parse_yaml_config(parser)
     train(args)

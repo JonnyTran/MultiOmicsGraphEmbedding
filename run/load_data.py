@@ -1,3 +1,4 @@
+import glob
 import logging
 import os
 import pickle
@@ -9,6 +10,7 @@ import pandas as pd
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
+from ruamel import yaml
 from torch_geometric.datasets import AMiner
 
 import moge
@@ -67,7 +69,6 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
             add_reverse_metapaths=use_reverse,
             inductive=hparams.inductive, reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "ACM"
-
     elif name == "DBLP":
         from cogdl.datasets.gtn_data import GTNDataset
         dataset = DGLNodeGenerator.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-dblp"),
@@ -80,7 +81,6 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                                     add_reverse_metapaths=False, inductive=hparams.inductive,
                                                     reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "DBLP"
-
     elif name == "IMDB":
         from cogdl.datasets.gtn_data import GTNDataset
         dataset = DGLNodeGenerator.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-imdb"),
@@ -96,7 +96,6 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                                     add_reverse_metapaths=False, inductive=hparams.inductive,
                                                     reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "IMDB"
-
     elif name == "AMiner":
         dataset = HeteroNeighborGenerator(AMiner("datasets/aminer"), hparams.neighbor_sizes, node_types=None,
                                           metapaths=[('paper', 'written by', 'author'),
@@ -110,6 +109,25 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
 
     elif method == 'DeepGraphGO':
         dataset = None  # will load in method
+
+    elif name in ["HUMAN_MOUSE", "MULTISPECIES"]:
+
+        if name == 'HUMAN_MOUSE':
+            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRINGsplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+        elif name == "MULTISPECIES":
+            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRINGsplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+
+        mlb_path = os.path.expanduser('~/Bioinformatics_ExternalData/LATTE2GO')
+        mlb_paths = glob.glob(f'{mlb_path}/{hparams.dataset}-{hparams.pred_ntypes}/go_id.mlb')
+        if mlb_paths:
+            hparams.mlb_path = mlb_paths[0]
+
+        with open('run/configs/_latte2go_helper.yaml', 'r') as f:
+            args = yaml.safe_load(f)
+        hparams.__dict__.update(args)
+
+        dataset = build_uniprot_dataset('UniProt', dataset_path=dataset_path, hparams=hparams)
+
 
     elif 'UNIPROT' in name.upper() and (
             isinstance(dataset_path, HeteroNetwork) or (isinstance(dataset_path, str) and ".pickle" in dataset_path)):

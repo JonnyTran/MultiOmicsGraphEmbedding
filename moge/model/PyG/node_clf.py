@@ -683,7 +683,7 @@ class MLP(NodeClfTrainer):
 
 class HGTNodeClf(LATTEFlatNodeClf):
     def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"], collate_fn=None) -> None:
-        super().__init__(hparams, dataset, metrics)
+        super(LATTENodeClf, self).__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel

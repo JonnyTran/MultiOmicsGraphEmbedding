@@ -199,23 +199,23 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Post-processing to fix some data inconsistencies
         ## Missing classes not in .obo
-        for pred_ntype in self.pred_ntypes:
+        for go_ntype in self.pred_ntypes:
             extra_classes = None
-            if pred_ntype in self.nodes:
-                extra_classes = pd.Index(self.classes).difference(self.nodes[pred_ntype])
-                print(pred_ntype, self.classes.shape, extra_classes.size)
+            if go_ntype in self.nodes:
+                extra_classes = pd.Index(self.classes).difference(self.nodes[go_ntype])
+                logger.info(go_ntype, self.classes.shape, extra_classes.size)
                 if extra_classes.size:
-                    self.nodes[pred_ntype] = self.nodes[pred_ntype].append(extra_classes)
-                assert not self.nodes[pred_ntype].duplicated().any()
+                    self.nodes[go_ntype] = self.nodes[go_ntype].append(extra_classes)
+                assert not self.nodes[go_ntype].duplicated().any()
 
             # Missing nodes_namespace
-            if pred_ntype not in self.nodes_namespace:
-                self.nodes_namespace[pred_ntype] = pd.Series([pred_ntype for i in range(self.n_classes)],
-                                                             index=self.classes)
+            if go_ntype not in self.nodes_namespace:
+                self.nodes_namespace[go_ntype] = pd.Series([go_ntype for i in range(self.n_classes)],
+                                                           index=self.classes)
             if extra_classes is not None:
-                print(pred_ntype, self.nodes_namespace[pred_ntype].shape, extra_classes.size)
-                self.nodes_namespace[pred_ntype] = self.nodes_namespace[pred_ntype].append(
-                    pd.Series([pred_ntype for i in range(len(extra_classes))],
+                logger.info(go_ntype, self.nodes_namespace[go_ntype].shape, extra_classes.size)
+                self.nodes_namespace[go_ntype] = self.nodes_namespace[go_ntype].append(
+                    pd.Series([go_ntype for i in range(len(extra_classes))],
                               index=self.classes))
 
         # Rename nodes_namespace

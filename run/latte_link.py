@@ -145,7 +145,7 @@ if __name__ == "__main__":
     parser.add_argument('--hours', type=float, default=None)
 
     parser.add_argument('--train_date', type=str, default='2018-01-01')
-
+    parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
     args = parse_yaml_config(parser)
 
     train(args)

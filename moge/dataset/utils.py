@@ -284,11 +284,11 @@ def get_edge_attr_keys(nx_graph) -> Set[str]:
     return d.keys()
 
 
-def get_edge_index_values(nx_graph: nx.MultiGraph,
-                          nodes_A: Union[List[str], np.array],
-                          nodes_B: Union[List[str], np.array],
-                          edge_attrs: List[str] = None,
-                          format="pyg") \
+def nx_to_edge_index(nx_graph: nx.MultiGraph,
+                     nodes_A: Union[List[str], np.array],
+                     nodes_B: Union[List[str], np.array],
+                     edge_attrs: List[str] = None,
+                     format="pyg") \
         -> Tuple[Union[torch.LongTensor, Tuple[Tensor]], Optional[Dict[str, Tensor]]]:
     """
     Convert a nx.MultiGraph into an edge_index with edge_values tensors.

@@ -560,7 +560,7 @@ def load_dgl_graph(data_cnf, model_cnf, model_id=None, subset_pid: List[str] = N
     # Node features
     node_feats = ssp.load_npz(data_cnf['network']['feature'])
 
-    if subset_pid:
+    if subset_pid is not None:
         subset_pid = [node for node in subset_pid if node in net_pid_map]
         node_ids = torch.tensor([net_pid_map[node] for node in subset_pid], dtype=torch.int64)
         dgl_graph = dgl.node_subgraph(dgl_graph, nodes=node_ids)

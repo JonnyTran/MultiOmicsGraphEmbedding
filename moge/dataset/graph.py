@@ -1,4 +1,5 @@
 import pprint
+import traceback
 from abc import abstractmethod
 from typing import Union, List, Tuple, Dict, Optional
 
@@ -160,10 +161,12 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                                       DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  nodes_namespace: Dict[str, pd.Series] = None,
-                 pred_ntypes=None,
+                 pred_ntypes: List[str] = None,
                  classes=None,
                  edge_dir: str = "in", add_reverse_metapaths: bool = True, inductive: bool = False,
                  name=None, **kwargs):
+        if isinstance(pred_ntypes, str):
+            pred_ntypes = [pred_ntypes]
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
@@ -417,13 +420,18 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         y_dict = {}
         for name in np.unique(namespaces):
             mask = namespaces == name
+            try:
+                if isinstance(inputs, (Tensor, np.ndarray, pd.DataFrame)):
+                    y_dict[name] = select_mask(inputs, mask=mask, axis=axis)
 
-            if isinstance(inputs, (Tensor, np.ndarray, pd.DataFrame)):
-                y_dict[name] = select_mask(inputs, mask=mask, axis=axis)
-
-            elif isinstance(inputs, dict):
-                for ntype, input in inputs.items():
-                    y_dict.setdefault(ntype, {})[name] = select_mask(input, mask=mask, axis=axis)
+                elif isinstance(inputs, dict):
+                    for ntype, input in inputs.items():
+                        y_dict.setdefault(ntype, {})[name] = select_mask(input, mask=mask, axis=axis)
+            except:
+                print("namespaces", namespaces.shape, 'pred_ntypes', self.pred_ntypes, 'self.nodes_namespace',
+                      tensor_sizes(self.nodes_namespace))
+                print(f"name {name}, mask {mask.shape} {mask.max()}, y_dict {tensor_sizes(y_dict)}")
+                traceback.print_exc()
 
         return y_dict
 
