@@ -1,5 +1,7 @@
 import datetime
+import glob
 import logging
+import os
 import random
 import sys
 from argparse import ArgumentParser, Namespace
@@ -57,6 +59,17 @@ def train(hparams):
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
+
+    # Path to set MultiLabelBinarizer
+    mlb_path = os.path.expanduser('~/Bioinformatics_ExternalData/LATTE2GO')
+    if 'MULTISPECIES' in hparams.dataset:
+        results = glob.glob(f'{mlb_path}/{hparams.dataset}-{hparams.pred_ntypes}/go_id.mlb')
+    elif 'HUMAN_MOUSE' in hparams.dataset:
+        results = glob.glob(f'{mlb_path}/{hparams.dataset}-{hparams.pred_ntypes}/go_id.mlb')
+    else:
+        results = []
+    if results:
+        hparams.mlb_path = results[0]
 
     if hparams.method == "HAN":
         args = {
@@ -224,7 +237,7 @@ def train(hparams):
 
     elif 'DeepGraphGO' == hparams.method:
         USE_AMP = False
-        model = build_deepgraphgo_model(hparams, base_path='')
+        model = build_deepgraphgo_model(hparams, base_path='../DeepGraphGO')
 
     else:
         raise Exception(f"Unknown model {hparams.embedder}")
@@ -271,6 +284,8 @@ if __name__ == "__main__":
     parser.add_argument('--inductive', type=bool, default=False)
 
     parser.add_argument('--dataset', type=str, default="ACM")
+    parser.add_argument('--pred_ntypes', type=str, default="biological_process")
+
     parser.add_argument('--use_emb', type=str,
                         default="/home/jonny/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
     parser.add_argument('--root_path', type=str,

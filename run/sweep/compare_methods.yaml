@@ -8,6 +8,8 @@ parameters:
     values: [ 1, 2, 3, 4, 5 ]
   dataset:
     values: [ "MULTISPECIES", "HUMAN_MOUSE" ]
+  pred_ntypes:
+    values: [ 'molecular_function', 'biological_process', 'cellular_component' ]
   method:
     values: [ "LATTE-1", "LATTE-2", "HGT", "DeepGraphGO" ]
   inductive:

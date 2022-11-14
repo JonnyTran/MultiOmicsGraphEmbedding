@@ -6,7 +6,7 @@ import dask.dataframe as dd
 from moge.model.dgl.DeepGraphGO import load_dgl_graph, DeepGraphGO
 
 
-def build_deepgraphgo_model(hparams, base_path="../DeepGraphGO"):
+def build_deepgraphgo_model(hparams, base_path="../DeepGraphGO", ):
     if isinstance(hparams.pred_ntypes, str):
         assert len(hparams.pred_ntypes)
         pred_ntypes = hparams.pred_ntypes.split(" ")
@@ -33,8 +33,12 @@ def build_deepgraphgo_model(hparams, base_path="../DeepGraphGO"):
     else:
         subset_pid = None
 
+    # Set path to the MultiLabelBinarizer which set the classes
+
+    mlb_path = getattr(hparams, 'mlb_path', f'{base_path}/data/{namespace}_go.mlb')
+
     # Hparams
-    data_cnf = {'mlb': f'{base_path}/data/{namespace}_go.mlb',
+    data_cnf = {'mlb': mlb_path,
                 'model_path': 'models',
                 'name': namespace,
                 'protein_data': proteins,
