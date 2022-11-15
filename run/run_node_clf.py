@@ -125,7 +125,6 @@ def train(hparams):
             "lr": 1e-3,
             "momentum": 0.9,
             "weight_decay": 1e-2,
-            'epochs': 100,
         }
 
         model = HGTNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
@@ -185,7 +184,7 @@ def train(hparams):
             batch_order = 10
 
         default_args = {
-            "embedding_dim": 128,
+            "embedding_dim": 256,
             "layer_pooling": "order_concat",
 
             "n_layers": len(dataset.neighbor_sizes),
@@ -214,7 +213,6 @@ def train(hparams):
             "use_class_weights": False,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "lr": 1e-3,
-            "epochs": 300,
             "weight_decay": 1e-2,
             "lr_annealing": None,
         }
