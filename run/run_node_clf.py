@@ -105,6 +105,7 @@ def train(hparams):
         }
         model = MetaPath2Vec(Namespace(**default_args), dataset=dataset, metrics=METRICS)
     elif hparams.method == "HGT":
+        USE_AMP = False
         default_args = {
             "embedding_dim": 128,
             "n_layers": 2,
@@ -243,7 +244,9 @@ def train(hparams):
         model = MLP(hparams, dataset=dataset, metrics=METRICS)
 
     else:
-        raise Exception(f"Unknown model {hparams.embedder}")
+        raise Exception(f"Unknown model {hparams.model}")
+
+    model.train_metrics.metrics = {}
 
     tags = [] + hparams.dataset.split(" ")
     if hasattr(hparams, "namespaces"):

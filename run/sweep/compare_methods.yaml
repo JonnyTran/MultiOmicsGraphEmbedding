@@ -5,13 +5,13 @@ metric:
   goal: maximize
 parameters:
   seed:
-    values: [ 1, 2, 3, 4, 5 ]
+    values: [ 1 ]
   dataset:
     values: [ "MULTISPECIES", "HUMAN_MOUSE" ]
   pred_ntypes:
     values: [ 'molecular_function', 'biological_process', 'cellular_component' ]
   method:
-    values: [ "LATTE-1", "LATTE-2", "HGT", "DeepGraphGO", "MLP" ]
+    values: [ "LATTE-1", "HGT", "DeepGraphGO", "MLP" ]
   inductive:
     values: [ false ]
   early_stopping:
