@@ -34,17 +34,17 @@ filter_metapaths:
 
 use_reverse: true
 add_parents: true
-batch_size: 1024
+batch_size: 2048
 feature: true
 neighbor_loader: 'HGTLoader'
-n_neighbors: 1024
+n_neighbors: 2048
 
 attn_heads: 4
 attn_activation: "LeakyReLU"
 activation: "relu"
 n_layers: 2
-attn_dropout: 0.5
-dropout: 0.2
+attn_dropout: 0.2
+dropout: 0.0
 layer_pooling: 'concat'
 
 inductive: false
