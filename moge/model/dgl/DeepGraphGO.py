@@ -306,6 +306,9 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
         self._set_hparams(hparams)
         self.reset_parameters()
 
+    def name(self):
+        return self.__class__.__name__
+
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.input.weight)
         nn.init.xavier_uniform_(self.classifier.weight)

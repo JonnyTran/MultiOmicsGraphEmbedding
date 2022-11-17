@@ -551,17 +551,17 @@ class RelationMultiLayerAgg:
                     links['source'].replace(dst_id, prev_src_id, inplace=True)
                     links['target'].replace(dst_id, prev_src_id, inplace=True)
 
-                if True:
-                    # Ensure dst ntypes in non-last-layers have correct positioning by adding a self loop.
-                    for ntype in set(current_dst_ntypes).difference(last_src_nids.keys()):
-                        nid = nodes.query(f'(level == {nodes["level"].min()}) and (label == "{ntype}")').index[0]
+                # Ensure dst ntypes in non-last-layers have correct positioning by adding a self loop.
+                for ntype in set(current_dst_ntypes).difference(last_src_nids.keys()):
+                    print("ntype", ntype)
+                    nid = nodes.query(f'(level == {nodes["level"].min()}) and (label == "{ntype}")').index[0]
 
-                        selfloop_weight = 1 - links.query(f'target == {nid}')['mean'].sum() + 1e-3
-                        selfloop_link = pd.Series({
-                            'source': nid, 'target': nid, 'label': ntype, 'color': nodes.loc[nid, 'color'],
-                            'mean': selfloop_weight, 'std': 0.0, 'layer': latte.layer},
-                            name=links.index.max() + 1)
-                        links = links.append(selfloop_link)
+                    selfloop_weight = 1 - links.query(f'target == {nid}')['mean'].sum() + 1e-3
+                    selfloop_link = pd.Series({
+                        'source': nid, 'target': nid, 'label': ntype, 'color': nodes.loc[nid, 'color'],
+                        'mean': selfloop_weight, 'std': 0.0, 'layer': latte.layer},
+                        name=links.index.max() + 1)
+                    links = links.append(selfloop_link)
 
                 nodes['level'] += layer_nodes[-1]['level'].max() - 1
 

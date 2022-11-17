@@ -748,22 +748,28 @@ class GraphClfTrainer(LightningModule):
                                             batch_size=self.hparams.batch_size)
 
 @torch.no_grad()
-def print_pred_class_counts(y_pred, y_true, multilabel, n_top_class=8):
-    print()
-    if (y_pred < 0.0).any():
-        y_pred = torch.sigmoid(y_pred.clone()) if multilabel else torch.softmax(y_pred.clone(), dim=-1)
+def print_pred_class_counts(y_pred: Tensor, y_true: Tensor, multilabel, classes: np.ndarray = None, n_top_class=8):
+    try:
+        if (y_pred < 0.0).any():
+            y_pred = torch.sigmoid(y_pred.clone()) if multilabel else torch.softmax(y_pred.clone(), dim=-1)
 
-    if multilabel:
-        y_pred_dict = pd.Series(y_pred.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-        y_true_dict = pd.Series(y_true.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-        print(f"y_pred {len(y_pred_dict)} classes",
-              {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-        print(f"y_true {len(y_true_dict)} classes",
-              {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-    else:
-        y_pred_dict = pd.Series(y_pred.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-        y_true_dict = pd.Series(y_true.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-        print(f"y_pred {len(y_pred_dict)} classes",
-              {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-        print(f"y_true {len(y_true_dict)} classes",
-              {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+        args = {}
+        if classes is not None:
+            args['index'] = classes
+
+        if multilabel:
+            y_pred_dict = pd.Series(y_pred.sum(1).cpu().type(torch.int).numpy(), **args).value_counts().to_dict()
+            y_true_dict = pd.Series(y_true.sum(1).cpu().type(torch.int).numpy(), **args).value_counts().to_dict()
+            print(f"y_pred {len(y_pred_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
+            print(f"y_true {len(y_true_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+        else:
+            y_pred_dict = pd.Series(y_pred.argmax(1).cpu().type(torch.int).numpy()).value_counts().to_dict()
+            y_true_dict = pd.Series(y_true.cpu().type(torch.int).numpy()).value_counts().to_dict()
+            print(f"y_pred {len(y_pred_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
+            print(f"y_true {len(y_true_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+    except Exception as e:
+        logger.error(e.__repr__())

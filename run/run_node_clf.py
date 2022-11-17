@@ -32,12 +32,7 @@ def train(hparams):
     MAX_EPOCHS = 1000
     MIN_EPOCHS = getattr(hparams, 'min_epochs', None)
 
-    if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
-        GPUS = [hparams.gpu]
-    elif hparams.num_gpus == 1:
-        GPUS = select_empty_gpus()
-    else:
-        GPUS = random.sample([0, 1, 2], NUM_GPUS)
+
 
     ### Dataset
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
@@ -50,7 +45,7 @@ def train(hparams):
     callbacks = []
     if hparams.dataset.upper() in ['UNIPROT', "MULTISPECIES", "HUMAN_MOUSE"]:
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
-        early_stopping_args = dict(monitor='val_aupr', mode='max')
+        early_stopping_args = dict(monitor='val_fmax', mode='max')
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
@@ -183,6 +178,8 @@ def train(hparams):
             t_order = 3
             batch_order = 10
 
+        dataset.neighbor_sizes = [2048, 2048]
+
         default_args = {
             "embedding_dim": 256,
             "layer_pooling": "order_concat",
@@ -194,12 +191,12 @@ def train(hparams):
 
             "attn_heads": 4,
             "attn_activation": "LeakyReLU",
-            "attn_dropout": 0.5,
+            "attn_dropout": 0.2,
 
             "batchnorm": False,
             "layernorm": True,
             "activation": "relu",
-            "dropout": 0.5,
+            "dropout": 0.0,
             "input_dropout": False,
 
             "nb_cls_dense_size": 0,
@@ -216,8 +213,8 @@ def train(hparams):
             "weight_decay": 1e-2,
             "lr_annealing": None,
         }
-        default_args.update(hparams.__dict__)
-        model = LATTEFlatNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
+        hparams.__dict__.update(default_args)
+        model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
 
     elif 'DeepGraphGO' == hparams.method:
         USE_AMP = False
@@ -257,6 +254,13 @@ def train(hparams):
 
     if hparams.early_stopping:
         callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
+
+    if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
+        GPUS = [hparams.gpu]
+    elif hparams.num_gpus == 1:
+        GPUS = select_empty_gpus()
+    else:
+        GPUS = random.sample([0, 1, 2], NUM_GPUS)
 
     trainer = Trainer(
         accelerator='cuda',
@@ -325,6 +329,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--num_gpus', type=int, default=1)
     parser.add_argument('--seed', type=int, default=random.randint(0, int(1e4)))
+    parser.add_argument('--hours', type=int, default=23)
 
     parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
     # add all the available options to the trainer

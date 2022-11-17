@@ -499,7 +499,7 @@ class LATTEFlatNodeClf(LATTENodeClf):
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 
         if batch_nb == 0:
-            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel, classes=self.dataset.classes)
 
         self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
 
