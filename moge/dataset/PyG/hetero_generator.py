@@ -533,12 +533,19 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Get TSNE 2d position from embeddings
         try:
             from umap import UMAP
-            tsne = UMAP(n_components=2, n_jobs=-1)
-        except Exception as e:
+            tsne = UMAP(n_components=2, n_jobs=-1, n_epochs=100, verbose=True)
+        except ImportError as ie:
+            logger.error(ie.__repr__())
             import MulticoreTSNE
             tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, perplexity=15, learning_rate=10, n_jobs=-1)
 
-        nodes_pos = tsne.fit_transform(nodes_emb)
+        try:
+            tsne.fit(nodes_emb)
+        except KeyboardInterrupt:
+            logger.info(f"Stop training {tsne}")
+        finally:
+            nodes_pos = tsne.transform(nodes_emb)
+
         nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
         df = df.assign(loss=df['loss'].astype(float), pos1=df['pos1'].astype(float), pos2=df['pos2'].astype(float))
