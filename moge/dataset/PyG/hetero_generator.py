@@ -812,12 +812,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return dataset
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, add_metapaths=None, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, add_metapaths=None, node_mask=None,
+                        **kwargs):
         graph = self.G
         head_ntype = self.head_node_type
 
         # Select only test nodes with at least 1 label
-        node_mask = graph[head_ntype].test_mask & graph[head_ntype].y.sum(1).type(torch.bool)
+        if node_mask is not None:
+            node_mask = node_mask & graph[head_ntype].y.sum(1).type(torch.bool)
+        else:
+            node_mask = graph[head_ntype].test_mask & graph[head_ntype].y.sum(1).type(torch.bool)
         logger.info(f'test_dataloader size: {node_mask.sum()}')
 
         num_train_overlap = (graph[head_ntype].test_mask & (graph[head_ntype].train_mask == True)).sum()

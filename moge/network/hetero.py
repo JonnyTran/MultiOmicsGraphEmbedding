@@ -730,8 +730,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 f'Adding edge_index to HeteroData: {metapath} {tensor_sizes(edge_index)} {tensor_sizes(edge_attrs)}')
             return {metapath: (edge_index, edge_attrs)}
 
-        parallel = Parallel(n_jobs=len(self.networks), prefer="threads")
-        outputs = parallel(delayed(extract_edge_index)(m) for m in self.networks)
+        outputs = Parallel(n_jobs=len(self.networks),
+                           prefer="threads")(delayed(extract_edge_index)(m) for m in self.networks)
         edge_index_dict = dict(collections.ChainMap(*outputs))
 
         for metapath, (edge_index, edge_attrs) in edge_index_dict.items():
@@ -765,7 +765,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             if expression and ntype in self.multiomics.get_omics_list() \
                     and hasattr(self.multiomics[ntype], 'expressions'):
-                expressions = self.multiomics[ntype].expressions.loc[:, nodelist]  # (num_features, num_samples)
+                expressions = self.multiomics[ntype].expressions.loc[:, nodelist]  # shape: (num_features, num_samples)
 
                 if hasattr(expressions, 'sparse') and not expressions.empty:
                     csr_mtx: csr_matrix = expressions.sparse.to_coo().T.tocsr()
@@ -774,9 +774,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                       col=torch.tensor(csr_mtx.indices, dtype=torch.long),
                                                       value=torch.tensor(csr_mtx.data, dtype=torch.float),
                                                       sparse_sizes=csr_mtx.shape, is_sorted=True, trust_data=True)
+                    hetero[ntype]['x_feat_names'] = expressions.index.values
 
                 elif not expressions.empty:
                     hetero[ntype]['x'] = torch.tensor(expressions.values.T, dtype=torch.float)
+                    hetero[ntype]['x_feat_names'] = expressions.index.values
 
         # Node labels
         if target:
@@ -810,6 +812,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     continue
 
                 hetero[ntype]['y'] = labels
+                hetero[ntype]['y_classes'] = classes
         else:
             classes = None
 
