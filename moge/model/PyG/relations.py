@@ -232,7 +232,7 @@ class RelationAttention(ABC):
             for metapath in filter_metapaths(edge_index_dict, tail_type=ntype):
                 metapath_name = ".".join(metapath)
                 head_type, tail_type = metapath[0], metapath[-1]
-                edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], )
+                edge_index, edge_values = get_edge_index_values(edge_index_dict[metapath], drop_edge_value=False)
                 if edge_index is None or edge_index.size(1) == 0: continue
 
                 # Edge counts

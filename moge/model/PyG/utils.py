@@ -173,7 +173,7 @@ def filter_metapaths(metapaths: List[Tuple],
 
 
 def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],
-                          filter_edge=False, threshold=0.0, drop_edge_value=True) \
+                          filter_edge=False, threshold=0.0, drop_edge_value=False) \
         -> Tuple[Tensor, Optional[Tensor]]:
     """
 
