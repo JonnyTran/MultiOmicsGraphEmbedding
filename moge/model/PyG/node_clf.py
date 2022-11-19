@@ -548,8 +548,7 @@ class MLP(NodeClfTrainer):
 
         h_out = {}
         if len(h_out) < len(inputs["global_node_index"].keys()):
-            embs = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
-            h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
+            h_out = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
 
         if hasattr(self, "classifier"):
             head_ntype_embeddings = h_out[self.head_node_type]

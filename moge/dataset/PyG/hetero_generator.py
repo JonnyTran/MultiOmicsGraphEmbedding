@@ -213,7 +213,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             if go_ntype not in self.nodes_namespace:
                 self.nodes_namespace[go_ntype] = pd.Series([go_ntype for i in range(self.n_classes)],
                                                            index=self.classes)
-            if extra_classes is not None:
+            if extra_classes is not None and len(extra_classes):
                 logger.info(go_ntype, self.nodes_namespace[go_ntype].shape, extra_classes.size)
                 self.nodes_namespace[go_ntype] = self.nodes_namespace[go_ntype].append(
                     pd.Series([go_ntype for i in range(len(extra_classes))],
@@ -503,8 +503,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Concatenated list of node embeddings and other metadata
         nodes_emb = {ntype: emb.detach().cpu().numpy() if isinstance(emb, Tensor) else emb \
-                     for ntype, emb in embeddings.items()}
-        nodes_emb = np.concatenate([nodes_emb[ntype][:len(nids)] for ntype, nids in ntype_nids.items()])
+                     for ntype, emb in embeddings.items() \
+                     if ntype in ntype_nids}
+        nodes_emb = np.concatenate([nodes_emb[ntype][:len(nids)] \
+                                    for ntype, nids in ntype_nids.items()])
 
         node_train_valid_test = np.vstack([
             np.concatenate([self.G[ntype].train_mask[nids].numpy() for ntype, nids in ntype_nids.items()]),

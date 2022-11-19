@@ -111,6 +111,8 @@ class Graph:
         Returns:
 
         """
+        if hasattr(self, "node_metadata") and self.node_metadata is not None:
+            return self.node_metadata
 
         def _process_int_values(s: Series) -> Series:
             if s.dtype == 'O' and s.str.contains("|").any():

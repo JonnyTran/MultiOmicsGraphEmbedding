@@ -57,18 +57,18 @@ def adjust_batch_size(hparams):
     return int(batch_size)
 
 
-def select_empty_gpus() -> List[int]:
+def select_empty_gpus(num_gpus=1) -> List[int]:
     pynvml.nvmlInit()
     deviceCount = pynvml.nvmlDeviceGetCount()
 
-    available = []
+    avail_device = []
     for i in range(deviceCount):
         device = pynvml.nvmlDeviceGetHandleByIndex(i)
         info = pynvml.nvmlDeviceGetMemoryInfo(device)
 
-        available.append((info.free / info.total, i))
+        avail_device.append((info.free / info.total, i))
 
-    best_gpu = max(available)[1]
+    best_gpu = max(avail_device)[1]
     return [best_gpu]
 
 

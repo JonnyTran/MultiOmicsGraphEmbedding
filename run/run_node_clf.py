@@ -257,10 +257,8 @@ def train(hparams):
 
     if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
         GPUS = [hparams.gpu]
-    elif hparams.num_gpus == 1:
-        GPUS = select_empty_gpus()
-    else:
-        GPUS = random.sample([0, 1, 2], NUM_GPUS)
+    elif NUM_GPUS:
+        GPUS = select_empty_gpus(NUM_GPUS)
 
     trainer = Trainer(
         accelerator='cuda',
@@ -281,7 +279,6 @@ def train(hparams):
     trainer.tune(model)
     trainer.fit(model)
     trainer.test(model)
-
 
 def update_hparams_from_env(hparams: Namespace, dataset=None):
     updates = {}
