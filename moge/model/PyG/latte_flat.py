@@ -129,24 +129,14 @@ class LATTEConv(MessagePassing, RelationAttention):
     #     return beta
 
     def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
-        beta_l = F.relu(query * self.rel_attn_l[ntype], )
-        beta_r = F.relu(key * self.rel_attn_r[ntype], )
+        beta_l = F.relu(query * self.rel_attn_l[ntype])
+        beta_r = F.relu(key * self.rel_attn_r[ntype])
 
         beta = (beta_l[:, None, :, :] * beta_r).sum(-1) + self.rel_attn_bias[ntype][None, :, None]
         beta = F.softmax(beta, dim=1)
-        # beta = torch.relu(beta / beta.sum(1, keepdim=True))
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str):
-    #     """
-    #     Multihead Attention to find betas
-    #     """
-    #     key = key.view(query.size(0), self.num_tail_relations(ntype), -1)
-    #     _, betas = self.rel_mha.forward(key, key=key, value=key, average_attn_weights=False)
-    #
-    #     betas = betas.mean(2).permute([0,2,1])
-    #     return betas
 
     def forward(self, feats: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
@@ -176,9 +166,12 @@ class LATTEConv(MessagePassing, RelationAttention):
         edge_pred_dicts = {}
         for ntype in global_node_index:
             if global_node_index[ntype].size(0) == 0 or self.num_tail_relations(ntype) <= 1: continue
+
             h_out[ntype], edge_pred_dict = self.aggregate_relations(
                 ntype=ntype, l_dict=l_dict, r_dict=r_dict,
-                edge_index_dict=edge_index_dict, edge_pred_dict=edge_pred_dict, global_node_index=global_node_index,
+                edge_index_dict=edge_index_dict,
+                edge_pred_dict=edge_pred_dict,
+                global_node_index=global_node_index,
                 verbose=verbose)
             edge_pred_dicts.update(edge_pred_dict)
 
@@ -187,6 +180,7 @@ class LATTEConv(MessagePassing, RelationAttention):
             if verbose:
                 rel_embedding = h_out[ntype].detach().clone()
 
+            # GATRelAttn
             # h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim)
             # h_out[ntype], betas[ntype] = self.relation_conv[ntype].forward(h_out[ntype])
 
@@ -263,23 +257,46 @@ class LATTEConv(MessagePassing, RelationAttention):
                             r_dict: Dict[str, Tensor],
                             edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                             edge_pred_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
-                            global_node_index: Dict[str, Tensor], verbose=False):
+                            global_node_index: Dict[str, Tensor],
+                            verbose=False) \
+            -> Tuple[Tensor, Dict[Tuple, Tuple[Tensor, Tensor]]]:
+        """
+
+        Args:
+            ntype ():
+            l_dict ():
+            r_dict ():
+            edge_index_dict ():
+            edge_pred_dict ():
+            global_node_index ():
+            verbose ():
+
+        Returns:
+            emb_relations:
+            edge_pred_dict:
+        """
         sizes = {ntype: nids.numel() for ntype, nids in global_node_index.items()}
+
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(size=(sizes[ntype],
-                                          self.num_tail_relations(ntype),
+                                          self.num_tail_relations(ntype, include_self=True),
                                           self.attn_heads,
-                                          self.out_channels)).type_as(self.attn)
+                                          self.out_channels),
+                                    device=self.attn.device,
+                                    dtype=self.attn.dtype,
+                                    requires_grad=True)
         relations = self.get_tail_relations(ntype)
 
         if edge_pred_dict is None:
             edge_pred_dict = copy.copy(edge_index_dict)
-        elif len(edge_pred_dict) < len(edge_index_dict):
+        elif set(edge_index_dict).difference(edge_pred_dict):
             edge_pred_dict.update(edge_index_dict)
 
         # First order
         for metapath in self.get_tail_relations(ntype, order=1):
             head, tail = metapath[0], metapath[-1]
+            metapath_index = relations.index(metapath)
+
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None or \
                     head not in sizes or tail not in sizes: continue
             num_node_head, num_node_tail = sizes[head], sizes[tail]
@@ -295,7 +312,7 @@ class LATTEConv(MessagePassing, RelationAttention):
                 metapath_idx=self.metapaths.index(metapath),
                 values=None)
 
-            emb_relations[:, relations.index(metapath)] = out
+            emb_relations[:, metapath_index] = out
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
 

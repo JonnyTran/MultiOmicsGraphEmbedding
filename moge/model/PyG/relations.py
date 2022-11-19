@@ -154,16 +154,22 @@ class RelationAttention(ABC):
                          for metapath in relations]
         return relations
 
-    def num_head_relations(self, node_type) -> int:
+    def num_head_relations(self, node_type, include_self=True) -> int:
         """
         Return the number of metapaths with head node type equals to :param ntype: and plus one for none-selection.
         """
         relations = self.get_head_relations(node_type)
-        return len(relations) + 1
+        n = len(relations)
+        if include_self:
+            n += 1
+        return n
 
-    def num_tail_relations(self, ntype) -> int:
+    def num_tail_relations(self, ntype, include_self=True) -> int:
         relations = self.get_tail_relations(ntype)
-        return len(relations) + 1
+        n = len(relations)
+        if include_self:
+            n += 1
+        return n
 
     @torch.no_grad()
     def update_relation_attn(self, betas: Dict[str, Tensor],

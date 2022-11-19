@@ -23,7 +23,7 @@ from moge.network.utils import to_list_of_strs
 from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 
 
-def get_slug(name, hparams: Namespace, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
+def get_slug(name: str, hparams: Namespace, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
              exclude_etypes, feature, save_path):
     node_types = ['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein', 'biological_process', 'molecular_function',
                   'cellular_component']
@@ -121,7 +121,7 @@ def parse_options(hparams, dataset_path):
 
 
 def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
-                          save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True) \
+                          save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True, rebuild=False) \
         -> HeteroNodeClfDataset:
     target = 'go_id'
 
@@ -131,7 +131,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     load_path = get_slug(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
                          exclude_etypes, feature, save_path)
 
-    if os.path.exists(os.path.expanduser(load_path)):
+    if os.path.exists(os.path.expanduser(load_path)) and not rebuild:
         try:
             logger.info(f'Loading saved HeteroNodeClfDataset at {load_path}')
             dataset = HeteroNodeClfDataset.load(load_path, **hparams.__dict__)
