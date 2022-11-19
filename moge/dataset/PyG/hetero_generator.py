@@ -22,6 +22,7 @@ from pandas import DataFrame, Series, Index
 from ruamel import yaml
 from scipy.sparse import coo_matrix
 from six.moves import intern
+from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
@@ -480,7 +481,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def get_node_metadata(self, ntype_nids: Dict[str, Tensor],
                           embeddings: Dict[str, Tensor],
                           weights: Optional[Dict[str, Series]] = None,
-                          losses: Dict[str, Tensor] = None) -> DataFrame:
+                          losses: Dict[str, Tensor] = None,
+                          n_clusters=20,
+                          update_df: pd.DataFrame = None) -> DataFrame:
         """
         Collect node metadata for all nodes in X["global_node_index"]
         Args:
@@ -520,35 +523,46 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Metadata
         # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
-        df = pd.DataFrame(
-            {"node": np.concatenate([self.nodes[ntype][ntype_nids[ntype]] \
-                                     for ntype in ntype_nids]),
-             "ntype": np.concatenate([[ntype for i in range(ntype_nids[ntype].shape[0])] \
-                                      for ntype in ntype_nids]),
-             "train_valid_test": node_train_valid_test,
-             "loss": node_losses},
-            index=pd.Index(np.concatenate([ntype_nids[ntype] for \
-                                           ntype in ntype_nids]), name="nid"))
+        if update_df is None:
+            df = pd.DataFrame(
+                {"node": np.concatenate([self.nodes[ntype][ntype_nids[ntype]] \
+                                         for ntype in ntype_nids]),
+                 "ntype": np.concatenate([[ntype for i in range(ntype_nids[ntype].shape[0])] \
+                                          for ntype in ntype_nids]),
+                 "train_valid_test": node_train_valid_test,
+                 "loss": node_losses},
+                index=pd.Index(np.concatenate([ntype_nids[ntype] for \
+                                               ntype in ntype_nids]), name="nid"))
+        else:
+            df = update_df
 
         # Get TSNE 2d position from embeddings
-        try:
-            from umap import UMAP
-            tsne = UMAP(n_components=2, n_jobs=-1, n_epochs=100, verbose=True)
-        except ImportError as ie:
-            logger.error(ie.__repr__())
-            import MulticoreTSNE
-            tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, perplexity=15, learning_rate=10, n_jobs=-1)
+        if 'pos1' not in df.columns:
+            try:
+                from umap import UMAP
+                tsne = UMAP(n_components=2, n_jobs=-1, n_epochs=100, verbose=True)
+            except ImportError as ie:
+                logger.error(ie.__repr__())
+                import MulticoreTSNE
+                tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, perplexity=15, learning_rate=10, n_jobs=-1)
 
-        try:
-            tsne.fit(nodes_emb)
-        except KeyboardInterrupt:
-            logger.info(f"Stop training {tsne}")
-        finally:
-            nodes_pos = tsne.transform(nodes_emb)
+            try:
+                tsne.fit(nodes_emb)
+            except KeyboardInterrupt:
+                logger.info(f"Stop training {tsne}")
+            finally:
+                nodes_pos = tsne.transform(nodes_emb)
 
-        nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
-        df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
-        df = df.assign(loss=df['loss'].astype(float), pos1=df['pos1'].astype(float), pos2=df['pos2'].astype(float))
+            nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
+            df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
+            df = df.assign(loss=df['loss'].astype(float), pos1=df['pos1'].astype(float), pos2=df['pos2'].astype(float))
+
+        # Predict kmeans clusters
+        if 'kmeans_cluster_id' not in df.columns:
+            kmeans = KMeans(n_clusters)
+            logger.info(f"Kmeans with k={n_clusters}")
+            kmeans_pred = kmeans.fit_predict(nodes_emb)
+            df['kmeans_cluster_id'] = kmeans_pred
 
         # Set index
         df = df.reset_index()

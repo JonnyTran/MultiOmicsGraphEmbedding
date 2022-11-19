@@ -26,7 +26,6 @@ from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import edge_index_to_adjs
 from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve, add_common_metrics
-from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
 
 
@@ -48,38 +47,7 @@ class ClusteringEvaluator(LightningModule):
         #     print(layer.name())
         #     layer.register_forward_pre_hook(save_node_ids)
 
-    def save_embedding(self, module, _, outputs):
-        if self.training:
-            return
-
-        if module.__name__ == "embedder":
-            logging.info(f"save_embedding @ {module.__name__}")
-
-            if isinstance(outputs, (list, tuple)):
-                self._embeddings = outputs[0]
-            else:
-                self._embeddings = outputs
-
-    def save_pred(self, module, _, outputs):
-        if self.training:
-            return
-
-        if module.__name__ in ["classifier"]:
-            logging.info(
-                f"save_pred @ {module.__name__}, output {tensor_sizes(outputs)}")
-
-            if isinstance(outputs, (list, tuple)):
-                self._y_pred = outputs[0]
-            else:
-                self._y_pred = outputs
-
-    def trainvalidtest_dataloader(self):
-        return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
-
     def clustering_metrics(self, n_runs=10, compare_node_types=True):
-        loader = self.trainvalidtest_dataloader()
-        X_all, y_all, _ = next(iter(loader))
-        self.cpu().forward(preprocess_input(X_all, device="cpu"))
 
         if not isinstance(self._embeddings, dict):
             self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
@@ -107,11 +75,8 @@ class ClusteringEvaluator(LightningModule):
         metrics = res_df.mean(0).to_dict()
         return metrics
 
-    def get_embeddings_labels(self, embeddings: Dict[str, Tensor], global_node_index: Dict[str, Tensor],
-                              cache: bool = True) \
+    def get_embeddings_labels(self, embeddings: Dict[str, Tensor], global_node_index: Dict[str, Tensor]) \
             -> Tuple[DataFrame, Series, Series]:
-        if cache and hasattr(self, "_embeddings") and hasattr(self, "_node_types") and hasattr(self, "_labels"):
-            return self._embeddings, self._node_types, self._labels
 
         # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
         emb_df_list = []
@@ -143,14 +108,16 @@ class ClusteringEvaluator(LightningModule):
 
         return embeddings, node_types, labels
 
-    def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False, seed=None):
+    def predict_cluster(self, embeddings: Tensor, index: pd.Index,
+                        n_clusters=8, n_jobs=-2, save_kmeans=False, seed=None) -> pd.Series:
         kmeans = KMeans(n_clusters, n_jobs=n_jobs, random_state=seed)
         logging.info(f"Kmeans with k={n_clusters}")
-        y_pred = kmeans.fit_predict(self.embeddings)
+
+        y_pred = kmeans.fit_predict(embeddings.cpu().numpy() if isinstance(embeddings, Tensor) else embeddings)
         if save_kmeans:
             self.kmeans = kmeans
 
-        y_pred = pd.Series(y_pred, index=self.embeddings.index, dtype=str)
+        y_pred = pd.Series(y_pred, index=index, dtype=str)
         return y_pred
 
 
