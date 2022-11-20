@@ -481,7 +481,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def get_node_metadata(self, ntype_nids: Dict[str, Tensor],
                           embeddings: Dict[str, Tensor],
                           weights: Optional[Dict[str, Series]] = None,
-                          losses: Dict[str, Tensor] = None,
+                          losses: Dict[str, np.ndarray] = None,
                           n_clusters=20,
                           update_df: pd.DataFrame = None) -> DataFrame:
         """
@@ -497,9 +497,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         """
         self.create_node_metadata(self.network.annotations, nodes=self.nodes)
 
-        ntype_nids = OrderedDict({ntype: nids.numpy() if isinstance(nids, Tensor) else nids \
-                                  for ntype, nids in ntype_nids.items() \
-                                  if ntype in embeddings})
+        ntype_nids: Dict[str, np.ndarray] = OrderedDict(
+            {ntype: nids.numpy() if isinstance(nids, Tensor) else nids \
+             for ntype, nids in ntype_nids.items() \
+             if ntype in embeddings})
 
         # Concatenated list of node embeddings and other metadata
         nodes_emb = {ntype: emb.detach().cpu().numpy() if isinstance(emb, Tensor) else emb \
@@ -516,6 +517,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         node_train_valid_test = np.array(["Train", "Valid", "Test"])[node_train_valid_test.argmax(1)]
 
         if losses:
+            # Add missing nodes for certain ntype in `losses`
+            for ntype in (ntype for ntype in losses if losses[ntype].size != ntype_nids[ntype].size):
+                num_missing = np.array([None for _ in range(ntype_nids[ntype].size - losses[ntype].size)])
+                losses[ntype] = np.concatenate([losses[ntype], num_missing])
+
             node_losses = np.concatenate([losses[ntype] \
                                               if ntype in losses else \
                                               [None for i in range(ntype_nids[ntype].size)] \
@@ -526,13 +532,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Metadata
         # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
         if update_df is None:
+            data_dict = {"node": np.concatenate([self.nodes[ntype][ntype_nids[ntype]] \
+                                                 for ntype in ntype_nids]),
+                         "ntype": np.concatenate([[ntype for i in range(ntype_nids[ntype].shape[0])] \
+                                                  for ntype in ntype_nids]),
+                         "train_valid_test": node_train_valid_test,
+                         "loss": node_losses}
             df = pd.DataFrame(
-                {"node": np.concatenate([self.nodes[ntype][ntype_nids[ntype]] \
-                                         for ntype in ntype_nids]),
-                 "ntype": np.concatenate([[ntype for i in range(ntype_nids[ntype].shape[0])] \
-                                          for ntype in ntype_nids]),
-                 "train_valid_test": node_train_valid_test,
-                 "loss": node_losses},
+                data_dict,
                 index=pd.Index(np.concatenate([ntype_nids[ntype] for \
                                                ntype in ntype_nids]), name="nid"))
         else:
@@ -564,7 +571,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             kmeans = KMeans(n_clusters)
             logger.info(f"Kmeans with k={n_clusters}")
             kmeans_pred = kmeans.fit_predict(nodes_emb)
-            df['kmeans_cluster_id'] = kmeans_pred
+            df['kmeans_cluster_id'] = pd.Index(kmeans_pred).astype('str')
 
         # Set index
         df = df.reset_index()

@@ -86,11 +86,6 @@ class LATTEConv(MessagePassing, RelationAttention):
         if layernorm:
             self.layernorm: Dict[str, nn.LayerNorm] = nn.ParameterDict(
                 {ntype: nn.LayerNorm(output_dim) for ntype in self.node_types})
-            self.rel_layernorm: Dict[str, nn.LayerNorm] = nn.ParameterDict(
-                {ntype: nn.LayerNorm([self.num_tail_relations(ntype, include_self=True),
-                                      self.attn_heads,
-                                      self.out_channels]) for ntype in self.node_types})
-
         if batchnorm:
             self.batchnorm = nn.ParameterDict({ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types})
 
@@ -190,9 +185,6 @@ class LATTEConv(MessagePassing, RelationAttention):
 
             h_out[ntype][:, -1] = l_dict[ntype]
 
-            if hasattr(self, 'rel_layernorm'):
-                h_out[ntype] = self.rel_layernorm[ntype].forward(h_out[ntype])
-
             if verbose:
                 rel_embedding = h_out[ntype].detach().clone()
 
@@ -209,8 +201,7 @@ class LATTEConv(MessagePassing, RelationAttention):
                                                                         betas[ntype].mean(-1).mean(0),
                                                                         betas[ntype].mean(-1).std(0))):
                     if metapath in edge_pred_dict:
-                        edge_index = edge_pred_dict[metapath] \
-                            if isinstance(edge_pred_dict[metapath], Tensor) else edge_pred_dict[metapath][0]
+                        edge_index, _ = get_edge_index_values(edge_pred_dict[metapath], drop_edge_value=True)
                         edge_size = edge_index.size(1)
                     elif metapath != ntype:
                         continue
@@ -240,6 +231,7 @@ class LATTEConv(MessagePassing, RelationAttention):
 
             if verbose:
                 print(f"   -> {self.activation.__name__ if hasattr(self, 'activation') else ''} "
+                      f"{'batchnorm' if hasattr(self, 'batchnorm') else ''} "
                       f"{'batchnorm' if hasattr(self, 'batchnorm') else ''} "
                       f"{'layernorm' if hasattr(self, 'layernorm') else ''}: "
                       f"{torch.norm(h_out[ntype], dim=1).mean().item():.2f}")

@@ -474,7 +474,8 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             metrics.update_metrics(y_pred, y_true, weights=weights, subset=subset)
 
     @torch.no_grad()
-    def get_node_loss(self, targets: Tensor, scores: Tensor, global_node_index: Dict[str, Tensor] = None):
+    def get_node_loss(self, targets: Tensor, scores: Tensor, global_node_index: Dict[str, Tensor] = None) \
+            -> Dict[str, np.ndarray]:
         scores = torch.from_numpy(scores.values if isinstance(scores, pd.DataFrame) else scores) \
             if not isinstance(scores, Tensor) else scores
         target = torch.from_numpy(targets.values if isinstance(targets, pd.DataFrame) else targets) \

@@ -4,6 +4,7 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+from logzero import logger
 from numpy import ndarray
 from pandas import Index
 
@@ -78,5 +79,7 @@ def select_labels(y_list: pd.Series, min_count: Union[int, float] = None, max_co
     counts = counts[counts >= min_count]
     if max_count:
         counts = counts[counts <= max_count]
+
+    logger.info(f"Selected {counts.size} with min_count={min_count}")
 
     return counts.index
