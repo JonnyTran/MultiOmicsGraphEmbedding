@@ -134,7 +134,7 @@ class LATTEConv(MessagePassing, RelationAttention):
 
         beta = (beta_l[:, None, :, :] * beta_r).sum(-1) + self.rel_attn_bias[ntype][None, :, None]
         beta = F.softmax(beta, dim=1)
-        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
     def projection(self, feats: Dict[str, Tensor], linears: ModuleDict, subset=None):

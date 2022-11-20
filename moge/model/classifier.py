@@ -101,8 +101,7 @@ class LabelNodeClassifer(nn.Module):
         self.head_node_type = hparams.head_node_type
 
         self.pred_ntypes = dataset.pred_ntypes
-        self.class_indices = dataset.class_indices
-        self.class_sizes = {ntype: ids.numel() for ntype, ids in self.class_indices.items()}
+        self.class_sizes = {ntype: ids.numel() for ntype, ids in dataset.class_indices.items()}
 
         # if hparams.embedding_dim
         self.embedding_dim = hparams.embedding_dim
@@ -113,9 +112,16 @@ class LabelNodeClassifer(nn.Module):
         elif hparams.loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.activation = nn.Softmax()
 
+        self.batchnorm = nn.BatchNorm1d(hparams.embedding_dim)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        pass
+        # nn.init.xavier_uniform_(self.weight)
+
     def forward(self, emb: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
         for ntype in self.pred_ntypes:
-            cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
+            cls_emb = self.batchnorm.forward(h_dict[ntype][:self.class_sizes[ntype]])
 
         assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb.shape}) != n_classes ({self.n_classes})"
         logits = (emb @ cls_emb.T) + self.bias

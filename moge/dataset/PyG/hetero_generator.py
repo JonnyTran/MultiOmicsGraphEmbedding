@@ -156,7 +156,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return self
 
     @classmethod
-    def load(cls, path: Path, **kwargs):
+    def load(cls, path: Path, **hparams):
         if isinstance(path, str) and '~' in path:
             path = os.path.expanduser(path)
 
@@ -164,8 +164,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         with open(join(path, 'metadata.pickle'), 'rb') as f:
             attrs: Dict = pickle.load(f)
-        if kwargs:
-            attrs.update({k: v for k, v in kwargs.items() if k != 'dataset'})
+        if hparams:
+            attrs.update({k: v for k, v in hparams.items() if k != 'dataset'})
 
         self = cls(hetero, **attrs)
         self._name = os.path.basename(path)
@@ -184,14 +184,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             if ann_df is not None:
                 self.network.annotations[ntype] = ann_df
 
-                if 'sequence' in kwargs and kwargs['sequence'] and 'sequence' in ann_df.columns:
+                if 'sequence' in hparams and hparams['sequence'] and 'sequence' in ann_df.columns:
                     hetero[ntype].sequence = ann_df['sequence']
 
         # Load sequence tokenizer
-        if 'vocabularies' in kwargs:
+        if 'vocabularies' in hparams:
             seq_tokenizer = SequenceTokenizers(
-                vocabularies=kwargs['vocabularies'],
-                max_length=kwargs['max_length'] if 'max_length' in kwargs else None)
+                vocabularies=hparams['vocabularies'],
+                max_length=hparams['max_length'] if 'max_length' in hparams else None)
             self.seq_tokenizer = seq_tokenizer
 
         # Load nodes list
@@ -228,6 +228,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if self.head_node_type in self.network.annotations and \
                 'species_id' in self.network.annotations[self.head_node_type].columns:
             self.nodes_namespace[self.head_node_type] = self.network.annotations[self.head_node_type]["species_id"]
+
+        if get_attrs(hparams, 'n_neighbors', None) and hparams.n_neighbors not in self.neighbor_sizes:
+            self.neighbor_sizes = [hparams.n_neighbors for _ in self.neighbor_sizes]
 
         return self
 
@@ -509,6 +512,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         nodes_emb = np.concatenate([nodes_emb[ntype][:len(nids)] \
                                     for ntype, nids in ntype_nids.items()])
 
+        # train/valid/test
         node_train_valid_test = np.vstack([
             np.concatenate([self.G[ntype].train_mask[nids].numpy() for ntype, nids in ntype_nids.items()]),
             np.concatenate([self.G[ntype].valid_mask[nids].numpy() for ntype, nids in ntype_nids.items()]),
@@ -516,32 +520,31 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         ).T
         node_train_valid_test = np.array(["Train", "Valid", "Test"])[node_train_valid_test.argmax(1)]
 
-        if losses:
+        # Node loss
+        ntype_losses = None
+        if isinstance(losses, dict) and losses:
             # Add missing nodes for certain ntype in `losses`
             for ntype in (ntype for ntype in losses if losses[ntype].size != ntype_nids[ntype].size):
                 num_missing = np.array([None for _ in range(ntype_nids[ntype].size - losses[ntype].size)])
                 losses[ntype] = np.concatenate([losses[ntype], num_missing])
 
-            node_losses = np.concatenate([losses[ntype] \
-                                              if ntype in losses else \
-                                              [None for i in range(ntype_nids[ntype].size)] \
-                                          for ntype in ntype_nids])
-        else:
-            node_losses = None
+            ntype_losses = np.concatenate([losses[ntype] \
+                                               if ntype in losses else \
+                                               [None for i in range(ntype_nids[ntype].size)] \
+                                           for ntype in ntype_nids])
 
         # Metadata
         # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
         if update_df is None:
-            data_dict = {"node": np.concatenate([self.nodes[ntype][ntype_nids[ntype]] \
-                                                 for ntype in ntype_nids]),
-                         "ntype": np.concatenate([[ntype for i in range(ntype_nids[ntype].shape[0])] \
-                                                  for ntype in ntype_nids]),
-                         "train_valid_test": node_train_valid_test,
-                         "loss": node_losses}
+            data = {"node": np.concatenate([self.nodes[ntype][ntype_nids[ntype]] \
+                                            for ntype in ntype_nids]),
+                    "ntype": np.concatenate([[ntype for i in range(ntype_nids[ntype].shape[0])] \
+                                             for ntype in ntype_nids]),
+                    "train_valid_test": node_train_valid_test,
+                    "loss": ntype_losses}
             df = pd.DataFrame(
-                data_dict,
-                index=pd.Index(np.concatenate([ntype_nids[ntype] for \
-                                               ntype in ntype_nids]), name="nid"))
+                data,
+                index=pd.Index(np.concatenate([ntype_nids[ntype] for ntype in ntype_nids]), name="nid"))
         else:
             df = update_df
 
@@ -567,7 +570,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             df = df.assign(loss=df['loss'].astype(float), pos1=df['pos1'].astype(float), pos2=df['pos2'].astype(float))
 
         # Predict kmeans clusters
-        if 'kmeans_cluster_id' not in df.columns:
+        if n_clusters and 'kmeans_cluster_id' not in df.columns:
             kmeans = KMeans(n_clusters)
             logger.info(f"Kmeans with k={n_clusters}")
             kmeans_pred = kmeans.fit_predict(nodes_emb)
