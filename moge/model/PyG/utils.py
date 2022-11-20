@@ -207,7 +207,7 @@ def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],
     # if edge_values.dtype != torch.float:
     #     edge_values = edge_values.to(torch.float)
     if drop_edge_value:
-        edge_values = None
+        return edge_index
 
     return edge_index, edge_values
 

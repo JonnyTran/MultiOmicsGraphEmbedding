@@ -45,6 +45,8 @@ class LATTEConv(MessagePassing, RelationAttention):
             self.activation = F.tanh
         elif activation == "relu":
             self.activation = F.relu
+        elif activation == "elu":
+            self.activation = F.elu
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
@@ -201,7 +203,7 @@ class LATTEConv(MessagePassing, RelationAttention):
                                                                         betas[ntype].mean(-1).mean(0),
                                                                         betas[ntype].mean(-1).std(0))):
                     if metapath in edge_pred_dict:
-                        edge_index, _ = get_edge_index_values(edge_pred_dict[metapath], drop_edge_value=True)
+                        edge_index = get_edge_index_values(edge_pred_dict[metapath], drop_edge_value=True)
                         edge_size = edge_index.size(1)
                     elif metapath != ntype:
                         continue
