@@ -30,16 +30,19 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
 
 
 def clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi", "ami"]):
+    mask = ~pd.isna(y_true) & ~pd.isna(y_pred)
+    print("clustering_metrics: mask", mask.sum())
+
     results = {}
     for metric in metrics:
         if "homogeneity" in metric:
-            results[metric] = homogeneity_score(y_true, y_pred)
+            results[metric] = homogeneity_score(y_true[mask], y_pred[mask])
         elif "completeness" in metric:
-            results[metric] = completeness_score(y_true, y_pred)
+            results[metric] = completeness_score(y_true[mask], y_pred[mask])
         elif "nmi" in metric:
-            results[metric] = normalized_mutual_info_score(y_true, y_pred, average_method="arithmetic")
+            results[metric] = normalized_mutual_info_score(y_true[mask], y_pred[mask], average_method="arithmetic")
         elif "ami" in metric:
-            results[metric] = adjusted_mutual_info_score(y_true, y_pred)
+            results[metric] = adjusted_mutual_info_score(y_true[mask], y_pred[mask])
     return results
 
 

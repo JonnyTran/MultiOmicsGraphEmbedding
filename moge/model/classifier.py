@@ -101,6 +101,7 @@ class LabelNodeClassifer(nn.Module):
         self.head_node_type = hparams.head_node_type
 
         self.pred_ntypes = dataset.pred_ntypes
+        assert dataset.class_indices, f'dataset.class_indices ({dataset.class_indices}) must not be none'
         self.class_sizes = {ntype: ids.numel() for ntype, ids in dataset.class_indices.items()}
 
         # if hparams.embedding_dim

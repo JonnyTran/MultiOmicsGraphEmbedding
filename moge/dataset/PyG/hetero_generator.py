@@ -509,8 +509,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         nodes_emb = {ntype: emb.detach().cpu().numpy() if isinstance(emb, Tensor) else emb \
                      for ntype, emb in embeddings.items() \
                      if ntype in ntype_nids}
-        nodes_emb = np.concatenate([nodes_emb[ntype][:len(nids)] \
-                                    for ntype, nids in ntype_nids.items()])
+        nodes_emb_concat = np.concatenate([nodes_emb[ntype][:len(nids)] \
+                                           for ntype, nids in ntype_nids.items()])
 
         # train/valid/test
         node_train_valid_test = np.vstack([
@@ -559,11 +559,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, perplexity=15, learning_rate=10, n_jobs=-1)
 
             try:
-                tsne.fit(nodes_emb)
+                tsne.fit(nodes_emb_concat)
             except KeyboardInterrupt:
                 logger.info(f"Stop training {tsne}")
             finally:
-                nodes_pos = tsne.transform(nodes_emb)
+                nodes_pos = tsne.transform(nodes_emb_concat)
 
             nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
             df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
@@ -571,10 +571,13 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Predict kmeans clusters
         if n_clusters and 'kmeans_cluster_id' not in df.columns:
-            kmeans = KMeans(n_clusters)
             logger.info(f"Kmeans with k={n_clusters}")
-            kmeans_pred = kmeans.fit_predict(nodes_emb)
-            df['kmeans_cluster_id'] = pd.Index(kmeans_pred).astype('str')
+            kmeans_pred = []
+            for ntype in ntype_nids:
+                kmeans = KMeans(n_clusters)
+                pred = ntype + pd.Index(kmeans.fit_predict(nodes_emb[ntype])).astype(str)
+                kmeans_pred.append(pred)
+            df['kmeans_cluster_id'] = np.concatenate(kmeans_pred)
 
         # Set index
         df = df.reset_index()
