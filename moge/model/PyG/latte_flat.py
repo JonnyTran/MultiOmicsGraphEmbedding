@@ -378,15 +378,6 @@ class LATTEConv(MessagePassing, RelationAttention):
 
         return x_j * alpha.unsqueeze(-1)
 
-    def attn_activation(self, alpha, metapath_id):
-        if isinstance(self.alpha_activation, Tensor):
-            return self.alpha_activation[metapath_id] * alpha
-        elif isinstance(self.alpha_activation, nn.Module):
-            return self.alpha_activation(alpha)
-        else:
-            return alpha
-
-
 class LATTE(nn.Module, RelationMultiLayerAgg):
     def __init__(self, n_layers: int, t_order: int,
                  embedding_dim: int,
@@ -394,7 +385,9 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
                  metapaths: List[Tuple[str, str, str]],
                  layer_pooling: str = None,
                  activation: str = "relu",
-                 attn_heads: int = 1, attn_activation="sharpening", attn_dropout: float = 0.5,
+                 attn_heads: int = 1,
+                 attn_activation="sharpening",
+                 attn_dropout: float = 0.5,
                  edge_sampling=True,
                  hparams: Namespace = None):
         super().__init__()

@@ -61,13 +61,13 @@ class LATTENodeClf(NodeClfTrainer):
                               t_order=min(hparams.t_order, hparams.n_layers),
                               embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(k_hop=True if "khop" in collate_fn else None),
+                              metapaths=dataset.get_metapaths(),
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout,
-                              layer_pooling=hparams.layer_pooling if 'layer_pooling' in hparams else 'last',
-                              edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
+                              layer_pooling=getattr(hparams, 'layer_pooling', 'last'),
+                              edge_sampling=getattr(hparams, 'edge_sampling', False),
                               hparams=hparams)
 
         if hparams.layer_pooling == "concat":
@@ -303,9 +303,8 @@ class LATTENodeClf(NodeClfTrainer):
 
         try:
             if self.wandb_experiment is not None:
-                dataloader = self.test_dataloader()
                 self.eval()
-                y_true, scores, embeddings, global_node_index = self.predict(dataloader, save_betas=3)
+                y_true, scores, embeddings, global_node_index = self.predict(self.test_dataloader(), save_betas=3)
 
                 if hasattr(self.dataset, "nodes_namespace"):
                     y_true_dict = self.dataset.split_array_by_namespace(y_true, axis=1)
