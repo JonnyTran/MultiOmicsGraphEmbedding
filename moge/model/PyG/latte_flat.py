@@ -13,6 +13,7 @@ from torch_geometric.utils import softmax
 from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
+from moge.model.utils import tensor_sizes
 
 
 class LATTEConv(MessagePassing, RelationAttention):
@@ -66,6 +67,9 @@ class LATTEConv(MessagePassing, RelationAttention):
         self.rel_attn_r = nn.ParameterDict({
             ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
             for ntype in self.node_types})
+        # self.rel_attn = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels * 2)) \
+        #     for ntype in self.node_types})
         self.rel_attn_bias = nn.ParameterDict({
             ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
             for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
@@ -75,9 +79,7 @@ class LATTEConv(MessagePassing, RelationAttention):
         #                            attn_heads=attn_heads, attn_dropout=attn_dropout) \
         #     for ntype in self.node_types})
 
-        if attn_activation == "sharpening":
-            self.alpha_activation = nn.Parameter(Tensor(len(self.metapaths)).fill_(1.0))
-        elif attn_activation == "PReLU":
+        if attn_activation == "PReLU":
             self.alpha_activation = nn.PReLU(init=0.2)
         elif attn_activation == "LeakyReLU":
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
@@ -138,6 +140,16 @@ class LATTEConv(MessagePassing, RelationAttention):
         beta = F.softmax(beta, dim=1)
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
+
+    # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
+    #     x_l = query * self.rel_attn_l[ntype]
+    #     x_r = key * self.rel_attn_r[ntype]
+    #
+    #     beta = F.leaky_relu((x_l[:, None, :, :] + x_r).sum(-1), 0.2) # + self.rel_attn_bias[ntype][None, :, None]
+    #     # print(tensor_sizes(beta=beta, x_l=x_l, x_r=x_r, rel_attn_bias=self.rel_attn_bias[ntype]))
+    #     beta = F.softmax(beta, dim=1)
+    #     # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+    #     return beta
 
     def projection(self, feats: Dict[str, Tensor], linears: ModuleDict, subset=None):
         h_dict = {ntype: linears[ntype].forward(x).relu_() \
@@ -358,11 +370,8 @@ class LATTEConv(MessagePassing, RelationAttention):
         if values is None:
             x = torch.cat([x_i, x_j], dim=2)
 
-            # Sharpening alpha values
-            if isinstance(self.alpha_activation, Tensor):
-                x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
             # Non-linear activation
-            elif isinstance(self.alpha_activation, nn.Module):
+            if isinstance(self.alpha_activation, nn.Module):
                 x = self.alpha_activation(x)
 
             alpha = (x * self.attn[metapath_idx]).sum(dim=-1)
