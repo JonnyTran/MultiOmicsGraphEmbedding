@@ -70,9 +70,9 @@ class LATTEConv(MessagePassing, RelationAttention):
         # self.rel_attn = nn.ParameterDict({
         #     ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels * 2)) \
         #     for ntype in self.node_types})
-        # self.rel_attn_bias = nn.ParameterDict({
-        #     ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
-        #     for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
+        self.rel_attn_bias = nn.ParameterDict({
+            ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
+            for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
 
         # self.relation_conv: Dict[str, MetapathGATConv] = nn.ModuleDict({
         #     ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=1,
@@ -142,13 +142,13 @@ class LATTEConv(MessagePassing, RelationAttention):
     #     return beta
 
     def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
-        x_l = query * self.rel_attn_l[ntype]
+        x_l = query[:, None, :] * self.rel_attn_l[ntype]
         x_r = key * self.rel_attn_r[ntype]
 
-        beta = F.leaky_relu((x_l[:, None, :] + x_r).sum(-1), 0.2)  # + self.rel_attn_bias[ntype][None, :, None]
+        beta = F.leaky_relu((x_l + x_r).sum(-1), 0.2) + self.rel_attn_bias[ntype][None, :, None]
         # print(tensor_sizes(beta=beta, x_l=x_l, x_r=x_r, rel_attn_bias=self.rel_attn_bias[ntype]))
         beta = F.softmax(beta, dim=1)
-        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
     def projection(self, feats: Dict[str, Tensor], linears: ModuleDict, subset=None):
