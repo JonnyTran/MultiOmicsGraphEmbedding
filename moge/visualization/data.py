@@ -17,20 +17,22 @@ from moge.visualization.utils import configure_layout, group_axis_ticks
 hv.extension('plotly')
 
 
-def rasterize_matrix(df: pd.DataFrame, x_label="X", y_label="Y", size=1000, **kwargs):
+def rasterize_matrix(df: pd.DataFrame, size=1000,
+                     x_label=None, y_label=None, x_ticks=False, y_ticks=False,
+                     xaxis_automargin=True, yaxis_automargin=True, **kwargs):
     layout_args = dict()
     if isinstance(df, pd.DataFrame):
         y_label = df.index.name if df.index.name else df.index.names[0]
         x_label = df.columns.name if df.columns.name else df.columns.names[0]
 
-        if isinstance(df.columns, pd.MultiIndex):
+        if isinstance(df.columns, pd.MultiIndex) or x_ticks:
             grouped_xticks = group_axis_ticks(df.columns, level=0)
             layout_args.update(dict(
                 xaxis_tickmode='array',
                 xaxis_tickvals=grouped_xticks.values, xaxis_ticktext=grouped_xticks.index,
             ))
 
-        if isinstance(df.index, pd.MultiIndex):
+        if isinstance(df.index, pd.MultiIndex) or y_ticks:
             grouped_yticks = group_axis_ticks(df.index, level=0)
             layout_args.update(dict(
                 yaxis_tickmode='array',
@@ -50,7 +52,10 @@ def rasterize_matrix(df: pd.DataFrame, x_label="X", y_label="Y", size=1000, **kw
     fig = hv.render(rasterized_img, backend="plotly")
 
     layout_args.update(kwargs)
-    go_fig = go.Figure(fig).update_layout(**layout_args)
+    go_fig = go.Figure(fig).update_layout(
+        xaxis_automargin=xaxis_automargin,
+        yaxis_automargin=yaxis_automargin,
+        **layout_args)
     return go_fig
 
 

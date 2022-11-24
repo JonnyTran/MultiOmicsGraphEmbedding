@@ -54,9 +54,9 @@ class LATTEConv(MessagePassing, RelationAttention):
         self.linear_l = nn.ModuleDict(
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F)
-        self.linear_r = nn.ModuleDict(
-            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
-             for node_type in self.node_types})  # W.shape (F x F}
+        # self.linear_r = nn.ModuleDict(
+        #     {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+        #      for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn = nn.Parameter(torch.rand((len(self.metapaths), attn_heads, self.out_channels * 2)))
@@ -145,7 +145,8 @@ class LATTEConv(MessagePassing, RelationAttention):
         x_l = query[:, None, :] * self.rel_attn_l[ntype]
         x_r = key * self.rel_attn_r[ntype]
 
-        beta = F.leaky_relu((x_l + x_r).sum(-1), 0.2) + self.rel_attn_bias[ntype][None, :, None]
+        bias = self.rel_attn_bias[ntype][None, :, None]  # / torch.sqrt(self.embedding_dim)
+        beta = F.leaky_relu((x_l + x_r).sum(-1), 0.2) + bias
         # print(tensor_sizes(beta=beta, x_l=x_l, x_r=x_r, rel_attn_bias=self.rel_attn_bias[ntype]))
         beta = F.softmax(beta, dim=1)
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
@@ -178,7 +179,8 @@ class LATTEConv(MessagePassing, RelationAttention):
              output_emb, edge_attn_scores
         """
         l_dict = self.projection(feats, linears=self.linear_l, subset=self.get_src_ntypes())
-        r_dict = self.projection(feats, linears=self.linear_r, subset=self.get_dst_ntypes())
+        # r_dict = self.projection(feats, linears=self.linear_r, subset=self.get_dst_ntypes())
+        r_dict = l_dict
 
         print("\nLayer", self.layer + 1, ) if verbose else None
 
