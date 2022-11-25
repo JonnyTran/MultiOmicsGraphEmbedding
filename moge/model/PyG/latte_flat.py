@@ -88,10 +88,9 @@ class LATTEConv(MessagePassing, RelationAttention):
             self.alpha_activation = None
 
         if layernorm:
-            self.layernorm: Dict[str, nn.LayerNorm] = nn.ParameterDict(
-                {ntype: nn.LayerNorm(output_dim) for ntype in self.node_types})
+            self.layernorm = nn.LayerNorm(output_dim)
         if batchnorm:
-            self.batchnorm = nn.ParameterDict({ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types})
+            self.batchnorm = nn.BatchNorm1d(output_dim)
 
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
@@ -241,9 +240,9 @@ class LATTEConv(MessagePassing, RelationAttention):
                 h_out[ntype] = self.dropout(h_out[ntype])
 
             if hasattr(self, "layernorm"):
-                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+                h_out[ntype] = self.layernorm(h_out[ntype])
             if hasattr(self, "batchnorm"):
-                h_out[ntype] = self.batchnorm[ntype](h_out[ntype])
+                h_out[ntype] = self.batchnorm(h_out[ntype])
 
             if verbose:
                 print(f"   -> {self.activation.__name__ if hasattr(self, 'activation') else ''} "

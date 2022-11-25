@@ -113,7 +113,7 @@ class LabelNodeClassifer(nn.Module):
         elif hparams.loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.activation = nn.Softmax()
 
-        self.batchnorm = nn.BatchNorm1d(hparams.embedding_dim)
+        # self.batchnorm = nn.BatchNorm1d(hparams.embedding_dim)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -122,7 +122,7 @@ class LabelNodeClassifer(nn.Module):
 
     def forward(self, emb: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
         for ntype in self.pred_ntypes:
-            cls_emb = self.batchnorm.forward(h_dict[ntype][:self.class_sizes[ntype]])
+            cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
 
         assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb.shape}) != n_classes ({self.n_classes})"
         logits = (emb @ cls_emb.T) + self.bias

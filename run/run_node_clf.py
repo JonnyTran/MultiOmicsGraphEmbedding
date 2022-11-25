@@ -181,7 +181,7 @@ def train(hparams):
         dataset.neighbor_sizes = [2048, 2048]
 
         default_args = {
-            "embedding_dim": 256,
+            "embedding_dim": 512,
             "layer_pooling": "concat",
 
             "n_layers": len(dataset.neighbor_sizes),
@@ -189,7 +189,7 @@ def train(hparams):
             'neighbor_sizes': dataset.neighbor_sizes,
             "batch_size": int(2 ** batch_order),
 
-            "attn_heads": 4,
+            "attn_heads": 8,
             "attn_activation": "LeakyReLU",
             "attn_dropout": 0.2,
 
