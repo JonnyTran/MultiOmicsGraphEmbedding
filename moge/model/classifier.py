@@ -106,6 +106,7 @@ class LabelNodeClassifer(nn.Module):
 
         # if hparams.embedding_dim
         self.embedding_dim = hparams.embedding_dim
+        self.weight = nn.Parameter(torch.rand(hparams.embedding_dim))
         self.bias = nn.Parameter(torch.zeros(self.n_classes))
 
         if hparams.loss_type == "BCE":
@@ -117,15 +118,15 @@ class LabelNodeClassifer(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        pass
-        # nn.init.xavier_uniform_(self.weight)
+        if hasattr(self, 'weight') and self.weight.dim() > 1:
+            nn.init.xavier_uniform_(self.weight)
 
     def forward(self, emb: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
         for ntype in self.pred_ntypes:
             cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
 
         assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb.shape}) != n_classes ({self.n_classes})"
-        logits = (emb @ cls_emb.T) + self.bias
+        logits = ((emb * self.weight) @ cls_emb.T) + self.bias
 
         if hasattr(self, 'activation'):
             logits = self.activation(logits)

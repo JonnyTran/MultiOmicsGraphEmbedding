@@ -125,6 +125,7 @@ class HeteroNodeFeatureEncoder(nn.Module):
 
                 h_dict[ntype] = self.linear_proj[ntype].forward(h_dict[ntype])
 
+            # Sparse matrix mult
             elif ntype in self.linear_proj and isinstance(h_dict[ntype], SparseTensor):
                 self.linear_proj[ntype]: nn.ParameterList
                 for module in self.linear_proj[ntype]:
