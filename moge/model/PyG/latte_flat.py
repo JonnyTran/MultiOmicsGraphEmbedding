@@ -429,7 +429,8 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
                 higher_order_metapaths = join_metapaths(higher_order_metapaths, metapaths, skip_undirected=False)
 
             l_layer_metapaths = filter_metapaths(metapaths=metapaths + higher_order_metapaths,
-                                                 order=list(range(1, layer_t_order + 1)),
+                                                 # order=list(range(1, layer_t_order + 1)),
+                                                 order=layer_t_order,
                                                  tail_type=output_ntypes if is_last_layer else None,
                                                  filter=hparams.filter_metapaths if 'filter_metapaths' in hparams else None,
                                                  exclude=hparams.exclude_metapaths if 'exclude_metapaths' in hparams else None,
