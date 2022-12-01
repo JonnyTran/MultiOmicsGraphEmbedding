@@ -107,7 +107,7 @@ class LabelNodeClassifer(nn.Module):
         # if hparams.embedding_dim
         self.embedding_dim = hparams.embedding_dim
         self.weight = nn.Parameter(torch.rand(hparams.embedding_dim))
-        self.bias = nn.Parameter(torch.zeros(self.n_classes))
+        # self.bias = nn.Parameter(torch.zeros(self.n_classes))
 
         if hparams.loss_type == "BCE":
             self.activation = nn.Sigmoid()
@@ -126,7 +126,7 @@ class LabelNodeClassifer(nn.Module):
             cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
 
         assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb.shape}) != n_classes ({self.n_classes})"
-        logits = ((emb * self.weight) @ cls_emb.T) + self.bias
+        logits = ((emb * self.weight) @ cls_emb.T)  # + self.bias
 
         if hasattr(self, 'activation'):
             logits = self.activation(logits)

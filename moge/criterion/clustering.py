@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 import pandas as pd
+from logzero import logger
 from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score, \
     adjusted_mutual_info_score
 
@@ -26,12 +27,13 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
     except AttributeError as e:
         return e
 
-    return clustering_metrics(y_true, y_pred, metrics)
+    metrics = clustering_metrics(y_true, y_pred, metrics)
+    return metrics
 
 
-def clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi", "ami"]):
+def clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi", "ami"], verbose=False):
     mask = ~pd.isna(y_true) & ~pd.isna(y_pred)
-    print("clustering_metrics: mask", mask.sum())
+    logger.info("clustering_metrics: mask", mask.sum()) if verbose else None
 
     results = {}
     for metric in metrics:

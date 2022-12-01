@@ -1,7 +1,7 @@
 import copy
 import traceback
 from argparse import Namespace
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union, Set
 
 import torch
 import torch.nn.functional as F
@@ -147,12 +147,12 @@ class LATTEConv(MessagePassing, RelationAttention):
         bias = self.rel_attn_bias[ntype][None, :, None]  # / torch.sqrt(self.embedding_dim)
         beta = F.leaky_relu((x_l + x_r).sum(-1), 0.2) + bias
         # print(tensor_sizes(beta=beta, x_l=x_l, x_r=x_r, rel_attn_bias=self.rel_attn_bias[ntype]))
-        beta = F.softmax(beta, dim=1)
+        beta = F.softmax(beta.transpose(2, 1), dim=2).transpose(2, 1)
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    def projection(self, feats: Dict[str, Tensor], linears: ModuleDict, subset=None):
-        h_dict = {ntype: linears[ntype].forward(x).relu_() \
+    def projection(self, feats: Dict[str, Tensor], linears: ModuleDict, subset: Set[str] = None):
+        h_dict = {ntype: linears[ntype].forward(x) \
                   for ntype, x in feats.items() if not subset or ntype in subset}
 
         h_dict = {ntype: h.view(feats[ntype].size(0), self.attn_heads, self.out_channels) \
@@ -224,11 +224,10 @@ class LATTEConv(MessagePassing, RelationAttention):
                         edge_size = None
 
                     rel_embedding = h_out[ntype] if h_out[ntype].dim() >= 3 else rel_embedding
-
                     print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
                           f"\tedge_index: {edge_size}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(rel_embedding[:, i], dim=0).mean().item() :.2f}")
+                          f"\tnorm: {torch.norm(rel_embedding[:, i].view(h_out[ntype].size(0), -1), dim=1).mean(dim=0).item() :.2f}")
 
             h_out[ntype] = h_out[ntype] * betas[ntype].unsqueeze(-1)
             h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)

@@ -1,4 +1,5 @@
 import traceback
+import warnings
 from typing import Optional, Any, Callable, List, Dict, Union, Tuple
 
 import numpy as np
@@ -13,7 +14,8 @@ from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from torch import Tensor
 from torch_sparse import SparseTensor
-from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, BinnedPrecisionRecallCurve, BinnedAveragePrecision
+from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, Metric
+from torchmetrics.utilities import rank_zero_warn
 from torchmetrics.utilities.data import METRIC_EPS, to_onehot
 
 from .utils import filter_samples, tensor_sizes, activation
@@ -354,30 +356,125 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
             return {f"{prefix}top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
 
 
-class AveragePrecisionPairwise(BinnedAveragePrecision):
-    def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100, shrink=1e-2,
-                 **kwargs: Any) -> None:
-        super().__init__(num_classes, thresholds, **kwargs)
-
-        if shrink:
-            self.shrink = torch.nn.Hardshrink(lambd=shrink)
+class FMax_Slow(torchmetrics.Metric):
+    def __init__(self, thresholds: Union[int, Tensor, List[float]] = 100):
+        """
+        Fmax at argmax_t F(t) = 2 * avg_pr * avg_rc / (avg_pr + avg_rc) where averaged pr's and rc's are sample-centric.
+        Args:
+            thresholds ():
+        """
+        super().__init__()
+        self.thresholds = np.linspace(0, 1.0, thresholds)
         self.reset()
 
-    def reset(self) -> None:
-        super().reset()
-        self.num_samples = 0
+    def reset(self):
+        self._scores = []
+        self._threshs = []
+        self._n_samples = []
 
-    @torch.no_grad()
-    def update(self, preds: Tensor, target: Tensor) -> None:
-        # assume values in [0, 1] range
-        if hasattr(self, 'shrink') and self.shrink is not None:
-            row, col = (self.shrink(preds) + target).nonzero().T
-            preds = preds[row, col]
-            target = target[row, col]
-        else:
-            preds = preds.ravel()
-            target = target.ravel()
+    def update(self, scores: Tensor, targets: Tensor):
+        n_samples = scores.shape[0]
+        with torch.no_grad():
+            if isinstance(scores, Tensor):
+                scores = torch.nn.Hardshrink(lambd=1e-2)(scores).cpu().numpy()
 
+            if isinstance(targets, SparseTensor):
+                targets = targets.to_scipy()
+            elif targets.layout == torch.sparse_csr:
+                targets = ssp.csr_matrix(
+                    (targets.values().numpy(), targets.col_indices().numpy(), targets.crow_indices().numpy()),
+                    shape=targets.shape,
+                )
+            elif isinstance(targets, Tensor):
+                targets = targets.cpu().numpy()
+
+        fmax, thresh = self.get_fmax(scores=scores, targets=targets, thresholds=self.thresholds)
+
+        self._scores.append(fmax)
+        self._threshs.append(thresh)
+        self._n_samples.append(n_samples)
+
+    def get_fmax(
+            self,
+            scores: Union[np.ndarray, ssp.csr_matrix],
+            targets: Union[np.ndarray, ssp.csr_matrix],
+            thresholds: np.ndarray,
+    ) -> Tuple[float, float]:
+        fmax_t = 0.0, 0.0
+
+        if not isinstance(targets, ssp.csr_matrix):
+            targets = ssp.csr_matrix(targets)
+        targets_sum = targets.sum(axis=1)
+
+        for thresh in thresholds:
+            cut_sc = ssp.csr_matrix(scores > thresh).astype(np.int32)
+            correct = cut_sc.multiply(targets).sum(axis=1)
+
+            p = correct / cut_sc.sum(axis=1)
+            r = correct / targets_sum
+            p, r = np.average(p[np.invert(np.isnan(p))]), np.average(r)
+            if np.isnan(p):
+                continue
+            try:
+                fmax_t = max(fmax_t, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
+            except ZeroDivisionError:
+                pass
+        return fmax_t
+
+    def compute(self, prefix=None) -> Union[float, Dict[str, float]]:
+        if len(self._scores) == 0:
+            raise NotComputableError("AveragePrecision must have at" "least one example before it can be computed.")
+
+        weighted_avg_score = np.average(self._scores, weights=self._n_samples)
+        return weighted_avg_score
+
+
+class BinnedPrecisionRecallCurve(Metric):
+    is_differentiable: bool = False
+    higher_is_better: Optional[bool] = None
+    full_state_update: bool = False
+    TPs: Tensor
+    FPs: Tensor
+    FNs: Tensor
+
+    def __init__(
+            self,
+            num_classes: int,
+            thresholds: Union[int, Tensor, List[float]] = 100,
+            **kwargs: Any,
+    ) -> None:
+        rank_zero_warn(
+            "Metric `BinnedPrecisionRecallCurve` has been deprecated in v0.10 and will be completly removed in v0.11."
+            " Instead, use the refactored version of `PrecisionRecallCurve` by specifying the `thresholds` argument.",
+            DeprecationWarning,
+        )
+        super().__init__(**kwargs)
+
+        self.num_classes = num_classes
+        if isinstance(thresholds, int):
+            self.num_thresholds = thresholds
+            self.thresholds = torch.linspace(0, 1.0, thresholds)
+
+        elif thresholds is not None:
+            if not isinstance(thresholds, (list, Tensor)):
+                raise ValueError("Expected argument `thresholds` to either be an integer, list of floats or a tensor")
+            self.thresholds = torch.tensor(thresholds) if isinstance(thresholds, list) else thresholds
+            self.num_thresholds = self.thresholds.numel()
+
+        for name in ("TPs", "FPs", "FNs"):
+            self.add_state(
+                name=name,
+                default=torch.zeros(num_classes, self.num_thresholds, dtype=torch.float32),
+                dist_reduce_fx="sum",
+            )
+
+    def update(self, preds: Tensor, target: Tensor) -> None:  # type: ignore
+        """
+        Args
+            preds: (n_samples, n_classes) tensor
+            target: (n_samples, n_classes) tensor
+        """
+        # binary case
         if len(preds.shape) == len(target.shape) == 1:
             preds = preds.reshape(-1, 1)
             target = target.reshape(-1, 1)
@@ -393,14 +490,83 @@ class AveragePrecisionPairwise(BinnedAveragePrecision):
             self.FPs[:, i] += ((~target) & predictions).sum(dim=0)
             self.FNs[:, i] += (target & (~predictions)).sum(dim=0)
 
-        self.num_samples += preds.shape[0]
+    def compute(self) -> Union[Tuple[Tensor, Tensor, Tensor], Tuple[List[Tensor], List[Tensor], List[Tensor]]]:
+        """Returns float tensor of size n_classes."""
+        precisions = (self.TPs + METRIC_EPS) / (self.TPs + self.FPs + METRIC_EPS)
+        recalls = self.TPs / (self.TPs + self.FNs + METRIC_EPS)
 
-    def compute(self) -> Union[List[Tensor], Tensor]:
-        if self.num_samples == 0:
-            raise NotComputableError(
-                "AveragePrecisionPairwise must have at least one example before it can be computed."
+        # Need to guarantee that last precision=1 and recall=0, similar to precision_recall_curve
+        t_ones = torch.ones(self.num_classes, 1, dtype=precisions.dtype, device=precisions.device)
+        precisions = torch.cat([precisions, t_ones], dim=1)
+        t_zeros = torch.zeros(self.num_classes, 1, dtype=recalls.dtype, device=recalls.device)
+        recalls = torch.cat([recalls, t_zeros], dim=1)
+        if self.num_classes == 1:
+            return precisions[0, :], recalls[0, :], self.thresholds
+        return list(precisions), list(recalls), [self.thresholds for _ in range(self.num_classes)]
+
+
+def _average_precision_compute_with_precision_recall(
+        precision: Tensor,
+        recall: Tensor,
+        num_classes: int,
+        average: Optional[str] = "macro",
+        weights: Optional[Tensor] = None,
+) -> Union[List[Tensor], Tensor]:
+    """Computes the average precision score from precision and recall.
+
+    Args:
+        precision: precision values
+        recall: recall values
+        num_classes: integer with number of classes. Not nessesary to provide
+            for binary problems.
+        average: reduction method for multi-class or multi-label problems
+        weights: weights to use when average='weighted'
+    """
+    # Return the step function integral
+    # The following works because the last entry of precision is
+    # guaranteed to be 1, as returned by precision_recall_curve
+    if num_classes == 1:
+        return -torch.sum((recall[1:] - recall[:-1]) * precision[:-1])
+
+    res = []
+    for p, r in zip(precision, recall):
+        res.append(-torch.sum((r[1:] - r[:-1]) * p[:-1]))
+
+    # Reduce
+    if average in ("macro", "weighted"):
+        res = torch.stack(res)
+        if torch.isnan(res).any():
+            warnings.warn(
+                "Average precision score for one or more classes was `nan`. Ignoring these classes in average",
+                UserWarning,
             )
-        return super().compute()
+        if average == "macro":
+            return res[~torch.isnan(res)].mean()
+        weights = torch.ones_like(res) if weights is None else weights
+        return (res * weights)[~torch.isnan(res)].sum()
+    if average is None or average == "none":
+        return res
+    allowed_average = ("micro", "macro", "weighted", "none", None)
+    raise ValueError(f"Expected argument `average` to be one of {allowed_average}" f" but got {average}")
+
+
+class BinnedAveragePrecision(BinnedPrecisionRecallCurve):
+    def __init__(
+            self,
+            num_classes: int,
+            thresholds: Union[int, Tensor, List[float]] = 100,
+            **kwargs: Any,
+    ) -> None:
+        rank_zero_warn(
+            "Metric `BinnedAveragePrecision` has been deprecated in v0.10 and will be completly removed in v0.11."
+            " Instead, use the refactored version of `AveragePrecision` by specifying the `thresholds` argument.",
+            DeprecationWarning,
+        )
+        super().__init__(num_classes=num_classes, thresholds=thresholds, **kwargs)
+
+    def compute(self) -> Union[List[Tensor], Tensor]:  # type: ignore
+        precisions, recalls, _ = super().compute()
+        return _average_precision_compute_with_precision_recall(precisions, recalls, self.num_classes, average=None)
 
 
 class FMax_Micro(BinnedPrecisionRecallCurve):
@@ -481,78 +647,53 @@ class FMax_Micro(BinnedPrecisionRecallCurve):
         return max_f1_thresh.values
 
 
-class FMax_Slow(torchmetrics.Metric):
-    def __init__(self, thresholds: Union[int, Tensor, List[float]] = 100):
-        """
-        Fmax at argmax_t F(t) = 2 * avg_pr * avg_rc / (avg_pr + avg_rc) where averaged pr's and rc's are sample-centric.
-        Args:
-            thresholds ():
-        """
-        super().__init__()
-        self.thresholds = np.linspace(0, 1.0, thresholds)
+class AveragePrecisionPairwise(BinnedAveragePrecision):
+    def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100, shrink=1e-2,
+                 **kwargs: Any) -> None:
+        super().__init__(num_classes, thresholds, **kwargs)
+
+        if shrink:
+            self.shrink = torch.nn.Hardshrink(lambd=shrink)
         self.reset()
 
-    def reset(self):
-        self._scores = []
-        self._threshs = []
-        self._n_samples = []
+    def reset(self) -> None:
+        super().reset()
+        self.num_samples = 0
 
-    def update(self, scores: Tensor, targets: Tensor):
-        n_samples = scores.shape[0]
-        with torch.no_grad():
-            if isinstance(scores, Tensor):
-                scores = torch.nn.Hardshrink(lambd=1e-2)(scores).cpu().numpy()
+    @torch.no_grad()
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        # assume values in [0, 1] range
+        if hasattr(self, 'shrink') and self.shrink is not None:
+            row, col = (self.shrink(preds) + target).nonzero().T
+            preds = preds[row, col]
+            target = target[row, col]
+        else:
+            preds = preds.ravel()
+            target = target.ravel()
 
-            if isinstance(targets, SparseTensor):
-                targets = targets.to_scipy()
-            elif targets.layout == torch.sparse_csr:
-                targets = ssp.csr_matrix(
-                    (targets.values().numpy(), targets.col_indices().numpy(), targets.crow_indices().numpy()),
-                    shape=targets.shape,
-                )
-            elif isinstance(targets, Tensor):
-                targets = targets.cpu().numpy()
+        if len(preds.shape) == len(target.shape) == 1:
+            preds = preds.reshape(-1, 1)
+            target = target.reshape(-1, 1)
 
-        fmax, thresh = self.get_fmax(scores=scores, targets=targets, thresholds=self.thresholds)
+        if len(preds.shape) == len(target.shape) + 1:
+            target = to_onehot(target, num_classes=self.num_classes)
 
-        self._scores.append(fmax)
-        self._threshs.append(thresh)
-        self._n_samples.append(n_samples)
+        target = target == 1
+        # Iterate one threshold at a time to conserve memory
+        for i in range(self.num_thresholds):
+            predictions = preds >= self.thresholds[i]
+            self.TPs[:, i] += (target & predictions).sum(dim=0)
+            self.FPs[:, i] += ((~target) & predictions).sum(dim=0)
+            self.FNs[:, i] += (target & (~predictions)).sum(dim=0)
 
-    def get_fmax(
-            self,
-            scores: Union[np.ndarray, ssp.csr_matrix],
-            targets: Union[np.ndarray, ssp.csr_matrix],
-            thresholds: np.ndarray,
-    ) -> Tuple[float, float]:
-        fmax_t = 0.0, 0.0
+        self.num_samples += preds.shape[0]
 
-        if not isinstance(targets, ssp.csr_matrix):
-            targets = ssp.csr_matrix(targets)
-        targets_sum = targets.sum(axis=1)
-
-        for thresh in thresholds:
-            cut_sc = ssp.csr_matrix(scores > thresh).astype(np.int32)
-            correct = cut_sc.multiply(targets).sum(axis=1)
-
-            p = correct / cut_sc.sum(axis=1)
-            r = correct / targets_sum
-            p, r = np.average(p[np.invert(np.isnan(p))]), np.average(r)
-            if np.isnan(p):
-                continue
-            try:
-                fmax_t = max(fmax_t, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
-            except ZeroDivisionError:
-                pass
-        return fmax_t
-
-    def compute(self, prefix=None) -> Union[float, Dict[str, float]]:
-        if len(self._scores) == 0:
-            raise NotComputableError("AveragePrecision must have at" "least one example before it can be computed.")
-
-        weighted_avg_score = np.average(self._scores, weights=self._n_samples)
-        return weighted_avg_score
-
+    def compute(self) -> Union[List[Tensor], Tensor]:
+        if self.num_samples == 0:
+            raise NotComputableError(
+                "AveragePrecisionPairwise must have at least one example before it can be computed."
+            )
+        return super().compute()
 
 @torch.no_grad()
 def precision_recall_curve(y_true: Tensor, y_pred: Tensor, n_thresholds=100, average="micro"):
