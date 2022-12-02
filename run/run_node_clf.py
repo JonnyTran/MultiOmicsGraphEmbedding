@@ -4,6 +4,7 @@ import random
 import sys
 import warnings
 
+
 warnings.filterwarnings("ignore")
 
 from logzero import logger
@@ -19,6 +20,7 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf, HGTNodeClf, MLP
 from moge.model.dgl.node_clf import HANNodeClf, HGConv, R_HGNN
 from moge.model.PyG.DeepGOZero import DeepGOZero
+from moge.model.utils import tensor_sizes
 
 from run.datasets.deepgraphgo import build_deepgraphgo_model
 from run.utils import parse_yaml_config, select_empty_gpus
@@ -168,10 +170,12 @@ def train(hparams):
         if hparams.method.endswith("-1"):
             t_order = 1
             batch_order = 12
+            patience = 30
 
         elif hparams.method.endswith("-2"):
             t_order = 2
             batch_order = 11
+            patience = 5
 
         elif hparams.method.endswith("-3"):
             t_order = 3
@@ -187,6 +191,19 @@ def train(hparams):
             "t_order": t_order,
             'neighbor_sizes': dataset.neighbor_sizes,
             "batch_size": int(2 ** batch_order),
+
+            "filter_metapaths": {
+                'biological_process': {('is_a', 'is_a')},
+                'molecular_function': {('is_a', 'is_a')},
+                'cellular_component': {('is_a', 'is_a')},
+                'Protein': {('coexpression', 'coexpression'),
+                            ('cooccurence', 'cooccurence'),
+                            ('database', 'database'),
+                            ('fusion', 'fusion'),
+                            ('neighborhood', 'neighborhood'),
+                            ('textmining', 'textmining'),
+                            ('experimental', 'experimental')},
+            },
 
             "attn_heads": 8,
             "attn_activation": "LeakyReLU",
@@ -211,7 +228,7 @@ def train(hparams):
             "lr": 1e-3,
             "weight_decay": 1e-2,
             "lr_annealing": None,
-            'patience': 30,
+            'patience': patience,
         }
         hparams.__dict__.update(default_args)
         model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
@@ -263,7 +280,7 @@ def train(hparams):
         tags.extend(dataset.tags)
 
     logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
-    logger.log_hyperparams(hparams)
+    logger.log_hyperparams(tensor_sizes(hparams))
 
     if hparams.early_stopping:
         callbacks.append(EarlyStopping(strict=False, **early_stopping_args))
