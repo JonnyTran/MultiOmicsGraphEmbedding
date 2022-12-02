@@ -333,6 +333,8 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     if save:
         dataset.save(load_path, add_slug=False)
+    del network
+    del geneontology
 
     return dataset
 

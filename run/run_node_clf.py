@@ -165,15 +165,15 @@ def train(hparams):
     elif "LATTE" in hparams.method:
         USE_AMP = False
 
-        if "-1" in hparams.method:
+        if hparams.method.endswith("-1"):
             t_order = 1
             batch_order = 12
 
-        elif "-2" in hparams.method:
+        elif hparams.method.endswith("-2"):
             t_order = 2
             batch_order = 11
 
-        elif "-3" in hparams.method:
+        elif hparams.method.endswith("-3"):
             t_order = 3
             batch_order = 10
 
