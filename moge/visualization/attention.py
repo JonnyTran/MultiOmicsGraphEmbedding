@@ -14,7 +14,7 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
                    for i, (src, dst, color) in links[['source', 'target', 'color']].iterrows()]
 
     if (nodes.index != nodes.reset_index().index).all():
-        warnings.warn("`nodes.index` is not contiguous integer values.")
+        warnings.warn("`nodes.index` are not contiguous integers.")
 
     fig = go.Figure(data=[
         go.Sankey(
@@ -52,8 +52,9 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
             level = (max_level - nodes.query(f'layer == {layer}')['level']).max() + 1
             level = min(level, max_level - 1)
             # print(layer, level, max_level-1, level / (max_level-1))
-            fig.add_vline(x=level / (max_level - 1), annotation_text=f'Layer {layer + 1}', layer='below',
-                          line_dash="dot", line_color="gray", opacity=0.25, annotation_position="top left")
+            fig.add_vline(x=level / (max_level - 1), layer='below',
+                          annotation_text=f'Layer {layer + 1}', annotation_position="top left",
+                          line_dash="dot", line_color="gray", opacity=0.50, )
 
     fig = configure_layout(fig, paper_bgcolor='rgba(255,255,255,255)',
                            plot_bgcolor='rgba(0,0,0,0)', **kwargs)
