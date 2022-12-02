@@ -395,7 +395,8 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
         self._set_hparams(hparams)
-        self.lr = hparams.lr
+        if hasattr(hparams, 'lr'):
+            self.lr = hparams.lr
         self.hparams.n_params = self.get_n_params()
 
     def name(self):

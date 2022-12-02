@@ -18,6 +18,7 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf, HGTNodeClf, MLP
 from moge.model.dgl.node_clf import HANNodeClf, HGConv, R_HGNN
+from moge.model.PyG.DeepGOZero import DeepGOZero
 
 from run.datasets.deepgraphgo import build_deepgraphgo_model
 from run.utils import parse_yaml_config, select_empty_gpus
@@ -32,8 +33,6 @@ def train(hparams):
     MAX_EPOCHS = 1000
     MIN_EPOCHS = getattr(hparams, 'min_epochs', None)
 
-
-
     ### Dataset
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
@@ -45,7 +44,7 @@ def train(hparams):
     callbacks = []
     if hparams.dataset.upper() in ['UNIPROT', "MULTISPECIES", "HUMAN_MOUSE"]:
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
-        early_stopping_args = dict(monitor='val_fmax', mode='max')
+        early_stopping_args = dict(monitor='val_aupr', mode='max', patience=hparams.early_stopping)
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
@@ -166,15 +165,15 @@ def train(hparams):
     elif "LATTE" in hparams.method:
         USE_AMP = False
 
-        if "-1" in hparams.method:
+        if hparams.method.endswith("-1"):
             t_order = 1
             batch_order = 12
 
-        elif "-2" in hparams.method:
+        elif hparams.method.endswith("-2"):
             t_order = 2
             batch_order = 11
 
-        elif "-3" in hparams.method:
+        elif hparams.method.endswith("-3"):
             t_order = 3
             batch_order = 10
 
@@ -212,6 +211,7 @@ def train(hparams):
             "lr": 1e-3,
             "weight_decay": 1e-2,
             "lr_annealing": None,
+            'patience': 30,
         }
         hparams.__dict__.update(default_args)
         model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
@@ -220,20 +220,33 @@ def train(hparams):
         USE_AMP = False
         model = build_deepgraphgo_model(hparams, base_path='../DeepGraphGO')
 
+    elif 'DeepGOZero' == hparams.method:
+        dataset.neighbor_sizes = [0]
+        hparams.__dict__.update({
+            'go_file': '../deepgozero/data/go.norm',
+            "embedding_dim": 1024,
+            "hidden_dim": 1024,
+            'margin': 0.1,
+            'batch_size': 450,
+            "loss_type": "BCE_WITH_LOGITS",
+            'lr': 5e-4,
+        })
+        model = DeepGOZero(hparams, dataset, metrics=METRICS)
+
     elif 'MLP' == hparams.method:
+        dataset.neighbor_sizes = [0]
         hparams.__dict__.update({
             "embedding_dim": 256,
             "n_layers": len(dataset.neighbor_sizes),
             'neighbor_sizes': dataset.neighbor_sizes,
             "batch_size": 2 ** 11,
-            "dropout": 0.5,
+            "dropout": 0.2,
             "nb_cls_dense_size": 0,
             "nb_cls_dropout": 0,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
             "lr": 1e-3,
-            "weight_decay": 1e-2,
         })
 
         model = MLP(hparams, dataset=dataset, metrics=METRICS)
@@ -253,7 +266,7 @@ def train(hparams):
     logger.log_hyperparams(hparams)
 
     if hparams.early_stopping:
-        callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
+        callbacks.append(EarlyStopping(strict=False, **early_stopping_args))
 
     if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
         GPUS = [hparams.gpu]

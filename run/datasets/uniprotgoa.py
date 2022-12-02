@@ -195,8 +195,15 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # Set the go_id label and train/valid/test node split for head_node_type
     if labels_dataset.startswith('DGG'):
-        network.annotations[head_ntype], train_nodes, valid_nodes, test_nodes = get_DeepGraphGO_split(
+        annotations, train_nodes, valid_nodes, test_nodes = get_DeepGraphGO_split(
             network.annotations[head_ntype], deepgraphgo_path, target=target, pred_ntypes=pred_ntypes)
+
+        if add_parents:
+            network.annotations[head_ntype] = annotations
+        else:
+            index_name = network.annotations[head_ntype].index.name
+            network.multiomics[head_ntype].annotate_attributes(geneontology.annotations, on=index_name,
+                                                               columns=[target], agg='unique')
 
         network.train_nodes[head_ntype] = train_nodes
         network.valid_nodes[head_ntype] = valid_nodes
@@ -326,6 +333,8 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     if save:
         dataset.save(load_path, add_slug=False)
+    del network
+    del geneontology
 
     return dataset
 

@@ -4,15 +4,17 @@ metric:
   name: val_fmax
   goal: maximize
 parameters:
-  seed:
-    values: [ 1, 2, 3, 4, 5 ]
   dataset:
     values: [ "MULTISPECIES", "HUMAN_MOUSE" ]
   pred_ntypes:
     values: [ 'molecular_function', 'biological_process', 'cellular_component' ]
+
   method:
-    values: [ "LATTE-1", "HGT", "DeepGraphGO", "MLP", "LATTE-2" ]
+    values: [ "LATTE2GO-1", "LATTE-1", "LATTE2GO-2", "HGT", "DeepGraphGO", "MLP", "DeepGOZero" ]
+
   inductive:
     values: [ false ]
+  seed:
+    values: [ 1 ]
   early_stopping:
     values: [ 10 ]
