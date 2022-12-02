@@ -4,8 +4,6 @@ import random
 import sys
 import warnings
 
-from moge.model.PyG.DeepGOZero import DeepGOZero
-
 warnings.filterwarnings("ignore")
 
 from logzero import logger
@@ -20,6 +18,7 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf, HGTNodeClf, MLP
 from moge.model.dgl.node_clf import HANNodeClf, HGConv, R_HGNN
+from moge.model.PyG.DeepGOZero import DeepGOZero
 
 from run.datasets.deepgraphgo import build_deepgraphgo_model
 from run.utils import parse_yaml_config, select_empty_gpus
@@ -45,7 +44,7 @@ def train(hparams):
     callbacks = []
     if hparams.dataset.upper() in ['UNIPROT', "MULTISPECIES", "HUMAN_MOUSE"]:
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
-        early_stopping_args = dict(monitor='val_aupr', mode='max')
+        early_stopping_args = dict(monitor='val_aupr', mode='max', patience=hparams.early_stopping)
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
@@ -212,6 +211,7 @@ def train(hparams):
             "lr": 1e-3,
             "weight_decay": 1e-2,
             "lr_annealing": None,
+            'patience': 30,
         }
         hparams.__dict__.update(default_args)
         model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
@@ -225,6 +225,7 @@ def train(hparams):
         hparams.__dict__.update({
             'go_file': '../deepgozero/data/go.norm',
             "embedding_dim": 1024,
+            "hidden_dim": 1024,
             'margin': 0.1,
             'batch_size': 450,
             "loss_type": "BCE_WITH_LOGITS",
@@ -265,7 +266,7 @@ def train(hparams):
     logger.log_hyperparams(hparams)
 
     if hparams.early_stopping:
-        callbacks.append(EarlyStopping(patience=hparams.early_stopping, strict=False, **early_stopping_args))
+        callbacks.append(EarlyStopping(strict=False, **early_stopping_args))
 
     if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
         GPUS = [hparams.gpu]

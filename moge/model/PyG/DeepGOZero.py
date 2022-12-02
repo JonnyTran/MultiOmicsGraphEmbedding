@@ -29,7 +29,7 @@ class DeepGOZero(NodeClfTrainer):
 
         self.nb_gos = n_classes = dataset.n_classes
         input_length = dataset.node_attr_size
-        hidden_dim = getattr(hparams, 'embedding_dim', 1024)
+        hidden_dim = getattr(hparams, 'hidden_dim', 1024)
         embed_dim = getattr(hparams, 'embedding_dim', 1024)
         net = []
         net.append(MLPBlock(input_length, hidden_dim))
