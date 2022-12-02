@@ -4,6 +4,8 @@ import random
 import sys
 import warnings
 
+from moge.model.PyG.DeepGOZero import DeepGOZero
+
 warnings.filterwarnings("ignore")
 
 from logzero import logger
@@ -32,8 +34,6 @@ def train(hparams):
     MAX_EPOCHS = 1000
     MIN_EPOCHS = getattr(hparams, 'min_epochs', None)
 
-
-
     ### Dataset
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
@@ -45,7 +45,7 @@ def train(hparams):
     callbacks = []
     if hparams.dataset.upper() in ['UNIPROT', "MULTISPECIES", "HUMAN_MOUSE"]:
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
-        early_stopping_args = dict(monitor='val_fmax', mode='max')
+        early_stopping_args = dict(monitor='val_aupr', mode='max')
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
@@ -220,20 +220,32 @@ def train(hparams):
         USE_AMP = False
         model = build_deepgraphgo_model(hparams, base_path='../DeepGraphGO')
 
+    elif 'DeepGOZero' == hparams.method:
+        dataset.neighbor_sizes = [0]
+        hparams.__dict__.update({
+            'go_file': '../deepgozero/data/go.norm',
+            "embedding_dim": 1024,
+            'margin': 0.1,
+            'batch_size': 450,
+            "loss_type": "BCE_WITH_LOGITS",
+            'lr': 5e-4,
+        })
+        model = DeepGOZero(hparams, dataset, metrics=METRICS)
+
     elif 'MLP' == hparams.method:
+        dataset.neighbor_sizes = [0]
         hparams.__dict__.update({
             "embedding_dim": 256,
             "n_layers": len(dataset.neighbor_sizes),
             'neighbor_sizes': dataset.neighbor_sizes,
             "batch_size": 2 ** 11,
-            "dropout": 0.5,
+            "dropout": 0.2,
             "nb_cls_dense_size": 0,
             "nb_cls_dropout": 0,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
             "lr": 1e-3,
-            "weight_decay": 1e-2,
         })
 
         model = MLP(hparams, dataset=dataset, metrics=METRICS)

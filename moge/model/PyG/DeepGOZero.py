@@ -31,7 +31,6 @@ class DeepGOZero(NodeClfTrainer):
         input_length = dataset.node_attr_size
         hidden_dim = getattr(hparams, 'embedding_dim', 1024)
         embed_dim = getattr(hparams, 'embedding_dim', 1024)
-        margin = 0.1
         net = []
         net.append(MLPBlock(input_length, hidden_dim))
         net.append(Residual(MLPBlock(hidden_dim, hidden_dim)))
@@ -50,7 +49,7 @@ class DeepGOZero(NodeClfTrainer):
         self.rel_embed = nn.Embedding(self.n_rels + 1, embed_dim)
         nn.init.uniform_(self.rel_embed.weight, -k, k)
         self.all_gos = th.arange(self.nb_gos)
-        self.margin = margin
+        self.margin = getattr(hparams, 'margin', 0.1)
 
     def load_data(self, hparams, dataset, go_file='../deepgozero/data/go.norm'):
         terms_dict = {c: i for i, c in enumerate(dataset.classes)}
@@ -205,7 +204,8 @@ class DeepGOZero(NodeClfTrainer):
         return loss
 
     def configure_optimizers(self):
-        optimizer = th.optim.Adam(self.parameters(), lr=5e-4)
+        lr = getattr(self.hparams, 'lr', 5e-4)
+        optimizer = th.optim.Adam(self.parameters(), lr=lr)
         scheduler = MultiStepLR(optimizer, milestones=[5, 20], gamma=0.1)
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}

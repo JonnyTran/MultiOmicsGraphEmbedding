@@ -125,6 +125,9 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
             args = yaml.safe_load(f)
         hparams.__dict__.update(args)
 
+        # if 'DeepGOZero' == hparams.method:
+        #     hparams.add_parents = False
+
         dataset = build_uniprot_dataset('UniProt', dataset_path=dataset_path, hparams=hparams)
 
 
