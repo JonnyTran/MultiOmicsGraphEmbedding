@@ -4,6 +4,7 @@ from collections import Counter, deque
 from typing import Dict, List, Tuple
 
 import pandas as pd
+import torch
 import torch as th
 from torch import nn, Tensor, LongTensor
 from torch.nn import functional as F
@@ -62,6 +63,7 @@ class DeepGOZero(NodeClfTrainer):
 
     def forward(self, features: Tensor, **kwargs) -> Tensor:
         if isinstance(features, SparseTensor):
+            features.storage._value = torch.ones_like(features.storage._value, device=self.device)
             features = features.to_dense()
         self.all_gos = self.all_gos.to(self.device)
         self.hasFuncIndex = self.hasFuncIndex.to(self.device)
@@ -86,6 +88,7 @@ class DeepGOZero(NodeClfTrainer):
 
         loss = F.binary_cross_entropy_with_logits(logits, y_true)
         loss = loss + self.el_loss(self.normal_forms)
+
         self.log("loss", loss, logger=True, on_step=True)
         self.update_node_clf_metrics(self.train_metrics, logits, y_true, weights)
         return loss
@@ -100,7 +103,7 @@ class DeepGOZero(NodeClfTrainer):
         logits, y_true, weights = filter_samples_weights(y_pred=logits, y_true=y_true, weights=weights)
 
         loss = F.binary_cross_entropy_with_logits(logits, y_true)
-        self.log("val_loss", loss, on_step=True)
+        self.log("val_loss", loss)
         self.update_node_clf_metrics(self.valid_metrics, logits, y_true, weights)
         return loss
 
@@ -114,7 +117,7 @@ class DeepGOZero(NodeClfTrainer):
         logits, y_true, weights = filter_samples_weights(y_pred=logits, y_true=y_true, weights=weights)
 
         loss = F.binary_cross_entropy_with_logits(logits, y_true)
-        self.log("test_loss", loss, on_step=True)
+        self.log("test_loss", loss)
         self.update_node_clf_metrics(self.test_metrics, logits, y_true, weights)
         return loss
 
