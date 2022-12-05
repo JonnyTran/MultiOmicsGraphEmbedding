@@ -102,7 +102,8 @@ def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tu
         if tail_types and metapath_b[-1] not in tail_types: continue
         for metapath_a in metapaths_A:
             if metapath_a[-1] != metapath_b[0]: continue
-            if skip_undirected and metapath_a[0] == metapath_a[-1] and metapath_b[0] == metapath_b[-1]: continue
+            if skip_undirected and metapath_a[0] == metapath_a[-1] and metapath_b[0] == metapath_b[-1] and metapath_a[
+                -2] != metapath_b[1]: continue
 
             if return_dict:
                 new_metapath = ".".join([metapath_a[1], metapath_b[1]])
