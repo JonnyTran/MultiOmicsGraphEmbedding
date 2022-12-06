@@ -287,6 +287,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         with open(join(path, 'metadata.yml'), 'w') as outfile:
             yaml.dump(tensor_sizes(attrs), outfile, default_flow_style=False)
 
+    def metagraph(self) -> nx.MultiDiGraph:
+        G = nx.MultiDiGraph([(u, v, e) for u, e, v in self.G.metadata()[1]])
+        return G
+
     @property
     def name(self) -> str:
         if '-' in self._name and '.' in self._name:

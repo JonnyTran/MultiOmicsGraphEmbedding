@@ -67,9 +67,9 @@ class LATTEConv(MessagePassing, RelationAttention):
         self.rel_attn_r = nn.ParameterDict({
             ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
             for ntype in self.node_types})
-        # self.rel_attn = nn.ParameterDict({
-        #     ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels * 2)) \
-        #     for ntype in self.node_types})
+        self.rel_attn_w = nn.ParameterDict({
+            ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
+            for ntype in self.node_types})
         self.rel_attn_bias = nn.ParameterDict({
             ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
             for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
@@ -120,6 +120,9 @@ class LATTEConv(MessagePassing, RelationAttention):
         if hasattr(self, "rel_attn_r"):
             for ntype, rel_attn in self.rel_attn_r.items():
                 nn.init.xavier_normal_(rel_attn, gain=gain)
+        if hasattr(self, "rel_attn_w"):
+            for ntype, rel_attn in self.rel_attn_w.items():
+                nn.init.xavier_normal_(rel_attn, gain=1.0)
 
     # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
     #     beta_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
@@ -229,7 +232,7 @@ class LATTEConv(MessagePassing, RelationAttention):
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(rel_embedding[:, i].view(h_out[ntype].size(0), -1), dim=1).mean(dim=0).item() :.2f}")
 
-            h_out[ntype] = h_out[ntype] * betas[ntype].unsqueeze(-1)
+            h_out[ntype] = h_out[ntype] * self.rel_attn_w[ntype] * betas[ntype].unsqueeze(-1)
             h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "activation"):

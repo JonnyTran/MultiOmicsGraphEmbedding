@@ -33,7 +33,7 @@ def train(hparams):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = True
     MAX_EPOCHS = 1000
-    MIN_EPOCHS = getattr(hparams, 'min_epochs', None)
+    MIN_EPOCHS = getattr(hparams, 'min_epochs', 60)
 
     ### Dataset
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
@@ -304,7 +304,7 @@ def train(hparams):
         # plugins='deepspeed' if NUM_GPUS > 1 else None,
         # accelerator='ddp_spawn',
         # plugins='ddp_sharded'
-        precision=16 if USE_AMP else 32
+        precision=16 if USE_AMP else 32,
     )
     trainer.tune(model)
     trainer.fit(model)
