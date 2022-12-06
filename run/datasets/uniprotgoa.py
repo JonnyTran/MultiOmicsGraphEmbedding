@@ -174,6 +174,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         go_ntypes = {'biological_process', 'cellular_component', 'molecular_function'}.intersection(ntype_subset)
     else:
         go_ntypes = {'biological_process', 'cellular_component', 'molecular_function'}
+
     if go_ntypes:
         # Add ontology interactions for all 3 ontologies
         network.add_edges_from_ontology(geneontology, nodes=go_nodes, split_ntype='namespace', etypes=go_etypes)
@@ -195,6 +196,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # Set the go_id label and train/valid/test node split for head_node_type
     if labels_dataset.startswith('DGG'):
+        logger.info("Using DeepGraphGO's dataset split, ignoring train_date,valid_date,test_date")
         annotations, train_nodes, valid_nodes, test_nodes = get_DeepGraphGO_split(
             network.annotations[head_ntype], deepgraphgo_path, target=target, pred_ntypes=pred_ntypes)
 

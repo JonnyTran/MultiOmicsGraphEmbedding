@@ -137,11 +137,11 @@ class DenseClassification(nn.Module):
     def __init__(self, hparams: Namespace):
         super().__init__()
         # Classifier
-        if hasattr(hparams, 'nb_cls_dense_size') and hparams.nb_cls_dense_size > 0:
+        if getattr(hparams, 'nb_cls_dense_size', 0) > 0:
             self.linears = nn.Sequential(OrderedDict([
                 ("linear_1", nn.Linear(hparams.embedding_dim, hparams.nb_cls_dense_size)),
                 ("relu", nn.ReLU()),
-                ("dropout", nn.Dropout(p=hparams.nb_cls_dropout)),
+                ("dropout", nn.Dropout(p=getattr(hparams, 'nb_cls_dropout', 0.0))),
                 ("linear", nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes))
             ]))
         else:

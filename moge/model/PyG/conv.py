@@ -58,6 +58,6 @@ class HeteroGNN(torch.nn.Module):
     def forward(self, x_dict: Dict[str, Tensor], edge_index_dict: Dict[Tuple[str, str, str], Tensor], **kwargs):
         for conv in self.convs:
             x_dict = conv(x_dict, edge_index_dict)
-            x_dict = {key: x.relu() for key, x in x_dict.items()}
+            x_dict = {ntype: x.relu() for ntype, x in x_dict.items()}
 
         return x_dict

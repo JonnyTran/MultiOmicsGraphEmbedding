@@ -257,9 +257,7 @@ def train(hparams):
             "n_layers": len(dataset.neighbor_sizes),
             'neighbor_sizes': dataset.neighbor_sizes,
             "batch_size": 2 ** 11,
-            "dropout": 0.2,
-            "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0,
+            "dropout": 0.0,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
@@ -279,7 +277,9 @@ def train(hparams):
     if hasattr(dataset, 'tags'):
         tags.extend(dataset.tags)
 
-    logger = WandbLogger(name=model.name(), tags=list(set(tags)), project="LATTE2GO")
+    logger = WandbLogger(name=getattr(hparams, 'method', model.name()),
+                         tags=list(set(tags)),
+                         project="LATTE2GO")
     logger.log_hyperparams(tensor_sizes(hparams))
 
     if hparams.early_stopping:

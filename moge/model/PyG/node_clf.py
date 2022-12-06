@@ -326,7 +326,7 @@ class LATTENodeClf(NodeClfTrainer):
                                 f'test_{namespace}_aupr': pair_aupr(y_true_dict[namespace], y_pred_dict[namespace]),
                                 f'test_{namespace}_fmax': fmax(y_true_dict[namespace], y_pred_dict[namespace])[0], }
                             logger.info(f"final metrics {final_metrics}")
-                            self.wandb_experiment.log(final_metrics | {'epoch': self.current_epoch})
+                            self.wandb_experiment.log(final_metrics | {'epoch': self.current_epoch + 1})
 
                         self.plot_pr_curve(targets=y_true_dict[namespace], scores=y_pred_dict[namespace],
                                            split_samples=split_samples, title=title)
@@ -532,7 +532,8 @@ class MLP(NodeClfTrainer):
         self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
         self.classifier = DenseClassification(hparams)
         self.criterion = ClassificationLoss(
-            loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+            loss_type=hparams.loss_type,
+            n_classes=dataset.n_classes,
             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                  'use_class_weights' in hparams and hparams.use_class_weights else None,
             pos_weight=dataset.pos_weight if hasattr(dataset, "pos_weight") and
@@ -547,6 +548,9 @@ class MLP(NodeClfTrainer):
 
         h_out = {}
         if len(h_out) < len(inputs["global_node_index"].keys()):
+            sp_tensor = inputs["x_dict"][self.head_node_type]
+            inputs["x_dict"][self.head_node_type].storage._value = torch.ones_like(sp_tensor.storage._value,
+                                                                                   device=self.device)
             h_out = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
 
         if hasattr(self, "classifier"):
