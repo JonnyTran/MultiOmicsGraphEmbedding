@@ -171,6 +171,7 @@ def train(hparams):
         model = R_HGNN(default_args, dataset, metrics=METRICS)
     elif "LATTE" in hparams.method:
         USE_AMP = False
+        early_stopping_args['monitor'] = 'val_aupr_mean'
 
         if hparams.method.endswith("-1"):
             t_order = 1
