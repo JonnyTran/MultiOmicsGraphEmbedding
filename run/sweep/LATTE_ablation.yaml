@@ -27,4 +27,4 @@ parameters:
   seed:
     values: [ 1 ]
   early_stopping:
-    values: [ 30 ]
+    values: [ 15 ]

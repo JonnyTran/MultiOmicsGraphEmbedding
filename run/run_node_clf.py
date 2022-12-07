@@ -176,12 +176,12 @@ def train(hparams):
         if hparams.method.endswith("-1"):
             t_order = 1
             batch_order = 11
-            early_stopping_args['patience'] = 30
+            # early_stopping_args['patience'] = 30
 
         elif hparams.method.endswith("-2"):
             t_order = 2
             batch_order = 10
-            early_stopping_args['patience'] = 25
+            # early_stopping_args['patience'] = 25
 
         elif hparams.method.endswith("-3"):
             t_order = 3
