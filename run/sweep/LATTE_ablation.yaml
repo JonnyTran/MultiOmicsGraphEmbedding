@@ -1,24 +1,30 @@
-program: run/run_methods.py
+program: run/run_node_clf.py
 method: grid
 metric:
-  name: test_macro_f1
+  name: val_fmax
   goal: maximize
 parameters:
   dataset:
-    values: [ "ACM", "DBLP", "IMDB" ]
+    values: [ "HUMAN_MOUSE" ]
+  pred_ntypes:
+    values: [ 'biological_process' ]
+
   method:
-    values: [ "LATTE-2", "LATTE-2 proximity" ]
-  disable_alpha:
-    values: [ True, False ]
-  disable_beta:
-    values: [ True, False ]
-  disable_concat:
-    values: [ True, False ]
-  attn_activation:
-    values: [ "LeakyReLU", "sharpening" ]
-  train_ratio:
-    values: [ 0.0 ]
-  run:
-    values: [ 1,2,3,4,5 ]
+    values: [ "LATTE-1", "LATTE-2" ]
+
+  layer_pooling:
+    values: [ 'concat', 'last' ]
+
+  ntype_subset:
+    values:
+      - 'Protein MessengerRNA MicroRNA LncRNA biological_process cellular_component molecular_function'
+      - 'Protein MessengerRNA MicroRNA LncRNA'
+      - 'Protein biological_process'
+      - 'Protein'
+
   inductive:
-    values: [ True ]
+    values: [ false ]
+  seed:
+    values: [ 1 ]
+  early_stopping:
+    values: [ 30 ]

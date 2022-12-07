@@ -5,7 +5,7 @@ metric:
   goal: maximize
 parameters:
   dataset:
-    values: [ "MULTISPECIES", "HUMAN_MOUSE" ]
+    values: [ "MULTISPECIES" ]
   pred_ntypes:
     values: [ 'molecular_function', 'biological_process', 'cellular_component' ]
 
@@ -17,4 +17,4 @@ parameters:
   seed:
     values: [ 1 ]
   early_stopping:
-    values: [ 10 ]
+    values: [ 30 ]

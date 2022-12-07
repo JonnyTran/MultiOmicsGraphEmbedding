@@ -127,7 +127,7 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
 
         # if 'DeepGOZero' == hparams.method:
         #     hparams.add_parents = False
-        if 'LATTE2GO' in hparams.method:
+        if 'LATTE2GO' in hparams.method and hparams.pred_ntypes not in hparams.ntype_subset:
             hparams.ntype_subset = hparams.ntype_subset + ' ' + hparams.pred_ntypes
 
         dataset = build_uniprot_dataset('UniProt', dataset_path=dataset_path, hparams=hparams)
