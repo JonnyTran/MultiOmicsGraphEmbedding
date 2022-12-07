@@ -185,6 +185,8 @@ def train(hparams):
         elif hparams.method.endswith("-3"):
             t_order = 3
             batch_order = 10
+        else:
+            raise Exception()
 
         dataset.neighbor_sizes = [2048, 2048]
 
@@ -254,7 +256,7 @@ def train(hparams):
             "embedding_dim": 256,
             "n_layers": len(dataset.neighbor_sizes),
             'neighbor_sizes': dataset.neighbor_sizes,
-            "batch_size": 2 ** 11,
+            "batch_size": 2 ** 12,
             "dropout": 0.0,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
