@@ -174,12 +174,12 @@ def train(hparams):
 
         if hparams.method.endswith("-1"):
             t_order = 1
-            batch_order = 12
+            batch_order = 11
             early_stopping_args['patience'] = 30
 
         elif hparams.method.endswith("-2"):
             t_order = 2
-            batch_order = 11
+            batch_order = 10
             early_stopping_args['patience'] = 25
 
         elif hparams.method.endswith("-3"):
@@ -338,6 +338,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--pred_ntypes', type=str, default="biological_process")
+    parser.add_argument('--ntype_subset', type=str, default="Protein")
+    parser.add_argument('--layer_pooling', type=str, default="concat")
 
     parser.add_argument('--use_emb', type=str,
                         default="/home/jonny/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
