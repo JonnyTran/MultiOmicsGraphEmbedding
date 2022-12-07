@@ -21,7 +21,7 @@ class LATTEConv(MessagePassing, RelationAttention):
                  layer: int = 0, t_order: int = 1,
                  activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
                  layernorm=False, batchnorm=False, dropout=0.2,
-                 edge_threshold=0.0, n_layers=False, verbose=False) -> None:
+                 edge_threshold=0.0, n_layers=None, verbose=False) -> None:
         super().__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.verbose = verbose
 
@@ -447,13 +447,14 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
                                     activation=activation,
                                     layernorm=hparams.layernorm,
                                     batchnorm=hparams.batchnorm,
-                                    dropout=hparams.dropout if "dropout" in hparams else 0.0,
+                                    dropout=getattr(hparams, 'dropout', 0.0),
                                     attn_heads=attn_heads,
                                     attn_activation=attn_activation,
                                     attn_dropout=attn_dropout,
-                                    edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
+                                    edge_threshold=getattr(hparams, 'edge_threshold', 0.0),
                                     n_layers=n_layers,
-                                    verbose=hparams.verbose if "verbose" in hparams else False))
+                                    verbose=getattr(hparams, 'verbose', False),
+                                    ))
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
         self.reset_parameters()

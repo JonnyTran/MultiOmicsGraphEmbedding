@@ -67,6 +67,7 @@ def train(hparams):
             'weight_decay': 0.001,
         }
         model = HANNodeClf(default_args, dataset, metrics=METRICS)
+
     elif hparams.method == "GTN":
         from moge.model.cogdl.node_clf import GTN
 
@@ -84,6 +85,7 @@ def train(hparams):
             "epochs": 40,
         }
         model = GTN(Namespace(**default_args), dataset=dataset, metrics=METRICS)
+
     elif hparams.method == "MetaPath2Vec":
         USE_AMP = True
         default_args = {
@@ -100,6 +102,7 @@ def train(hparams):
             "epochs": 100
         }
         model = MetaPath2Vec(Namespace(**default_args), dataset=dataset, metrics=METRICS)
+
     elif hparams.method == "HGT":
         USE_AMP = False
         default_args = {
@@ -124,6 +127,7 @@ def train(hparams):
         }
 
         model = HGTNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
+
     elif hparams.method == "HGConv":
         default_args = {
             'seed': hparams.run,
@@ -144,6 +148,7 @@ def train(hparams):
         }
         ModelClass = HGConv
         model = HGConv(default_args, dataset, metrics=METRICS)
+
     elif hparams.method == "R_HGNN":
         default_args = {
             "head_node_type": dataset.head_node_type,
@@ -170,12 +175,12 @@ def train(hparams):
         if hparams.method.endswith("-1"):
             t_order = 1
             batch_order = 12
-            patience = 30
+            early_stopping_args['patience'] = 30
 
         elif hparams.method.endswith("-2"):
             t_order = 2
             batch_order = 11
-            patience = 5
+            early_stopping_args['patience'] = 25
 
         elif hparams.method.endswith("-3"):
             t_order = 3
@@ -212,14 +217,8 @@ def train(hparams):
             "batchnorm": False,
             "layernorm": True,
             "activation": "relu",
-            "dropout": 0.0,
-            "input_dropout": False,
+            "dropout": 0.0 if hparams.pred_ntypes == 'biological_process' else 0.5,
 
-            "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0.0,
-
-            "edge_threshold": 0.0,
-            "edge_sampling": False,
             "head_node_type": dataset.head_node_type,
 
             "n_classes": dataset.n_classes,
@@ -228,7 +227,6 @@ def train(hparams):
             "lr": 1e-3,
             "weight_decay": 1e-2,
             "lr_annealing": None,
-            'patience': patience,
         }
         hparams.__dict__.update(default_args)
         model = LATTEFlatNodeClf(hparams, dataset, metrics=METRICS)
@@ -246,7 +244,7 @@ def train(hparams):
             'margin': 0.1,
             'batch_size': 450,
             "loss_type": "BCE_WITH_LOGITS",
-            'lr': 5e-4,
+            'lr': 1e-3,
         })
         model = DeepGOZero(hparams, dataset, metrics=METRICS)
 
