@@ -146,7 +146,6 @@ def train(hparams):
             'learning_rate': 0.001,
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
-        ModelClass = HGConv
         model = HGConv(default_args, dataset, metrics=METRICS)
 
     elif hparams.method == "R_HGNN":
@@ -169,6 +168,7 @@ def train(hparams):
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
         model = R_HGNN(default_args, dataset, metrics=METRICS)
+
     elif "LATTE" in hparams.method:
         USE_AMP = False
         early_stopping_args['monitor'] = 'val_aupr_mean'
@@ -176,12 +176,10 @@ def train(hparams):
         if hparams.method.endswith("-1"):
             t_order = 1
             batch_order = 11
-            # early_stopping_args['patience'] = 30
 
         elif hparams.method.endswith("-2"):
             t_order = 2
             batch_order = 10
-            # early_stopping_args['patience'] = 25
 
         elif hparams.method.endswith("-3"):
             t_order = 3
@@ -189,16 +187,18 @@ def train(hparams):
         else:
             raise Exception()
 
-        dataset.neighbor_sizes = [2048, 2048]
+        batch_size = int(2 ** batch_order)
+        n_layers = 2
+        dataset.neighbor_sizes = [batch_size for _ in range(n_layers)]
 
         default_args = {
             "embedding_dim": 512,
             "layer_pooling": "concat",
 
-            "n_layers": len(dataset.neighbor_sizes),
+            "n_layers": n_layers,
             "t_order": t_order,
             'neighbor_sizes': dataset.neighbor_sizes,
-            "batch_size": int(2 ** batch_order),
+            "batch_size": batch_size,
 
             "filter_metapaths": {
                 'biological_process': {('is_a', 'is_a')},
@@ -215,12 +215,12 @@ def train(hparams):
 
             "attn_heads": 8,
             "attn_activation": "LeakyReLU",
-            "attn_dropout": 0.2,
+            "attn_dropout": 0.0,
 
             "batchnorm": False,
             "layernorm": True,
             "activation": "relu",
-            "dropout": 0.0 if hparams.pred_ntypes == 'biological_process' else 0.5,
+            "dropout": 0.0,
 
             "head_node_type": dataset.head_node_type,
 
