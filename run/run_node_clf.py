@@ -172,6 +172,7 @@ def train(hparams):
     elif "LATTE" in hparams.method:
         USE_AMP = False
         early_stopping_args['monitor'] = 'val_aupr_mean'
+        early_stopping_args['patience'] = 50
 
         if hparams.method.endswith("-1"):
             t_order = 1
