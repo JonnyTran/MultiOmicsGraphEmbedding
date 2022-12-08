@@ -155,6 +155,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # Load HeteroNetwork
     if isinstance(dataset_path, str):
+        logger.info(f"Loading HeteroNetwork snapshot from: {os.path.expanduser(dataset_path)}")
         with open(os.path.expanduser(dataset_path), "rb") as file:
             network: HeteroNetwork = pickle.load(file)
             if not hasattr(network, 'train_nodes'):
@@ -301,7 +302,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         labels_subset=geneontology.data.index.intersection(go_classes),
         min_count=min_count,
         expression=feature,
-        sequence=True if sequence_tokenizers is not None else False,
+        sequence=sequence_tokenizers is not None,
         seq_tokenizer=sequence_tokenizers,
         add_reverse_metapaths=use_reverse,
         undirected_ntypes=getattr(hparams, 'undirected_ntypes', ['Protein']),

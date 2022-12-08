@@ -350,7 +350,7 @@ if __name__ == "__main__":
                         default="/home/jonny/Bioinformatics_ExternalData/OGB/")
 
     parser.add_argument('--train_ratio', type=float, default=None)
-    parser.add_argument('--early_stopping', type=int, default=5)
+    parser.add_argument('--early_stopping', type=int, default=15)
 
     # Ablation study
     parser.add_argument('--disable_alpha', type=bool, default=False)
