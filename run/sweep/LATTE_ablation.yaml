@@ -5,7 +5,7 @@ metric:
   goal: maximize
 parameters:
   dataset:
-    values: [ "HUMAN_MOUSE" ]
+    values: [ "HUMAN_MOUSE", "HUMAN_MOUSE_unsplit" ]
   pred_ntypes:
     values: [ 'biological_process' ]
 

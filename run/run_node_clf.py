@@ -44,13 +44,13 @@ def train(hparams):
 
     ### Callbacks
     callbacks = []
-    if hparams.dataset.upper() in ['UNIPROT', "MULTISPECIES", "HUMAN_MOUSE"]:
+    if hparams.dataset.upper() in ['UNIPROT', "MULTISPECIES", "HUMAN_MOUSE"] or \
+            "HUMAN_MOUSE" in hparams.dataset or "MULTISPECIES" in hparams.dataset:
         METRICS = ["BPO_aupr", "BPO_fmax", "CCO_aupr", "CCO_fmax", "MFO_aupr", "MFO_fmax"]
         early_stopping_args = dict(monitor='val_aupr', mode='max', patience=hparams.early_stopping)
     else:
         METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
         early_stopping_args = dict(monitor='val_loss', mode='min')
-
 
     if hparams.method == "HAN":
         default_args = {

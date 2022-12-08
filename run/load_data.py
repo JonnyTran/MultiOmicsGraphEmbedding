@@ -109,12 +109,15 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
     elif method == 'DeepGraphGO':
         dataset = None  # will load in method
 
-    elif name in ["HUMAN_MOUSE", "MULTISPECIES"]:
-
+    elif "HUMAN_MOUSE" in name or "MULTISPECIES" in name:
         if name == 'HUMAN_MOUSE':
             dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRINGsplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+        elif name == 'HUMAN_MOUSE_unsplit':
+            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
         elif name == "MULTISPECIES":
             dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRINGsplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+        elif name == "MULTISPECIES_unsplit":
+            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
 
         mlb_path = os.path.expanduser('~/Bioinformatics_ExternalData/LATTE2GO')
         mlb_paths = glob.glob(f'{mlb_path}/{hparams.dataset}-{hparams.pred_ntypes}/go_id.mlb')
