@@ -156,12 +156,20 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     # Load HeteroNetwork
     if isinstance(dataset_path, str):
         logger.info(f"Loading HeteroNetwork snapshot from: {os.path.expanduser(dataset_path)}")
-        with open(os.path.expanduser(dataset_path), "rb") as file:
-            network: HeteroNetwork = pickle.load(file)
-            if not hasattr(network, 'train_nodes'):
-                network.train_nodes = defaultdict(set)
-                network.valid_nodes = defaultdict(set)
-                network.test_nodes = defaultdict(set)
+        if dataset_path.endswith(".pickle"):
+            with open(os.path.expanduser(dataset_path), "rb") as file:
+                network: HeteroNetwork = pickle.load(file)
+
+        elif dataset_path.endswith('.HeteroNetwork'):
+            network = HeteroNetwork.load(dataset_path)
+        else:
+            raise Exception(f"Cannot load HeteroNetwork from {dataset_path}")
+
+        if not hasattr(network, 'train_nodes'):
+            network.train_nodes = defaultdict(set)
+            network.valid_nodes = defaultdict(set)
+            network.test_nodes = defaultdict(set)
+
     elif isinstance(dataset_path, HeteroNetwork):
         network = dataset_path
 

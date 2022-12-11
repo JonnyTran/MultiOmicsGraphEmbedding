@@ -1,12 +1,19 @@
+import ast
 import collections
+import glob
+import os
+import pickle
 import pprint
 import warnings
+from argparse import Namespace
 from collections import defaultdict
 from collections.abc import Iterable
+from os.path import join, exists
 from typing import Dict, Tuple, Union, List, Any, Optional, Set
 
 import dask.dataframe as dd
 import dgl
+import joblib
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -15,6 +22,7 @@ import tqdm
 from joblib import Parallel, delayed
 from logzero import logger
 from pandas import Series, Index, DataFrame
+from ruamel import yaml
 from scipy.sparse import csr_matrix
 from torch import Tensor
 from torch_geometric.data import HeteroData
@@ -56,56 +64,87 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         super(HeteroNetwork, self).__init__(networks=networks, multiomics=multiomics, annotations=annotations)
 
-    def __repr__(self):
+    def __repr__(self, return_dict=False):
         nodes = {ntype: nids.size for ntype, nids in self.nodes.items()}
         networks = {'.'.join(metapath): g.__str__() for metapath, g in self.networks.items()}
         annotations = {ntype: df.shape for ntype, df in self.annotations.items()}
-        return "HeteroNetwork {}\n{}".format(
-            self.multiomics._cohort_name,
-            pprint.pformat({'nodes': nodes, 'networks': networks, 'annotations': annotations}, depth=3, width=150))
+        repr_attrs = {'nodes': nodes, 'networks': networks, 'annotations': annotations}
+        if return_dict:
+            return repr_attrs
+        else:
+            return "HeteroNetwork {}\n{}".format(
+                self.multiomics._cohort_name,
+                pprint.pformat(repr_attrs, depth=3, width=150))
 
-    # @classmethod
-    # def load(cls, path):
-    #     return
-    #     if isinstance(path, str) and '~' in path:
-    #         path = os.path.expanduser(path)
-    #
-    #     self = cls(multiomics=Namespace(), node_types=None, layers=None)
-    #
-    #     for metapath, g in self.networks.items():
-    #         network_name = "__".join(metapath) if isinstance(metapath, Iterable) else str(metapath)
-    #         nx.write_gml(g, join(path, f"{network_name}.gml"))
-    #
-    #     for ntype, df in self.annotations.items():
-    #         df.to_pickle(join(path, f'{ntype}.pickle'))
-    #
-    #     if isinstance(self.nodes, (pd.Index, pd.Series)):
-    #         self.nodes.to_pickle(join(path, 'nodes.pickle'))
-    #     elif isinstance(self.nodes, dict):
-    #         with open(join(path, 'nodes.pickle'), 'wb') as f:
-    #             pickle.dump(self.nodes, f)
-    #
-    #     return self
-    #
-    # def save(self, path: str):
-    #     if isinstance(path, str) and '~' in path:
-    #         path = os.path.expanduser(path)
-    #
-    #     if not os.path.exists(path):
-    #         os.makedirs(path)
-    #
-    #     for metapath, g in self.networks.items():
-    #         network_name = "__".join(metapath) if isinstance(metapath, Iterable) else str(metapath)
-    #         nx.write_gml(g, join(path, f"{network_name}.gml"))
-    #
-    #     for ntype, df in self.annotations.items():
-    #         df.to_pickle(join(path, f'{ntype}.pickle'))
-    #
-    #     if isinstance(self.nodes, (pd.Index, pd.Series)):
-    #         self.nodes.to_pickle(join(path, 'nodes.pickle'))
-    #     elif isinstance(self.nodes, dict):
-    #         with open(join(path, 'nodes.pickle'), 'wb') as f:
-    #             pickle.dump(self.nodes, f)
+    @classmethod
+    def load(cls, path):
+        if isinstance(path, str) and '~' in path:
+            path = os.path.expanduser(path)
+
+        # MultiOmics
+        if os.path.exists(join(path, f'multiomics')):
+            multiomics = MultiOmics.load(join(path, f'multiomics'))
+        else:
+            multiomics = Namespace()
+
+        # Networks
+        networks = {}
+        for fp in tqdm.tqdm(glob.glob(join(path, f'*.gpickle')), desc='Loading networks'):
+            fn = os.path.basename(fp)
+            metapath = ast.literal_eval(fn.split(".")[0])
+            if exists(join(path, f'{metapath}.gpickle')):
+                networks[metapath] = nx.read_gpickle(join(path, f'{metapath}.gpickle'))
+
+        # Nodes
+        with open(join(path, 'nodes.pickle'), 'rb') as f:
+            nodes: Dict[str, pd.Index] = pickle.load(f)
+
+        self = cls(multiomics=multiomics, node_types=list(nodes.keys()), layers=networks)
+        self.nodes = nodes
+
+        for ntype in self.nodes:
+            if os.path.exists(join(path, f'{ntype}.pickle')):
+                self.annotations[ntype] = pd.read_pickle(join(path, f'{ntype}.pickle'))
+
+        return self
+
+    def save(self, path: str):
+        if isinstance(path, str) and '~' in path:
+            path = os.path.expanduser(path)
+
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        attrs = self.__repr__(return_dict=True)
+        with open(join(path, 'metadata.yml'), 'w') as outfile:
+            yaml.dump(attrs, outfile, default_flow_style=False)
+
+        # Nodes
+        if isinstance(self.nodes, (pd.Index, pd.Series)):
+            self.nodes.to_pickle(join(path, 'nodes.pickle'))
+        elif isinstance(self.nodes, dict):
+            with open(join(path, 'nodes.pickle'), 'wb') as f:
+                pickle.dump(self.nodes, f)
+
+        # Networks
+        for metapath, G in tqdm.tqdm(self.networks.items(), total=len(self.networks), desc="Saving networks"):
+            if not exists(join(path, f'{metapath}.gpickle')):
+                nx.write_gpickle(G, join(path, f'{metapath}.gpickle'))
+
+        # Multiomics
+        if not os.path.exists(join(path, f'multiomics')):
+            self.multiomics.save(join(path, f'multiomics'))
+
+        # Write annotations
+        for ntype, df in self.annotations.items():
+            if ntype not in self.node_types or ntype in self.multiomics._omics: continue
+            if not os.path.exists(join(path, f'{ntype}.pickle')):
+                df.to_pickle(join(path, f'{ntype}.pickle'))
+
+        # Write ntype feature_transformer
+        for target, mlb in getattr(self, 'feature_transformer', {}).items():
+            if not os.path.exists(join(path, f'{target}.mlb')):
+                joblib.dump(mlb, join(path, f'{target}.mlb'))
 
     def isolated_nodes(self, ntypes: Set[str] = None) -> Dict[str, Set[str]]:
         """

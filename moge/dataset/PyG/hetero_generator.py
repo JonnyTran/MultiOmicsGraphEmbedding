@@ -252,6 +252,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if not os.path.exists(path):
             os.makedirs(path)
 
+        # Nodes
         nodes = self.nodes if hasattr(self, "nodes") and self.nodes != None else self.network.nodes
         if isinstance(nodes, (pd.Index, pd.Series)):
             nodes.to_pickle(join(path, 'nodes.pickle'))
