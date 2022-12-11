@@ -232,8 +232,9 @@ class LATTEConv(MessagePassing, RelationAttention):
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(rel_embedding[:, i].view(h_out[ntype].size(0), -1), dim=1).mean(dim=0).item() :.2f}")
 
-            h_out[ntype] = h_out[ntype] * torch.cat([self.rel_attn_w[ntype],
-                                                     torch.ones_like(self.rel_attn_w[ntype][[0]])], dim=0)
+            if hasattr(self, 'rel_attn_w'):
+                h_out[ntype] = h_out[ntype] * torch.cat([self.rel_attn_w[ntype],
+                                                         torch.ones_like(self.rel_attn_w[ntype][[0]])], dim=0)
             h_out[ntype] = h_out[ntype] * betas[ntype].unsqueeze(-1)
             h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
