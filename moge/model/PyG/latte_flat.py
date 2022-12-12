@@ -50,7 +50,7 @@ class LATTEConv(MessagePassing, RelationAttention):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
-        self.linear_l = nn.ModuleDict(
+        self.linear = nn.ModuleDict(
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F)
         # self.linear_r = nn.ModuleDict(
@@ -99,7 +99,7 @@ class LATTEConv(MessagePassing, RelationAttention):
 
     def extra_repr(self) -> str:
         return 'linear_l={}, linear_r={}, attn={}, bias={}'.format(
-            self.linear_l, self.linear_r if hasattr(self, 'linear_r') else None, self.attn,
+            self.linear, self.linear_r if hasattr(self, 'linear_r') else None, self.attn,
             self.bias is not None)
 
     def reset_parameters(self):
@@ -108,8 +108,8 @@ class LATTEConv(MessagePassing, RelationAttention):
             nn.init.xavier_normal_(self.attn[i], gain=gain)
 
         gain = nn.init.calculate_gain('relu')
-        for node_type in self.linear_l:
-            nn.init.xavier_normal_(self.linear_l[node_type].weight, gain=gain)
+        for node_type in self.linear:
+            nn.init.xavier_normal_(self.linear[node_type].weight, gain=gain)
             if hasattr(self, 'linear_r'):
                 nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
 
@@ -180,7 +180,7 @@ class LATTEConv(MessagePassing, RelationAttention):
         Returns:
              output_emb, edge_attn_scores
         """
-        l_dict = self.projection(feats, linears=self.linear_l, subset=self.get_src_ntypes())
+        l_dict = self.projection(feats, linears=self.linear, subset=self.get_src_ntypes())
         # r_dict = self.projection(feats, linears=self.linear_r, subset=self.get_dst_ntypes())
         r_dict = l_dict
 

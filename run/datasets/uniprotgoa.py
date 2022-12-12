@@ -277,6 +277,9 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
         network.annotations[head_ntype][target] = network.annotations[head_ntype][target] \
             .fillna('').map(list).map(np.unique)
 
+    if getattr(hparams, 'combine_networks', None):
+        network.combine_networks(hparams.combine_networks)
+
     # if hparams.inductive:
     #     network.set_edge_traintest_mask()
 

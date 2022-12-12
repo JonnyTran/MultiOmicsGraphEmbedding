@@ -62,7 +62,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             else:
                 networks[src_etype_dst] = nxgraph
 
-        super(HeteroNetwork, self).__init__(networks=networks, multiomics=multiomics, annotations=annotations)
+        super().__init__(networks=networks, multiomics=multiomics, annotations=annotations)
 
     def __repr__(self, return_dict=False):
         nodes = {ntype: nids.size for ntype, nids in self.nodes.items()}
@@ -145,6 +145,53 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         for target, mlb in getattr(self, 'feature_transformer', {}).items():
             if not os.path.exists(join(path, f'{target}.mlb')):
                 joblib.dump(mlb, join(path, f'{target}.mlb'))
+
+    def combine_networks(self, groupby: Dict[Union[Tuple, str], List[Union[Tuple, str]]], delete_sources=True):
+        new_networks = {}
+
+        expanded_groupby = {}
+        for to_metapath, from_metapaths in groupby.items():
+            if isinstance(to_metapath, tuple):
+                # replace etype to matching metapath
+                from_metapaths = [next((m for m in self.networks.keys() \
+                                        if m[1] == etype and {m[0], m[-1]} == {to_metapath[0], to_metapath[-1]}),
+                                       etype) \
+                                      if isinstance(etype, str) else etype \
+                                  for etype in from_metapaths]
+
+                expanded_groupby[to_metapath] = from_metapaths
+                continue
+
+            for metapath in self.networks.keys():
+                if metapath[1] == to_metapath and not metapath in expanded_groupby:
+                    from_metapaths_sub = [next((m for m in self.networks.keys() \
+                                                if m[1] == etype and {m[0], m[-1]} == {metapath[0], metapath[-1]}),
+                                               etype) \
+                                              if isinstance(etype, str) else etype \
+                                          for etype in from_metapaths]
+
+                    expanded_groupby[metapath] = from_metapaths_sub
+
+        logger.info(f"combine_networks {expanded_groupby}")
+        groupby = expanded_groupby
+
+        for to_metapath, from_metapaths in groupby.items():
+            if not set(from_metapaths).issubset(set(self.networks.keys())):
+                logger.warn(f'Cannot compose {to_metapath} from {from_metapaths}, one of which is missing.')
+                continue
+            elif not isinstance(to_metapath, (tuple)):
+                logger.warn(f'{to_metapath} must be a tuple.')
+                continue
+
+            new_networks[to_metapath] = nx.compose_all([self.networks[m] for m in from_metapaths])
+
+        for to_metapath in new_networks:
+            old_metapaths = groupby[to_metapath]
+            for old_metapath in old_metapaths:
+                if delete_sources and old_metapath in self.networks:
+                    self.networks.pop(old_metapath)
+            # assign new combined network
+            self.networks[to_metapath] = new_networks[to_metapath]
 
     def isolated_nodes(self, ntypes: Set[str] = None) -> Dict[str, Set[str]]:
         """
@@ -761,7 +808,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 edge_attrs.append('weight')
             edge_index, edge_attrs = nx_to_edge_index(
                 self.networks[metapath],
-                nodes_A=self.nodes[head_type], nodes_B=self.nodes[tail_type],
+                nodes_A=self.nodes[head_type],
+                nodes_B=self.nodes[tail_type],
                 edge_attrs=edge_attrs,
                 format='pyg',
             )

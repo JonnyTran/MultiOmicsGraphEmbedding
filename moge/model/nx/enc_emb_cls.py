@@ -121,7 +121,7 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
 
         return self.criterion.forward(Y_hat, Y,
-                                      dense_weight=self._classifier.fc_classifier.linear_l.att_weight if self.hparams.use_hierar else None)
+                                      dense_weight=self._classifier.fc_classifier.linear.att_weight if self.hparams.use_hierar else None)
 
     def get_embeddings(self, X, batch_size=None):
         """
