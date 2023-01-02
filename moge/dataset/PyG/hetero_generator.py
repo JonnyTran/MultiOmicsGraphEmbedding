@@ -406,6 +406,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         X["global_node_index"] = {ntype: nid for ntype, nid in hetero.nid_dict.items() if nid.numel()}
         X['sizes'] = {ntype: size for ntype, size in hetero.num_nodes_dict.items() if size}
         X['batch_size'] = hetero.batch_size_dict
+        if self.class_indices:
+            class_sizes = {ntype: idx.numel() for ntype, idx in self.class_indices.items()}
+            X['batch_size'].update(class_sizes)
 
         # Edge-index dict
         X["edge_index_dict"] = {}

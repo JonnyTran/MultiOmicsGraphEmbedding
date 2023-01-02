@@ -22,3 +22,4 @@ torchmetrics
 torchtext
 fairscale
 logzero
+torch_geometrics==2.1.0
