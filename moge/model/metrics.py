@@ -516,8 +516,7 @@ class BinnedPrecisionRecallCurve(Metric):
 
 
 class Smin(BinnedPrecisionRecallCurve):
-    def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100,
-                 **kwargs: Any) -> None:
+    def __init__(self, num_classes: int = 1, thresholds: Union[int, Tensor, List[float]] = 100, **kwargs: Any) -> None:
         """
         A metric that considered the unbalanced information content (IC) of GO terms.
         Args:
@@ -571,13 +570,9 @@ class Smin(BinnedPrecisionRecallCurve):
 
         information_content = -torch.log10(self.occurence_counts / self.occurence_counts.sum())
         information_content = torch.nan_to_num(information_content, nan=0, posinf=0, neginf=0)
-        print(information_content)
 
-        remaining_uncertainty = (self.FNs * information_content[:, None])
-        misinformation = (self.FPs * information_content[:, None])
-
-        remaining_uncertainty = remaining_uncertainty.sum(axis=0) / self.num_samples
-        misinformation = misinformation.sum(axis=0) / self.num_samples
+        remaining_uncertainty = (self.FNs * information_content[:, None]).sum(axis=0) / self.num_samples
+        misinformation = (self.FPs * information_content[:, None]).sum(axis=0) / self.num_samples
 
         s_values = torch.sqrt(remaining_uncertainty ** 2 + misinformation ** 2)
         s_min = s_values.min(axis=0)

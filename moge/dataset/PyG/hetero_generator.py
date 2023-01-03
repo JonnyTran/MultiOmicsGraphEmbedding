@@ -310,8 +310,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         class_indices = {}
         for pred_ntype in self.pred_ntypes:
             indices = self.nodes[pred_ntype].get_indexer_for(self.classes)
-            assert (not (indices < 0).any()) and indices.size == self.n_classes, \
-                f'{(indices >= 0).sum()} != {self.n_classes}'
             class_indices[pred_ntype] = torch.from_numpy(indices)
         return class_indices
 

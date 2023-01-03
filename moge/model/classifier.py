@@ -3,7 +3,6 @@ from collections import OrderedDict
 from copy import deepcopy
 from typing import List, Optional, Dict, Mapping, Any
 
-import dgl
 import networkx as nx
 import numpy as np
 import torch
@@ -11,6 +10,7 @@ from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
 
+import dgl
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.dgl.HGT import HGT
@@ -102,7 +102,8 @@ class LabelNodeClassifer(nn.Module):
 
         self.pred_ntypes = dataset.pred_ntypes
         assert dataset.class_indices, f'dataset.class_indices ({dataset.class_indices}) must not be none'
-        self.class_sizes = {ntype: ids.numel() for ntype, ids in dataset.class_indices.items()}
+        self.class_sizes = {ntype: ids.numel() \
+                            for ntype, ids in dataset.class_indices.items()}
 
         # if hparams.embedding_dim
         self.embedding_dim = hparams.embedding_dim
