@@ -120,7 +120,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
         if hasattr(self, "conv"):
             for node_type in self.conv:
-                nn.init.kaiming_uniform_(self.conv[node_type].weight, mode='fan_in', nonlinearity='leaky_relu')
+                nn.init.kaiming_uniform_(self.conv[node_type].weights, mode='fan_in', nonlinearity='leaky_relu')
 
     # def get_beta_weights(self, h_dict):
     #     beta = {}
@@ -391,7 +391,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         :param global_node_idx (dict): Dict of <node_type>:<Tensor(node_idx,)>
         :return loss, edge_pred_dict: NCE loss. edge_pred_dict will contain both positive relations of shape (num_edges,) and negative relations of shape (num_edges*num_neg_edges, )
         """
-        loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
+        loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weights.device)
         for metapath, edge_index in edge_index_dict.items():
             # KL Divergence over observed positive edges or negative edges (if included)
             if isinstance(edge_index, tuple):  # Weighted edges

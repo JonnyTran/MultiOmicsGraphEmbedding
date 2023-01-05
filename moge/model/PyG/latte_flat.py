@@ -111,7 +111,7 @@ class LATTEConv(MessagePassing, RelationAttention):
         for node_type in self.linear:
             nn.init.xavier_normal_(self.linear[node_type].weight, gain=gain)
             if hasattr(self, 'linear_r'):
-                nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
+                nn.init.xavier_normal_(self.linear_r[node_type].weights, gain=gain)
 
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
         if hasattr(self, "rel_attn_l"):

@@ -148,7 +148,7 @@ class GTN(Gtn, NodeClfTrainer):
 
         if X is None:
             if isinstance(self.embedding, dict):
-                X = self.embedding[self.head_node_type].weight[x_idx].to(self.layers[0].device)
+                X = self.embedding[self.head_node_type].weights[x_idx].to(self.layers[0].device)
             else:
                 X = self.embedding.weight[x_idx]
 
@@ -256,7 +256,7 @@ class HAN(Han, NodeClfTrainer):
 
         if X is None:
             if isinstance(self.embedding, dict):
-                X = self.embedding[self.head_node_type].weight[x_idx].to(self.layers[0].device)
+                X = self.embedding[self.head_node_type].weights[x_idx].to(self.layers[0].device)
             else:
                 X = self.embedding.weight[x_idx]
 

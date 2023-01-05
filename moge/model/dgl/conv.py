@@ -154,7 +154,7 @@ class HeteroRGCN(nn.Module):
 
     def forward(self, G: dgl.DGLHeteroGraph):
         if hasattr(self, "embeddings"):
-            feats = {ntype: self.embeddings[ntype].weight for ntype in G.ntypes}
+            feats = {ntype: self.embeddings[ntype].weights for ntype in G.ntypes}
         elif hasattr(self, "encoder"):
             feats = {}
             for ntype in G.ntypes:

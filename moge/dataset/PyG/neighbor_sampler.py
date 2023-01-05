@@ -142,7 +142,7 @@ class HGTSamplerX(HGTSampler):
         if self.class_indices:
             # Filter out -1 values which indicate non-matching class indices
             for ntype, idx in self.class_indices.items():
-                self.class_indices[ntype] = idx[idx >= 0]
+                self.class_indices[ntype] = idx[idx != -1]
 
         super().__init__(data, num_samples=num_neighbors, input_type=input_type, is_sorted=is_sorted,
                          share_memory=share_memory)

@@ -102,7 +102,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         if hasattr(self, "feature_projection"):
             for ntype in self.feature_projection:
-                nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
+                nn.init.xavier_normal_(self.feature_projection[ntype].weights, gain=gain)
 
     def forward(self, inputs: Dict[str, Union[Tensor, Dict[str, Tensor]]], return_embeddings=False, **kwargs) \
             -> Union[Tensor, Tuple[Dict[str, Tensor], Tensor]]:

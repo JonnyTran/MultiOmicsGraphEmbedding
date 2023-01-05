@@ -1,7 +1,7 @@
 from argparse import Namespace
 from collections import OrderedDict
 from copy import deepcopy
-from typing import List, Optional, Dict, Mapping, Any
+from typing import List, Optional, Dict, Mapping, Any, Tuple
 
 import networkx as nx
 import numpy as np
@@ -73,7 +73,7 @@ class LabelGraphNodeClassifier(nn.Module):
             self.g = self.g.to(embeddings.device)
 
         if cls_emb is None:
-            cls_emb = {ntype: self.embeddings[ntype].weight for ntype in self.g.ntypes}
+            cls_emb = {ntype: self.embeddings[ntype].weights for ntype in self.g.ntypes}
         cls_emb = self.embedder.forward(G=self.g,
                                         feat=cls_emb)["_N"]
         cls_emb = self.dropout(cls_emb)
@@ -100,38 +100,85 @@ class LabelNodeClassifer(nn.Module):
         self.classes = dataset.classes
         self.head_node_type = hparams.head_node_type
 
-        self.pred_ntypes = dataset.pred_ntypes
-        assert dataset.class_indices, f'dataset.class_indices ({dataset.class_indices}) must not be none'
-        self.class_sizes = {ntype: ids.numel() \
-                            for ntype, ids in dataset.class_indices.items()}
+        self.pred_ntypes = tuple(dataset.pred_ntypes)
+        assert isinstance(self.pred_ntypes, (list, tuple)), f'self.pred_ntypes = {self.pred_ntypes}'
+
+        self.class_indices = dataset.class_indices
+        assert self.class_indices, f'self.class_indices ({self.class_indices}) must not be none'
+        self.class_sizes = {ntype: idx[idx != -1].numel() \
+                            for ntype, idx in self.class_indices.items()}
 
         # if hparams.embedding_dim
         self.embedding_dim = hparams.embedding_dim
-        self.weight = nn.Parameter(torch.rand(hparams.embedding_dim))
-        # self.bias = nn.Parameter(torch.zeros(self.n_classes))
+        self.weights = nn.ParameterDict({ntype: torch.rand(hparams.embedding_dim) for ntype in self.pred_ntypes})
+        # self.bias = nn.ParameterDict({ntype: torch.zeros(self.n_classes) for ntype in self.pred_ntypes})
 
         if hparams.loss_type == "BCE":
             self.activation = nn.Sigmoid()
         elif hparams.loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.activation = nn.Softmax()
 
-        # self.batchnorm = nn.BatchNorm1d(hparams.embedding_dim)
         self.reset_parameters()
 
     def reset_parameters(self):
-        if hasattr(self, 'weight') and self.weight.dim() > 1:
-            nn.init.xavier_uniform_(self.weight)
+        if hasattr(self, 'weight'):
+            for ntype in self.weights:
+                nn.init.xavier_uniform_(self.weights[ntype])
 
-    def forward(self, emb: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
+    def forward(self, embeddings: Tensor, h_dict: Dict[str, Tensor], **kwargs) -> Tensor:
+        cls_logits = {}
         for ntype in self.pred_ntypes:
+            # First n indices in `h_dict[ntype]` are class nodes
             cls_emb = h_dict[ntype][:self.class_sizes[ntype]]
+            cls_logits[ntype] = ((embeddings * self.weights[ntype]) @ cls_emb.T)  # + self.bias[ntype]
 
-        assert cls_emb.shape[0] == self.n_classes, f"cls_emb.shape ({cls_emb.shape}) != n_classes ({self.n_classes})"
-        logits = ((emb * self.weight) @ cls_emb.T)  # + self.bias
+        logits = torch.cat([cls_logits[ntype] for ntype in self.pred_ntypes], dim=1)
+        reorder_indices = self.get_reorder_indices(self.class_sizes, self.class_indices, pred_ntypes=self.pred_ntypes)
+        logits = logits[:, reorder_indices]
 
         if hasattr(self, 'activation'):
             logits = self.activation(logits)
         return logits
+
+    def get_reorder_indices(self, class_sizes: Dict[str, int], class_indices: Dict[str, Tensor],
+                            pred_ntypes: Tuple[str]) \
+            -> Tensor:
+        """
+        Return a permutation of the indices among the classes, which contain a combined mix of classes of different
+        `pred_ntypes`.
+        Args:
+            class_sizes ():
+            class_indices ():
+            pred_ntypes ():
+
+        Returns:
+            reorder_idx: a permutation of range(n_classes) where applied to `logits`,
+        """
+        if hasattr(self, 'reorder_idx') and isinstance(self.reorder_idx, Tensor):
+            return self.reorder_idx
+
+        mix_indices = {k: (v != -1).nonzero().flatten() for k, v in class_indices.items()}
+        cls_idx = torch.stack([class_indices[ntype] for ntype in pred_ntypes], axis=0)
+
+        _, sort_indices = cls_idx.sort(dim=0, descending=True)
+
+        class_idx_offset = {}
+        offset = 0
+        for i, ntype in enumerate(pred_ntypes):
+            class_idx_offset[ntype] = offset
+            offset += class_sizes[ntype]
+
+        reorder_idx = []
+        for i in range(self.n_classes):
+            ntype = pred_ntypes[sort_indices[0][i]]
+            cls_offset = class_idx_offset[ntype]
+            cls_idx = cls_offset + (mix_indices[ntype] == i).nonzero().flatten().item()
+            reorder_idx.append(cls_idx)
+
+        reorder_idx = torch.tensor(reorder_idx, dtype=torch.int64)
+        self.reorder_idx = reorder_idx
+
+        return reorder_idx
 
 
 class DenseClassification(nn.Module):
