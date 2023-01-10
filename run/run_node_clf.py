@@ -174,7 +174,7 @@ def train(hparams):
     elif "LATTE" in hparams.method:
         USE_AMP = False
         early_stopping_args['monitor'] = 'val_aupr_mean'
-        early_stopping_args['patience'] = 50
+        early_stopping_args['patience'] = 35
 
         if hparams.method.endswith("-1"):
             t_order = 1
@@ -192,7 +192,7 @@ def train(hparams):
 
         batch_size = int(2 ** batch_order)
         n_layers = 2
-        dataset.neighbor_sizes = [batch_size for _ in range(n_layers)]
+        dataset.neighbor_sizes = [2048, ] * n_layers
 
         default_args = {
             "embedding_dim": 512,

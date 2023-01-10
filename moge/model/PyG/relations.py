@@ -462,6 +462,15 @@ class RelationAttention(ABC):
 
 
 def reindex_contiguous(layer_nodes: pd.DataFrame, layer_links: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Reindex nodes and links to be contiguous and start from 0.
+    Args:
+        layer_nodes:
+        layer_links:
+
+    Returns:
+        layer_nodes, layer_links:
+    """
     replace_nid = pd.Series(layer_nodes.reset_index().index, index=layer_nodes.index)
     replace_nid = {k: v for k, v in replace_nid.items() if k != v}
     layer_nodes = layer_nodes.reset_index(drop=True)

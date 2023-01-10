@@ -65,19 +65,19 @@ def add_aggregated_metrics(metrics: Dict[str, Any],
 
 class Metrics(torch.nn.Module):
     def __init__(self, prefix: str,
-                 metrics: List[Union[str, Tuple[str]]] = ["precision", "recall", "top_k", "accuracy"],
+                 metrics: List[str] = ["precision", "recall", "top_k", "accuracy"],
                  loss_type: str = "BCE_WITH_LOGITS", threshold: float = 0.5, top_k: List[int] = [5, 10, 50],
                  n_classes: int = None, multilabel: bool = None):
         """
-        Create various metrics for either training, validation, or testing with a given prefix.
+        Create a group of metrics for either training, validation, or testing with a given prefix.
         Args:
-            prefix ():
-            metrics ():
-            loss_type ():
-            threshold ():
-            top_k ():
-            n_classes ():
-            multilabel ():
+            prefix (str): A string for the prefix of the metric name.
+            metrics (List[str]): A list of metric names to compute.
+            loss_type (str): A string for the loss type. One of ["BCE_WITH_LOGITS", "BCE", "MSE", "CE"].
+            threshold (): A float for the threshold to use for binary classification.
+            top_k (): A list of integers for the top k values to use for top k accuracy.
+            n_classes (): An integer for the number of classes.
+            multilabel (): A boolean for whether the task is multilabel.
         """
         super().__init__()
 
@@ -116,10 +116,7 @@ class Metrics(torch.nn.Module):
                 self.metrics[name] = F1Score(num_classes=n_classes, average="micro", top_k=top_k)
 
             elif "fmax" in name:
-                if prefix != '':
-                    self.metrics[name] = FMax_Slow()
-                else:
-                    continue
+                self.metrics[name] = FMax_Slow()
             elif "smin" in name:
                 self.metrics[name] = Smin(num_classes=n_classes, thresholds=100)
 
@@ -173,6 +170,7 @@ class Metrics(torch.nn.Module):
             self, y_pred: Tensor, y_true: Tensor, weights=Optional[Tensor], subset: Union[List[str], str] = None
     ):
         """
+        Update the metrics with the given predictions and labels, for a subset of metrics if specified.
         Args:
             y_pred (Tensor): Predicted scores that can be logits. It'll have an activation internally corresponding to the loss function.
             y_true (Tensor): Ground truth class labels.
@@ -457,6 +455,17 @@ class FMax_Slow(torchmetrics.Metric):
             targets: Union[np.ndarray, ssp.csr_matrix],
             thresholds: np.ndarray,
     ) -> Tuple[float, float]:
+        """
+        Find the threshold with the max F1 score using sparse binary CSR matrices.
+
+        Args:
+            scores:
+            targets:
+            thresholds:
+
+        Returns:
+
+        """
         fmax_t = 0.0, 0.0
 
         if not isinstance(targets, ssp.csr_matrix):
@@ -572,7 +581,9 @@ class BinnedPrecisionRecallCurve(Metric):
 class Smin(BinnedPrecisionRecallCurve):
     def __init__(self, num_classes: int, thresholds: Union[int, Tensor, List[float]] = 100, **kwargs: Any) -> None:
         """
-        A metric that considered the unbalanced information content (IC) of GO terms.
+        A metric that considered the unbalanced information content (IC) of GO terms. The IC is defined as the negative
+        of the base 2 logarithm of the frequency of the term in the reference set. The Smin metric is the minimum IC
+        of all the terms in the predicted set that are also in the reference set.
         Args:
             num_classes ():
             thresholds ():
@@ -632,7 +643,7 @@ class Smin(BinnedPrecisionRecallCurve):
                 "Smin must have at least one example before it can be computed."
             )
 
-        information_content = -torch.log10(self.occurence_counts / self.occurence_counts.sum())
+        information_content = -torch.log2(self.occurence_counts / self.occurence_counts.sum())
         information_content = torch.nan_to_num(information_content, nan=0, posinf=0, neginf=0)
 
         remaining_uncertainty = (self.FNs * information_content[:, None]).sum(axis=0) / self.num_samples

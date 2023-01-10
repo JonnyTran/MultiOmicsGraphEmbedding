@@ -21,6 +21,26 @@ class LATTEConv(MessagePassing, RelationAttention):
                  activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
                  layernorm=False, batchnorm=False, dropout=0.2,
                  edge_threshold=0.0, n_layers=None, verbose=False) -> None:
+        """
+        Create a LATTEConv layer for a given set of metapaths and node types.
+        Args:
+            input_dim:
+            output_dim:
+            num_nodes_dict:
+            metapaths:
+            layer:
+            t_order:
+            activation:
+            attn_heads:
+            attn_activation:
+            attn_dropout:
+            layernorm:
+            batchnorm:
+            dropout:
+            edge_threshold:
+            n_layers:
+            verbose:
+        """
         super().__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.verbose = verbose
 
@@ -405,6 +425,24 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
                  attn_dropout: float = 0.5,
                  edge_sampling=True,
                  hparams: Namespace = None):
+        """
+        Create a LATTE model with multiple layers of GAT message passing on a heterogeneous graph and generating
+        higher-order edge types.
+
+        Args:
+            n_layers:
+            t_order:
+            embedding_dim:
+            num_nodes_dict:
+            metapaths:
+            layer_pooling:
+            activation:
+            attn_heads:
+            attn_activation:
+            attn_dropout:
+            edge_sampling:
+            hparams:
+        """
         super().__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -441,23 +479,14 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
                                                  exclude=hparams.exclude_metapaths if 'exclude_metapaths' in hparams else None,
                                                  )
 
-            layers.append(LATTEConv(input_dim=embedding_dim,
-                                    output_dim=embedding_dim,
-                                    num_nodes_dict=num_nodes_dict,
-                                    metapaths=l_layer_metapaths,
-                                    layer=l,
-                                    t_order=self.t_order,
-                                    activation=activation,
-                                    layernorm=hparams.layernorm,
-                                    batchnorm=hparams.batchnorm,
-                                    dropout=getattr(hparams, 'dropout', 0.0),
-                                    attn_heads=attn_heads,
-                                    attn_activation=attn_activation,
-                                    attn_dropout=attn_dropout,
-                                    edge_threshold=getattr(hparams, 'edge_threshold', 0.0),
-                                    n_layers=n_layers,
-                                    verbose=getattr(hparams, 'verbose', False),
-                                    ))
+            layer = LATTEConv(input_dim=embedding_dim, output_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
+                              metapaths=l_layer_metapaths, layer=l, t_order=self.t_order, activation=activation,
+                              layernorm=hparams.layernorm, batchnorm=hparams.batchnorm,
+                              dropout=getattr(hparams, 'dropout', 0.0), attn_heads=attn_heads,
+                              attn_activation=attn_activation, attn_dropout=attn_dropout,
+                              edge_threshold=getattr(hparams, 'edge_threshold', 0.0), n_layers=n_layers,
+                              verbose=getattr(hparams, 'verbose', False), )
+            layers.append(layer)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
         self.reset_parameters()

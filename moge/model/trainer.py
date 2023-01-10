@@ -440,7 +440,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         metrics_dict = add_aggregated_metrics(metrics_dict, prefix='val_', suffixes=['aupr', 'fmax', 'smin'])
         if 'val_aupr' in metrics_dict:
             if not hasattr(self, 'val_aupr_mean'):
-                self.val_aupr_mean = torch.tensor([0.0, ] * 10, dtype=torch.float, device=self.device)
+                self.val_aupr_mean = torch.tensor([0.0, ] * 30, dtype=torch.float, device=self.device)
             self.val_aupr_mean[self.current_epoch % self.val_aupr_mean.numel()] = metrics_dict['val_aupr']
             metrics_dict['val_aupr_mean'] = self.val_aupr_mean.mean().item()
 
