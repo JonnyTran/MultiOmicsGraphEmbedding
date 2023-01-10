@@ -81,7 +81,7 @@ class Graph:
     def get_node_metadata(self, global_nodes_index: Dict[str, Tensor], embeddings: Dict[str, Tensor],
                           weights: Optional, losses: Optional[DataFrame]) -> DataFrame:
         """
-
+        Add t-SNE projections and computed loss for nodes given in the global node indices of each node type.
 
         Args:
             global_nodes_index ():
@@ -101,7 +101,7 @@ class Graph:
             rename_mapper={"name": "node", "Chromosome": "seqname", "Protein class": "class"}) \
             -> DataFrame:
         """
-        Initialize hetero node features from `annotations`
+        Create node metadata for each node type given the global node indices of each node type.
         Args:
             annotations ():
             nodes ():
@@ -160,13 +160,30 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
     tokenizer: BertSequenceTokenizer
 
     def __init__(self, dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
-                                      DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
+    DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  nodes_namespace: Dict[str, pd.Series] = None,
                  pred_ntypes: List[str] = None,
                  classes=None,
                  edge_dir: str = "in", add_reverse_metapaths: bool = True, inductive: bool = False,
                  name=None, **kwargs):
+        """
+        Create a HeteroGraphDataset from various datasets (PyG, DGL, HeteroData) and preprocess it.
+
+        Args:
+            dataset ():
+            node_types ():
+            metapaths ():
+            head_node_type ():
+            nodes_namespace ():
+            pred_ntypes ():
+            classes ():
+            edge_dir ():
+            add_reverse_metapaths ():
+            inductive ():
+            name ():
+            **kwargs ():
+        """
         if isinstance(pred_ntypes, str):
             pred_ntypes = [pred_ntypes]
         self.dataset = dataset
@@ -252,6 +269,9 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         print("train_ratio", self.train_ratio)
 
     def process_classes(self):
+        """
+        Depending on the classification type, compute the counts and weights of classes.
+        """
         # Node classifications
         num_samples = 1  # Used for computing class_weight
         if hasattr(self, "y_dict") and self.y_dict and self.head_node_type is not None:
@@ -392,6 +412,16 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
     def split_array_by_namespace(self, inputs: Union[Tensor, Dict[str, Tensor], np.ndarray, pd.DataFrame],
                                  nids: Union[pd.Series, pd.Index, np.ndarray, List] = None,
                                  axis=1):
+        """
+        Splits a tensor or dataframe by namespace (node type) and returns a dictionary of tensors or dataframes.
+        Args:
+            inputs ():
+            nids ():
+            axis ():
+
+        Returns:
+
+        """
         assert hasattr(self, "nodes_namespace")
         if axis == 1:
             if nids is None:

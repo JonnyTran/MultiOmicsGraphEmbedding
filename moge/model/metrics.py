@@ -25,25 +25,41 @@ def add_aggregated_metrics(metrics: Dict[str, Any],
                            prefix: str = '',
                            suffixes: List[str] = ['aupr', 'fmax', 'smin']) -> Dict[str, Any]:
     """
-    Reduce values from a dict whose keys contains the same `prefix` and `suffixes`.
+    Group values from the `metrics` dict whose keys contains the same `suffixes` and reduce with mean. The new reduced
+    values are added to `metrics` with `prefix` string prepended to the metric name.
 
     Args:
-        metrics (): a dict of metric name keys and
-        prefix (): a string
+        metrics (): a dict of metric name keys and scalar values for keys
+        prefix (): a string for the prefix of the new
         suffixes (): A list of metric names to aggregate.
 
     Returns:
-        metrics
+        metrics (): metric dict with aggregated metrics added.
     """
     if not isinstance(suffixes, list) or not isinstance(prefix, str):
         return metrics
 
     for suffix in suffixes:
         name = prefix + suffix
-        if name not in metrics and any(suffix in key for key in metrics):
-            values = [val for key, val in metrics.items() if suffix in key]
-            print(tensor_sizes(values))
-            metrics[name] = torch.stack(values, dim=0).mean(dim=0)
+        if name in metrics:
+            continue
+        values = [val for key, val in metrics.items() if key.endswith(suffix)]
+
+        if not values:
+            continue
+        elif len(values) == 1:
+            mean_value = values[0]
+        elif any(isinstance(val, Tensor) for val in values):
+            mean_value = torch.stack(values, dim=0).mean(dim=0)
+        elif any(isinstance(val, np.ndarray) for val in values):
+            mean_value = np.stack(values, axis=0).mean(axis=0)
+        elif any(isinstance(val, (float, int)) for val in values):
+            mean_value = np.mean(values)
+        else:
+            continue
+
+        metrics[name] = mean_value
+
     return metrics
 
 
@@ -52,6 +68,17 @@ class Metrics(torch.nn.Module):
                  metrics: List[Union[str, Tuple[str]]] = ["precision", "recall", "top_k", "accuracy"],
                  loss_type: str = "BCE_WITH_LOGITS", threshold: float = 0.5, top_k: List[int] = [5, 10, 50],
                  n_classes: int = None, multilabel: bool = None):
+        """
+        Create various metrics for either training, validation, or testing with a given prefix.
+        Args:
+            prefix ():
+            metrics ():
+            loss_type ():
+            threshold ():
+            top_k ():
+            n_classes ():
+            multilabel ():
+        """
         super().__init__()
 
         self.loss_type = loss_type.upper()
@@ -347,13 +374,14 @@ class OGBLinkPredMetrics(torchmetrics.Metric):
 
 
 class TopKMultilabelAccuracy(torchmetrics.Metric):
-    """
-    Calculates the top-k categorical accuracy.
-
-    - `update` must receive output of the form `(y_pred, y)` or `{'y_pred': y_pred, 'y': y}` Tensors of size (batch_size, n_classes).
-    """
-
     def __init__(self, k_s=[5, 10, 50, 100, 200], compute_on_step: bool = True, **kwargs):
+        """
+        Calculates the top-k categorical accuracy
+        Args:
+            k_s ():
+            compute_on_step ():
+            **kwargs ():
+        """
         super().__init__()
         self.k_s = k_s
 
@@ -472,6 +500,13 @@ class BinnedPrecisionRecallCurve(Metric):
             thresholds: Union[int, Tensor, List[float]] = 100,
             **kwargs: Any,
     ) -> None:
+        """
+        Computes precision and recall for each class at different thresholds.
+        Args:
+            num_classes ():
+            thresholds ():
+            **kwargs ():
+        """
         rank_zero_warn(
             "Metric `BinnedPrecisionRecallCurve` has been deprecated in v0.10 and will be completly removed in v0.11."
             " Instead, use the refactored version of `PrecisionRecallCurve` by specifying the `thresholds` argument.",

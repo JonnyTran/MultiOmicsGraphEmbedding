@@ -62,6 +62,23 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                  add_reverse_metapaths: bool = False,
                  undirected_ntypes: List[str] = None,
                  inductive: bool = False, **kwargs):
+        """
+        Load a heterogeneous graph dataset for node classification task.
+        Args:
+            dataset ():
+            seq_tokenizer ():
+            neighbor_loader ():
+            neighbor_sizes ():
+            node_types ():
+            metapaths ():
+            head_node_type ():
+            pred_ntypes ():
+            edge_dir ():
+            add_reverse_metapaths ():
+            undirected_ntypes ():
+            inductive ():
+            **kwargs ():
+        """
         if seq_tokenizer:
             self.seq_tokenizer = seq_tokenizer
         self.undirected_ntypes = undirected_ntypes
@@ -73,6 +90,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                          edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
 
     def process_pyg_heterodata(self, hetero: HeteroData):
+        """
+        Process a PyG HeteroData object.
+        Args:
+            hetero ():
+        """
         self.x_dict = hetero.x_dict
         self.node_types = hetero.node_types
         self.num_nodes_dict = {ntype: hetero[ntype].num_nodes \
@@ -120,6 +142,30 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            exclude_etypes: List[Union[str, Tuple]] = None,
                            pred_ntypes: List[str] = None,
                            train_test_split="node_mask", **kwargs):
+        """
+        Load a HeteroNodeClfDataset from a HeteroNetwork with node attributes, node labels, edge types, and edge attributes.
+        Then, node labels are organized into respective node types as nodes in the hetero graph.
+
+        Args:
+            network (): A HeteroNetwork object.
+            node_attr_cols ():  A list of node attribute columns to be used as node features.
+            target ():  The target column to be used as node labels.
+            min_count (): The minimum count of a node label to be included in the dataset.
+            expression (): Whether to use expression data as node features.
+            sequence (): Whether to use sequence data as node features.
+            labels_subset ():
+            head_node_type ():
+            ntype_subset ():
+            add_reverse_metapaths ():
+            split_namespace ():
+            exclude_etypes ():
+            pred_ntypes ():
+            train_test_split ():
+            **kwargs ():
+
+        Returns:
+
+        """
         hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_pyg_heterodata(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                       labels_subset=labels_subset, head_node_type=head_node_type,
@@ -157,6 +203,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     @classmethod
     def load(cls, path: Path, **hparams):
+        """
+        Load a dataset from a directory.
+        Args:
+            path ():
+            **hparams ():
+
+        Returns:
+
+        """
         if isinstance(path, str) and '~' in path:
             path = os.path.expanduser(path)
 
@@ -236,6 +291,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return self
 
     def save(self, path, add_slug=False):
+        """
+        Save the dataset to disk.
+        Args:
+            path ():
+            add_slug ():
+        """
         if isinstance(path, str) and '~' in path:
             path = os.path.expanduser(path)
             path = path.rstrip('/')
@@ -347,6 +408,26 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                              verbose=False,
                              shuffle=True,
                              **kwargs) -> DataLoader:
+        """
+        Create a graph sampler for a given node type.
+        Args:
+            graph ():
+            batch_size ():
+            node_type ():
+            node_mask ():
+            transform_fn ():
+            neighbor_loader ():
+            num_neighbors ():
+            add_metapaths ():
+            max_sample ():
+            num_workers ():
+            verbose ():
+            shuffle ():
+            **kwargs ():
+
+        Returns:
+
+        """
         # Num neighbors
         if neighbor_loader is None:
             neighbor_loader = self.neighbor_loader
@@ -397,6 +478,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def transform(self, hetero: HeteroData, transform: Callable = None) \
             -> Tuple[Dict[str, Dict], Dict, Optional[Dict]]:
+        """
+        Collate a batch of data from a hetero graph.
+        Args:
+            hetero ():
+            transform ():
+
+        Returns:
+
+        """
         if callable(transform):
             hetero = transform(hetero)
 
@@ -495,7 +585,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                           n_clusters=20,
                           update_df: pd.DataFrame = None) -> DataFrame:
         """
-        Collect node metadata for all nodes in X["global_node_index"]
+        Get node metadata for a batch of nodes.
+
         Args:
             batch (): a batch's dict of data
             embeddings (): Embeddings of nodes in the `X` batch
@@ -622,7 +713,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     node_title: Dict[str, str] = None,
                     sep="-", ) -> nx.MultiDiGraph:
         """
-
+        Convert DGLHeteroGraph to networkx.MultiDiGraph.
         Args:
             edge_index_dict (Dict[Tuple[str, str, str], Tensor]): default None.
 
@@ -891,6 +982,23 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                  inductive: bool = False,
                  train_test_split="edge_mask",
                  **kwargs):
+        """
+        Load a heterogenous graph dataset for link prediction.
+        Args:
+            dataset ():
+            negative_sampling_size ():
+            seq_tokenizer ():
+            neighbor_loader ():
+            neighbor_sizes ():
+            node_types ():
+            metapaths ():
+            head_node_type ():
+            edge_dir ():
+            add_reverse_metapaths ():
+            inductive ():
+            train_test_split ():
+            **kwargs ():
+        """
         super().__init__(dataset, seq_tokenizer=seq_tokenizer, neighbor_loader=neighbor_loader,
                          neighbor_sizes=neighbor_sizes, node_types=node_types, metapaths=metapaths,
                          head_node_type=head_node_type, edge_dir=edge_dir, add_reverse_metapaths=add_reverse_metapaths,
