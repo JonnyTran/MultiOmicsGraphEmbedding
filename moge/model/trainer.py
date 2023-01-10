@@ -25,7 +25,7 @@ from moge.dataset.dgl.node_generator import DGLNodeGenerator
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import edge_index_to_adjs
 from moge.model.PyG.relations import RelationAttention
-from moge.model.metrics import Metrics, precision_recall_curve, add_common_metrics
+from moge.model.metrics import Metrics, precision_recall_curve, add_aggregated_metrics
 from moge.visualization.attention import plot_sankey_flow
 
 
@@ -417,7 +417,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             for subtype, metrics in self.train_metrics.items():
                 metrics.reset_metrics()
 
-        metrics_dict = add_common_metrics(metrics_dict, prefix='', metrics_suffixes=['aupr', 'fmax'])
+        metrics_dict = add_aggregated_metrics(metrics_dict, prefix='', suffixes=['aupr', 'fmax', 'smin'])
 
         self.log_dict(metrics_dict, prog_bar=True)
 
@@ -437,7 +437,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             for subtype, metrics in self.valid_metrics.items():
                 metrics.reset_metrics()
 
-        metrics_dict = add_common_metrics(metrics_dict, prefix='val_', metrics_suffixes=['aupr', 'fmax'])
+        metrics_dict = add_aggregated_metrics(metrics_dict, prefix='val_', suffixes=['aupr', 'fmax', 'smin'])
         if 'val_aupr' in metrics_dict:
             if not hasattr(self, 'val_aupr_mean'):
                 self.val_aupr_mean = torch.tensor([0.0, ] * 10, dtype=torch.float, device=self.device)
@@ -460,7 +460,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
             for subtype, metrics in self.test_metrics.items():
                 metrics.reset_metrics()
-        metrics_dict = add_common_metrics(metrics_dict, prefix='test_', metrics_suffixes=['aupr', 'fmax'])
+        metrics_dict = add_aggregated_metrics(metrics_dict, prefix='test_', suffixes=['aupr', 'fmax', 'smin'])
 
         self.log_dict(metrics_dict, prog_bar=True)
         return None

@@ -28,7 +28,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from moge.model.metrics import Metrics, add_common_metrics
+from moge.model.metrics import Metrics, add_aggregated_metrics
 from moge.model.trainer import NodeEmbeddingEvaluator
 from moge.model.utils import to_device
 
@@ -381,7 +381,7 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
         if hasattr(self, 'train_metrics'):
             metrics_dict = self.train_metrics.compute_metrics()
             self.train_metrics.reset_metrics()
-            metrics_dict = add_common_metrics(metrics_dict, prefix='', metrics_suffixes=['aupr', 'fmax'])
+            metrics_dict = add_aggregated_metrics(metrics_dict, prefix='', suffixes=['aupr', 'fmax'])
             self.log_dict(metrics_dict, prog_bar=True, on_step=False, on_epoch=True)
         super().training_epoch_end(outputs)
 
@@ -389,7 +389,7 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
         if hasattr(self, 'valid_metrics'):
             metrics_dict = self.valid_metrics.compute_metrics()
             self.valid_metrics.reset_metrics()
-            metrics_dict = add_common_metrics(metrics_dict, prefix='val_', metrics_suffixes=['aupr', 'fmax'])
+            metrics_dict = add_aggregated_metrics(metrics_dict, prefix='val_', suffixes=['aupr', 'fmax'])
             self.log_dict(metrics_dict, prog_bar=True, on_step=False, on_epoch=True)
         super().validation_epoch_end(outputs)
 
@@ -397,7 +397,7 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
         if hasattr(self, 'test_metrics'):
             metrics_dict = self.test_metrics.compute_metrics()
             self.test_metrics.reset_metrics()
-            metrics_dict = add_common_metrics(metrics_dict, prefix='test_', metrics_suffixes=['aupr', 'fmax'])
+            metrics_dict = add_aggregated_metrics(metrics_dict, prefix='test_', suffixes=['aupr', 'fmax'])
             self.log_dict(metrics_dict, prog_bar=True, on_step=False, on_epoch=True)
         super().test_epoch_end(outputs)
 
@@ -424,7 +424,7 @@ class DeepGraphGO(NodeEmbeddingEvaluator):
         if self.wandb_experiment is not None:
             (fmax_, t_), aupr_ = fmax(targets, scores), pair_aupr(targets, scores)
             final_metrics = {f"test_{self.metric_prefix}_fmax": fmax_, f"test_{self.metric_prefix}_aupr": aupr_}
-            final_metrics = add_common_metrics(final_metrics, prefix='test_', metrics_suffixes=['aupr', 'fmax'])
+            final_metrics = add_aggregated_metrics(final_metrics, prefix='test_', suffixes=['aupr', 'fmax'])
             print('final_metrics', final_metrics)
             self.wandb_experiment.log(final_metrics | {'epoch': self.current_epoch})
 

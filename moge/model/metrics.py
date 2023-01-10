@@ -21,13 +21,32 @@ from torchmetrics.utilities.data import METRIC_EPS, to_onehot
 from .utils import filter_samples, tensor_sizes, activation
 
 
-def add_common_metrics(metrics_dict: Dict[str, Any],
-                       prefix: str = '', metrics_suffixes: List[str] = ['aupr', 'fmax']):
-    for suffix in metrics_suffixes:
-        if suffix not in metrics_dict and any(suffix in key for key in metrics_dict):
-            metrics_dict[prefix + suffix] = next((val for key, val in metrics_dict.items() \
-                                                  if suffix in key), None)
-    return metrics_dict
+def add_aggregated_metrics(metrics: Dict[str, Any],
+                           prefix: str = '',
+                           suffixes: List[str] = ['aupr', 'fmax', 'smin']) -> Dict[str, Any]:
+    """
+    Reduce values from a dict whose keys contains the same `prefix` and `suffixes`.
+
+    Args:
+        metrics (): a dict of metric name keys and
+        prefix (): a string
+        suffixes (): A list of metric names to aggregate.
+
+    Returns:
+        metrics
+    """
+    if not isinstance(suffixes, list) or not isinstance(prefix, str):
+        return metrics
+
+    for suffix in suffixes:
+        name = prefix + suffix
+        if name not in metrics and any(suffix in key for key in metrics):
+            values = [val for key, val in metrics.items() if suffix in key]
+            print(tensor_sizes(values))
+            metrics[name] = torch.stack(values, dim=0).mean(dim=0)
+    return metrics
+
+
 class Metrics(torch.nn.Module):
     def __init__(self, prefix: str,
                  metrics: List[Union[str, Tuple[str]]] = ["precision", "recall", "top_k", "accuracy"],
@@ -568,7 +587,7 @@ class Smin(BinnedPrecisionRecallCurve):
         if self.occurence_counts is None:
             self.occurence_counts = target.sum(0)
         else:
-            self.occurence_counts = self.occurence_counts + target.sum(0)
+            self.occurence_counts = self.occurence_counts.to(target.device) + target.sum(0)
 
         self.num_samples += preds.shape[0]
 
