@@ -93,7 +93,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             fn = os.path.basename(fp)
             metapath = ast.literal_eval(fn.split(".")[0])
             if exists(join(path, f'{metapath}.gpickle')):
-                networks[metapath] = nx.read_gpickle(join(path, f'{metapath}.gpickle'))
+                with open(join(path, f'{metapath}.gpickle'), 'rb') as f:
+                    networks[metapath] = pickle.load(f)
 
         # Nodes
         with open(join(path, 'nodes.pickle'), 'rb') as f:
@@ -129,7 +130,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # Networks
         for metapath, G in tqdm.tqdm(self.networks.items(), total=len(self.networks), desc="Saving networks"):
             if not exists(join(path, f'{metapath}.gpickle')):
-                nx.write_gpickle(G, join(path, f'{metapath}.gpickle'))
+                with open(join(path, f'{metapath}.gpickle'), 'wb') as f:
+                    pickle.dump(G, f, pickle.HIGHEST_PROTOCOL)
 
         # Multiomics
         if not os.path.exists(join(path, f'multiomics')):
