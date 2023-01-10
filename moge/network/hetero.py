@@ -78,6 +78,14 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
     @classmethod
     def load(cls, path):
+        """
+        Load the HeteroNetwork object from a given path
+        Args:
+            path: Path to the directory containing various networkx pickle files and ntype annotations dataframes.
+
+        Returns:
+            HeteroNetwork object
+        """
         if isinstance(path, str) and '~' in path:
             path = os.path.expanduser(path)
 
@@ -149,6 +157,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 joblib.dump(mlb, join(path, f'{target}.mlb'))
 
     def combine_networks(self, groupby: Dict[Union[Tuple, str], List[Union[Tuple, str]]], delete_sources=True):
+        """
+        Modify the HeteroNetwork by combining multiple networks into a single network based on the groupby dict.
+        Args:
+            groupby: A dict of target metapath and list of source metapaths.
+            delete_sources: Whether to delete the source networks after combining, default True.
+        """
         new_networks = {}
 
         expanded_groupby = {}
@@ -268,6 +282,19 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
     def process_feature_tranformer(self, columns: List[str] = None, ntype_subset: List[str] = None,
                                    delimiter: List[str] = "\||;",
                                    labels_subset=None, min_count=0, verbose=False):
+        """
+        Process feature transformer for each modality by extracting all unique values from annotations.
+        Args:
+            columns: List of columns to extract from annotations.
+            ntype_subset:
+            delimiter:
+            labels_subset:
+            min_count:
+            verbose:
+
+        Returns:
+
+        """
         self.delimiter = delimiter
         dfs = []
         if columns is None:
