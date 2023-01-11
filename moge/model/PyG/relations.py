@@ -221,7 +221,6 @@ class RelationAttention(ABC):
         if not hasattr(self, "_alphas"):
             self._alphas = {}
 
-        # print(tensor_sizes(global_node_index=global_node_index, batch_sizes=batch_sizes))
         for ntype, nids in global_node_index.items():
             if batch_sizes and ntype in batch_sizes:
                 batch_nids = nids[:batch_sizes[ntype]].cpu().numpy()
@@ -253,8 +252,8 @@ class RelationAttention(ABC):
                     elif isinstance(edge_values, Tensor) and edge_values.dim() < 2:
                         continue
 
-                    value, row, col = edge_values.mean(1).cpu().numpy(), \
-                                      edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
+                    value, row, col = edge_values.median(1).cpu().numpy(), \
+                        edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
                     adj_coo = ssp.coo_matrix((value, (row, col)),
                                              shape=(global_node_index[head_type].shape[0],
                                                     global_node_index[tail_type].shape[0]))
@@ -290,17 +289,27 @@ class RelationAttention(ABC):
 
     @property
     def _beta_std(self):
+        """
+        Return the standard deviation of the beta values for each node type.
+        Returns:
+            (Dict[str, pd.DataFrame]): a dictionary of node type and the std of the beta values.
+        """
         if hasattr(self, "_betas"):
             return {ntype: betas.std(0).to_dict() for ntype, betas in self._betas.items()}
 
     @property
     def _beta_avg(self):
+        """
+        Median of the beta values for each node type.
+        Returns:
+            (Dict[str, pd.DataFrame]): a dictionary of node type and the median of the beta values.
+        """
         if hasattr(self, "_betas"):
-            return {ntype: betas.mean(0).to_dict() for ntype, betas in self._betas.items()}
+            return {ntype: betas.median(0).to_dict() for ntype, betas in self._betas.items()}
 
     def get_relation_weights(self, std=True) -> Dict[str, Tuple[float, float]]:
         """
-        Get the mean and std of relation attention weights for all nodes
+        Get the mean and std of relation attention weights for all nodes, for each node type.
         """
         output = {}
         for node_type in self._beta_avg:

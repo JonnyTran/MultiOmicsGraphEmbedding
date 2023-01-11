@@ -33,8 +33,9 @@ from torch_sparse import SparseTensor
 from moge.model.tensor import tensor_sizes
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
-from moge.network.train_test_split import TrainTestSplit
 from moge.network.labels import parse_labels
+from moge.network.train_test_split import TrainTestSplit
+from moge.preprocess.edge_index import get_edge_index_dict, nx_to_edge_index, get_edge_attr_keys
 from moge.preprocess.metapaths import tag_negative_metapath, untag_negative_metapath
 
 
@@ -42,6 +43,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
     def __init__(self, multiomics: MultiOmics, node_types: List, layers: Dict[Tuple[str], nx.Graph],
                  annotations=True, ) -> None:
         """
+        Create a HeteroNetwork object from a MultiOmics object and a list of node types.
 
         Args:
             multiomics: MultiOmics object containing annotations
