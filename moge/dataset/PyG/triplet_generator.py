@@ -3,11 +3,13 @@ from typing import Dict, Tuple, List
 import numpy as np
 import pandas as pd
 import torch
-from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.utils import merge_node_index, get_relabled_edge_index, is_negative
 from ogb.linkproppred import PygLinkPropPredDataset
 from torch import Tensor
+
+from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
+from moge.dataset.graph import HeteroGraphDataset
+from moge.preprocess.edge_index import get_relabled_edge_index, merge_node_index
+from moge.preprocess.metapaths import is_negative
 
 
 class TripletDataset(HeteroGraphDataset):

@@ -21,6 +21,9 @@ import torch
 import tqdm
 from joblib import Parallel, delayed
 from logzero import logger
+from moge.dataset.utils import nx_to_edge_index, get_edge_index_dict, get_edge_attr_keys
+from openomics import MultiOmics
+from openomics.database.ontology import GeneOntology
 from pandas import Series, Index, DataFrame
 from ruamel import yaml
 from scipy.sparse import csr_matrix
@@ -28,15 +31,12 @@ from torch import Tensor
 from torch_geometric.data import HeteroData
 from torch_sparse import SparseTensor
 
-from moge.dataset.utils import nx_to_edge_index, get_edge_index_dict, tag_negative_metapath, \
-    untag_negative_metapath, get_edge_attr_keys
 from moge.model.utils import tensor_sizes
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import parse_labels
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology, GeneOntology
+from moge.preprocess.metapaths import tag_negative_metapath, untag_negative_metapath
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):

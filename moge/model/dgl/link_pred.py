@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import tqdm
 from dgl import DGLHeteroGraph
+from moge.dataset.utils import split_edge_index_by_namespace, edge_index_to_adjs
 from pandas import DataFrame
 from torch import Tensor
 from torch.nn import functional as F
@@ -18,7 +19,6 @@ from torch.optim import lr_scheduler
 
 from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
-from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace, edge_index_to_adjs
 from moge.model.PyG.node_clf import LATTEFlatNodeClf
 from moge.model.dgl.HGT import HGT
 from moge.model.dgl.latte import LATTE
@@ -26,6 +26,7 @@ from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import LinkPredTrainer
+from moge.preprocess.metapaths import tag_negative_metapath, is_negative
 
 
 class DglLinkPredForNodeClfTrainer:

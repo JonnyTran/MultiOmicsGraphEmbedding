@@ -1,6 +1,5 @@
-import copy
 import itertools
-from typing import List, Union, Dict, Tuple, Set, Optional, Any
+from typing import List, Union, Dict, Tuple, Set, Optional
 
 import networkx as nx
 import numpy as np
@@ -10,8 +9,7 @@ import torch
 from logzero import logger
 from pandas import Series
 from torch import Tensor
-from torch_geometric.utils import is_undirected
-from torch_sparse import SparseTensor, transpose
+from torch_sparse import SparseTensor
 
 
 def is_sorted(arr: Tensor):
@@ -330,25 +328,6 @@ def nx_to_edge_index(nx_graph: nx.MultiGraph,
     return edge_index, edge_values
 
 
-def one_hot_encoder(idx: Tensor):
-    """
-    Get one hot embedding of the input tensor.
-    Args:
-        idx: torch.Tensor, input 1-D tensor.
-    Returns:
-        one_hot: torch.Tensor, one-hot embedding of x.
-    """
-    ids = idx.unique()
-    id_dict = dict(list(zip(ids.numpy(), np.arange(len(ids)))))
-    one_hot = torch.zeros((len(idx), len(ids)))
-    for i, u in enumerate(idx):
-        if id_dict[u.item()] == 4:
-            pass
-        else:
-            one_hot[i][id_dict[u.item()]] = 1
-
-    return one_hot
-
 
 def edge_dict_sizes(edge_index_dict):
     return {k: v.shape[1] for k, v in edge_index_dict.items()}
@@ -361,12 +340,12 @@ def edge_dict_intersection(edge_index_dict_A, edge_index_dict_B):
             inters[metapath] = 0
             continue
 
-        inters[metapath] = edge_intersection(edge_index, edge_index_dict_B[metapath])
+        inters[metapath] = _edge_intersection(edge_index, edge_index_dict_B[metapath])
 
     return inters
 
 
-def edge_intersection(edge_index_A: Tensor, edge_index_B: Tensor, remove_duplicates=True):
+def _edge_intersection(edge_index_A: Tensor, edge_index_B: Tensor, remove_duplicates=True):
     A = pd.DataFrame(edge_index_A.T.numpy(), columns=["source", "target"])
     B = pd.DataFrame(edge_index_B.T.numpy(), columns=["source", "target"])
     int_df = pd.merge(A, B, how='inner', on=["source", "target"], sort=True)
@@ -426,152 +405,6 @@ def merge_node_index(old_node_index, new_node_index):
     return merged
 
 
-def add_reverse_edge_index(edge_index_dict: Dict[Tuple[str], Tensor], num_nodes_dict) -> None:
-    reverse_edge_index_dict = {}
-    for metapath, edge_index in edge_index_dict.items():
-        if is_negative(metapath) or edge_index_dict[metapath] == None: continue
-
-        reverse_metapath = reverse_metapath(metapath)
-
-        if metapath[0] == metapath[-1] and isinstance(edge_index, Tensor) and is_undirected(edge_index):
-            print(f"skipping reverse {metapath} because edges are symmetrical")
-            continue
-
-        print("Reversing", metapath, "to", reverse_metapath)
-        reverse_edge_index_dict[reverse_metapath] = transpose(index=edge_index_dict[metapath], value=None,
-                                                              m=num_nodes_dict[metapath[0]],
-                                                              n=num_nodes_dict[metapath[-1]])[0]
-    edge_index_dict.update(reverse_edge_index_dict)
 
 
-def get_reverse_metapaths(metapaths) -> List[Tuple[str]]:
-    reverse_metapaths = []
-    for metapath in metapaths:
-        reverse = reverse_metapath(metapath)
-        reverse_metapaths.append(reverse)
-    return reverse_metapaths
 
-
-def reverse_metapath(metapath: Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]) \
-        -> Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]:
-    if isinstance(metapath, list):
-        return [reverse_metapath(m) for m in metapath]
-
-    elif isinstance(metapath, dict):
-        return {reverse_metapath(m): eid for m, eid in metapath.items()}
-
-    if isinstance(metapath, tuple):
-        tokens = []
-        for i, token in enumerate(reversed(copy.deepcopy(metapath))):
-            if i == 1:
-                if len(token) == 2:  # 2 letter string etype
-                    rev_etype = token[::-1]
-                else:
-                    rev_etype = "rev_" + token
-                tokens.append(rev_etype)
-            else:
-                tokens.append(token)
-
-        rev_metapath = tuple(tokens)
-
-        return rev_metapath
-
-    elif isinstance(metapath, str):
-        rev_metapath = "".join(reversed(metapath))
-
-    elif isinstance(metapath, (int, np.int)):
-        rev_metapath = str(metapath) + "_"
-    else:
-        raise NotImplementedError(f"{metapath} not supported")
-
-
-def unreverse_metapath(metapath: Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]) \
-        -> Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]:
-    if isinstance(metapath, list):
-        return [unreverse_metapath(m) for m in metapath]
-
-    elif isinstance(metapath, dict):
-        return {unreverse_metapath(m): eid for m, eid in metapath.items()}
-
-    if isinstance(metapath, tuple):
-        tokens = []
-        for i, token in enumerate(reversed(copy.deepcopy(metapath))):
-            if i == 1:
-                if len(token) == 2:  # 2 letter string etype
-                    rev_etype = token[::-1]
-                else:
-                    rev_etype = token.removeprefix("rev_")
-                tokens.append(rev_etype)
-            else:
-                tokens.append(token)
-
-        rev_metapath = tuple(tokens)
-        return rev_metapath
-
-    else:
-        raise NotImplementedError(f"{metapath} not supported")
-
-
-def is_reversed(metapath):
-    if isinstance(metapath, tuple):
-        return any("rev_" in token for token in metapath)
-    elif isinstance(metapath, str):
-        return "rev" in metapath
-
-
-def tag_negative_metapath(metapath: Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]) \
-        -> Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]:
-    if isinstance(metapath, list):
-        return [tag_negative_metapath(m) for m in metapath]
-
-    elif isinstance(metapath, dict):
-        return {tag_negative_metapath(m): eid for m, eid in metapath.items()}
-
-    elif isinstance(metapath, tuple):
-        tokens = []
-        for i, token in enumerate(copy.deepcopy(metapath)):
-            if i == 1:
-                if len(token) == 2:  # 2 letter string etype
-                    rev_etype = token[::-1]
-                else:
-                    rev_etype = f"neg_{token}"
-                tokens.append(rev_etype)
-            else:
-                tokens.append(token)
-
-        rev_metapath = tuple(tokens)
-
-        return rev_metapath
-    else:
-        raise NotImplementedError(f"{metapath} not supported")
-
-
-def untag_negative_metapath(metapath: Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]) \
-        -> Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]:
-    if isinstance(metapath, list):
-        return [untag_negative_metapath(m) for m in metapath]
-
-    elif isinstance(metapath, dict):
-        return {untag_negative_metapath(m): eid for m, eid in metapath.items()}
-
-    elif isinstance(metapath, tuple):
-        tokens = []
-        for i, token in enumerate(copy.deepcopy(metapath)):
-            if i == 1:
-                rev_etype = token.removeprefix("neg_")
-                tokens.append(rev_etype)
-            else:
-                tokens.append(token)
-
-        rev_metapath = tuple(tokens)
-
-        return rev_metapath
-    else:
-        raise NotImplementedError(f"{metapath} not supported")
-
-
-def is_negative(metapath: Union[Tuple[str, str, str], str]):
-    if isinstance(metapath, tuple):
-        return any("neg" in token for token in metapath)
-    elif isinstance(metapath, str):
-        return "neg" in metapath

@@ -3,6 +3,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from typing import List, Optional, Dict, Mapping, Any, Tuple
 
+import dgl
 import networkx as nx
 import numpy as np
 import torch
@@ -10,7 +11,6 @@ from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
 
-import dgl
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.dgl.HGT import HGT
@@ -95,6 +95,13 @@ class LabelGraphNodeClassifier(nn.Module):
 
 class LabelNodeClassifer(nn.Module):
     def __init__(self, dataset: HeteroNodeClfDataset, hparams: Namespace):
+        """
+        Compute node classification scores for each node against each class in the graph using DistMult. The classes
+        may be a subset of the nodes from different node types.
+        Args:
+            dataset ():
+            hparams ():
+        """
         super().__init__()
         self.n_classes = hparams.n_classes
         self.classes = dataset.classes

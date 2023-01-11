@@ -9,7 +9,7 @@ from logzero import logger
 from torch import Tensor
 from torch_sparse import SparseTensor, spspmm
 
-from moge.dataset.utils import is_negative
+from moge.preprocess.metapaths import is_negative
 
 
 def num_edges(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]]):

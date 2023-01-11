@@ -20,10 +20,10 @@ from torch.utils.data import DataLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.utils import tensor_sizes
 from moge.network.hetero import HeteroNetwork
+from moge.preprocess.metapaths import reverse_metapath, unreverse_metapath, is_reversed, is_negative
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
 from ..PyG.node_generator import HeteroNeighborGenerator
-from ..utils import reverse_metapath, is_negative, is_reversed, unreverse_metapath
 from ...network.base import SEQUENCE_COL
 
 

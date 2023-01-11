@@ -30,15 +30,14 @@ from torch_geometric.utils import remove_self_loops, to_undirected
 from torch_sparse.tensor import SparseTensor
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
-from moge.dataset.PyG.utils import AddMetaPaths
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.io import get_attrs
 from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
-    get_relabled_edge_index, is_negative
-from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
+from moge.model.PyG.metapaths import convert_to_nx_edgelist, num_edges
 from moge.model.utils import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
+from moge.preprocess.edge_index import get_relabled_edge_index, edge_index_to_adjs, gather_node_dict
+from moge.preprocess.metapaths import is_negative
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
