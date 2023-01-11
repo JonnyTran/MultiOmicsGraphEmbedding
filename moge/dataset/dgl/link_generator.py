@@ -18,7 +18,7 @@ from torch_sparse import SparseTensor
 from moge.preprocess.metapaths import unreverse_metapath, is_reversed, untag_negative_metapath, is_negative
 from .node_generator import DGLNodeGenerator
 from ..PyG.hetero_generator import HeteroLinkPredDataset
-from ...model.utils import tensor_sizes
+from ...model.tensor import tensor_sizes
 from ...network.base import SEQUENCE_COL
 from ...network.hetero import HeteroNetwork
 from ...preprocess.edge_index import get_relabled_edge_index, edge_index_to_adjs

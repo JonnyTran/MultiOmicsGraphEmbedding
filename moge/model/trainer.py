@@ -23,7 +23,7 @@ from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
 from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.utils import edge_index_to_adjs
+from moge.preprocess.edge_index import edge_index_to_adjs
 from moge.model.PyG.relations import RelationAttention
 from moge.model.metrics import Metrics, precision_recall_curve, add_aggregated_metrics
 from moge.visualization.attention import plot_sankey_flow

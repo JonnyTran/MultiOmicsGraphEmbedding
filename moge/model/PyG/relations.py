@@ -15,7 +15,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv
 from torch_sparse import SparseTensor
 
-from moge.model.PyG.utils import filter_metapaths, get_edge_index_values, max_num_hops
+from moge.model.PyG.metapaths import filter_metapaths, get_edge_index_values, max_num_hops
 
 
 class MetapathGATConv(nn.Module):

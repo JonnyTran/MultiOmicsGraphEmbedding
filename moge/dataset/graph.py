@@ -20,10 +20,10 @@ from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_sparse import SparseTensor
 
-from moge.dataset.utils import select_mask
-from moge.model.utils import tensor_sizes
+from moge.model.tensor import tensor_sizes
 from moge.network.hetero import HeteroNetwork
 from moge.network.sequence import BertSequenceTokenizer
+from moge.preprocess.edge_index import select_mask
 
 
 class Graph:

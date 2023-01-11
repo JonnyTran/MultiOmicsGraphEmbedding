@@ -18,7 +18,7 @@ from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, Metric
 from torchmetrics.utilities import rank_zero_warn
 from torchmetrics.utilities.data import METRIC_EPS, to_onehot
 
-from .utils import filter_samples, tensor_sizes, activation
+from moge.model.tensor import filter_samples, tensor_sizes, activation
 
 
 def add_aggregated_metrics(metrics: Dict[str, Any],

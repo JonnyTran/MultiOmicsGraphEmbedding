@@ -12,7 +12,7 @@ from transformers import BertConfig, BertForSequenceClassification
 
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
+from moge.model.tensor import tensor_sizes
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 

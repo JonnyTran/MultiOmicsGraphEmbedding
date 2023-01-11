@@ -12,7 +12,7 @@ from logzero import logger
 from networkx.classes.reportviews import EdgeView
 from sklearn.preprocessing import MultiLabelBinarizer
 
-from moge.model.utils import tensor_sizes
+from moge.model.tensor import tensor_sizes
 
 
 def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):

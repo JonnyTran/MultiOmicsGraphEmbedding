@@ -17,7 +17,7 @@ from torch.optim import lr_scheduler
 from .conv import HGT
 from .latte import LATTE
 from .latte_flat import LATTE as LATTEFlat
-from .utils import get_edge_index_from_neg_batch, batch2global_edge_index
+from .metapaths import get_edge_index_from_neg_batch, batch2global_edge_index
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..losses import ClassificationLoss
 from ..metrics import Metrics

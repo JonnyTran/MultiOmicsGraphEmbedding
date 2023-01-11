@@ -4,7 +4,7 @@ from ogb.nodeproppred import PygNodePropPredDataset
 
 from moge.dataset.PyG.neighbor_sampler import NeighborSamplerX
 from moge.dataset.graph import HeteroGraphDataset
-from moge.model.PyG.utils import join_edge_indexes
+from moge.model.PyG.metapaths import join_edge_indexes
 
 
 class HeteroNeighborGenerator(HeteroGraphDataset):

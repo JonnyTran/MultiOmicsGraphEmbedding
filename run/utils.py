@@ -12,7 +12,7 @@ from logzero import logger
 
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
-from moge.model.utils import preprocess_input
+from moge.model.tensor import preprocess_input
 
 
 def parse_yaml_config(parser: ArgumentParser) -> Namespace:

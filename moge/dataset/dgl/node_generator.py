@@ -18,7 +18,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 
 from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
+from moge.model.tensor import tensor_sizes
 from moge.network.hetero import HeteroNetwork
 from moge.preprocess.metapaths import reverse_metapath, unreverse_metapath, is_reversed, is_negative
 from .samplers import ImportanceSampler

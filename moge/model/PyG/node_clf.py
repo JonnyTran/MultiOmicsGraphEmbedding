@@ -33,7 +33,7 @@ from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
+from moge.model.tensor import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
 
 
 class LATTENodeClf(NodeClfTrainer):

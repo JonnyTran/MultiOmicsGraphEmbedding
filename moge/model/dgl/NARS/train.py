@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from moge.model.utils import tensor_sizes
+from moge.model.tensor import tensor_sizes
 from .data import load_data, read_relation_subsets, gen_rel_subset_feature
 from .model import SIGN, WeightedAggregator
 from .utils import get_n_params, get_evaluator, train, test

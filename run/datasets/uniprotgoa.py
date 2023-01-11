@@ -19,7 +19,7 @@ from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.network.hetero import HeteroNetwork
-from moge.network.utils import to_list_of_strs
+from moge.network.labels import to_list_of_strs
 from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 
 

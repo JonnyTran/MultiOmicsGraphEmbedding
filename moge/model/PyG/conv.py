@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch_geometric.nn import GATConv, HGTConv, FastRGCNConv, HeteroConv
 
-from moge.model.PyG.utils import get_edge_index_values
+from moge.model.PyG.metapaths import get_edge_index_values
 
 
 class HGT(torch.nn.Module):

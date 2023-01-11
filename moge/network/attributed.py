@@ -6,7 +6,7 @@ import pandas as pd
 from logzero import logger
 from moge.network.base import Network
 from moge.network.base import SEQUENCE_COL
-from moge.network.utils import select_labels, to_list_of_strs
+from moge.network.labels import select_labels, to_list_of_strs
 from sklearn import preprocessing
 
 import openomics

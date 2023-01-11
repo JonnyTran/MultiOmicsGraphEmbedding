@@ -10,8 +10,8 @@ from dgl.utils import expand_as_pair
 from torch import nn as nn, Tensor
 
 from moge.model.PyG.relations import RelationAttention
-from moge.model.PyG.utils import filter_metapaths, max_num_hops, join_metapaths
-from moge.model.dgl.utils import ChainMetaPaths
+from moge.model.PyG.metapaths import filter_metapaths, max_num_hops, join_metapaths
+from moge.model.dgl.metapaths import ChainMetaPaths
 
 
 class LATTEConv(nn.Module, RelationAttention):

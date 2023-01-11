@@ -34,7 +34,7 @@ from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.io import get_attrs
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.PyG.metapaths import convert_to_nx_edgelist, num_edges
-from moge.model.utils import to_device, tensor_sizes
+from moge.model.tensor import to_device, tensor_sizes
 from moge.network.hetero import HeteroNetwork
 from moge.preprocess.edge_index import get_relabled_edge_index, edge_index_to_adjs, gather_node_dict
 from moge.preprocess.metapaths import is_negative
