@@ -10,9 +10,9 @@ from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
 from moge.model.PyG.metapaths import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
+from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
 
 
 class LATTEConv(MessagePassing, RelationAttention):
@@ -239,8 +239,8 @@ class LATTEConv(MessagePassing, RelationAttention):
                                                                         betas[ntype].mean(-1).mean(0),
                                                                         betas[ntype].mean(-1).std(0))):
                     if metapath in edge_pred_dict:
-                        edge_index = get_edge_index_values(edge_pred_dict[metapath], drop_edge_value=True)
-                        edge_size = edge_index.size(1)
+                        edge_index, _ = get_edge_index_values(edge_pred_dict[metapath], drop_edge_value=True)
+                        edge_size = edge_index.size(1) if edge_index is not None else 0
                     elif metapath != ntype:
                         continue
                     else:

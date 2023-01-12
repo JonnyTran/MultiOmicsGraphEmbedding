@@ -208,7 +208,7 @@ def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],
     # if edge_values.dtype != torch.float:
     #     edge_values = edge_values.to(torch.float)
     if drop_edge_value:
-        return edge_index
+        return edge_index, None
 
     return edge_index, edge_values
 
@@ -282,6 +282,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
             else:
                 values_b = values_b.to(device)
 
+            new_edge_index = new_values = None
             try:
                 # elif values_a.dim() > 1 and values_a.size(1) > 1:
                 # new_values = []

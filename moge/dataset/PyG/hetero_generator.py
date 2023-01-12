@@ -29,6 +29,7 @@ from torch_geometric.data import HeteroData
 from torch_geometric.utils import remove_self_loops, to_undirected
 from torch_sparse.tensor import SparseTensor
 
+from moge.dataset.PyG.metapaths import AddMetaPaths
 from moge.dataset.PyG.neighbor_sampler import NeighborLoaderX, HGTLoaderX
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.io import get_attrs
