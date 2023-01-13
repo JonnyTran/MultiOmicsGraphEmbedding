@@ -21,8 +21,6 @@ import torch
 import tqdm
 from joblib import Parallel, delayed
 from logzero import logger
-from openomics import MultiOmics
-from openomics.database.ontology import GeneOntology
 from pandas import Series, Index, DataFrame
 from ruamel import yaml
 from scipy.sparse import csr_matrix
@@ -36,7 +34,9 @@ from moge.network.base import SEQUENCE_COL
 from moge.network.labels import parse_labels
 from moge.network.train_test_split import TrainTestSplit
 from moge.preprocess.edge_index import get_edge_index_dict, nx_to_edge_index, get_edge_attr_keys
-from moge.preprocess.metapaths import tag_negative_metapath, untag_negative_metapath
+from moge.preprocess.metapaths import tag_negative_metapath, untag_negative_metapath, match_groupby_metapaths
+from openomics import MultiOmics
+from openomics.database.ontology import GeneOntology
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -157,60 +157,28 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if not os.path.exists(join(path, f'{target}.mlb')):
                 joblib.dump(mlb, join(path, f'{target}.mlb'))
 
-    def combine_networks(self, groupby: Dict[Union[Tuple, str], List[Union[Tuple, str]]], delete_sources=True):
+    def combine_networks(self, groupby: Dict[Union[Tuple, str], List[Union[Tuple, str]]], delete_sources=True) -> None:
         """
         Modify the HeteroNetwork by combining multiple networks into a single network based on the groupby dict.
+        The groupby allows the user to specify which networks to combine into a new network. The key of the dict
+        (i.e. the target etype) can be
+        a new network name and is context-dependent based on its source metapaths.
+
         Args:
-            groupby: A dict of target metapath and list of source metapaths.
+            groupby: A dict of target metapath (or etype) and list of source metapaths (or etypes). If an etype string
+                is given for target metapath, then expand to all metapaths with matching etype, but if no matches,
+                then source and target type will be copied from its source metapath. If an etype string is
+                given for source metapath, assume source metapaths have the same source and target node types as target
+                metapaths.
             delete_sources: Whether to delete the source metapaths after having combined to new target metapaths, default True.
         """
-
-        def _get_expanded_groupby(groupby: Dict[Union[Tuple, str], List[Union[Tuple, str]]],
-                                  metapaths: List[Tuple[str, str, str]]):
-            expanded_groupby = {}
-
-            # Expand each arget etype to metapaths
-            for dst_metapath, src_metapaths in groupby.items():
-                if isinstance(dst_metapath, str):
-                    for metapath in metapaths:
-                        if metapath[0] == dst_metapath:
-                            expanded_groupby[metapath] = src_metapaths
-
-                elif isinstance(dst_metapath, tuple):
-                    expanded_groupby[dst_metapath] = src_metapaths
-
-                else:
-                    raise ValueError(f"Invalid metapath {dst_metapath}")
-
-            # Expand each source etype to metapaths
-            for dst_metapath, src_metapaths in expanded_groupby.items():
-                # replace etype str to matching metapath
-                src_metapaths = []
-                for etype in src_metapaths:
-                    if isinstance(etype, str):
-                        etype = next((tup for tup in metapaths \
-                                      if tup[1] == etype and {tup[0], tup[-1]} == {dst_metapath[0], dst_metapath[-1]}),
-                                     None)
-
-                    if isinstance(etype, tuple):
-                        src_metapath = etype
-                    elif etype is None:
-                        continue
-                    else:
-                        raise ValueError(f"Invalid metapath {etype}")
-
-                    src_metapaths.append(src_metapath)
-
-                expanded_groupby[dst_metapath] = src_metapaths
-
-            return expanded_groupby
+        # Expand groupby to include all metapaths with matching etype
+        expanded_groupby = match_groupby_metapaths(groupby, list(self.networks.keys()))
+        logger.info(f"combine_networks: \n{pprint.pformat(expanded_groupby, width=250)}")
 
         new_networks = {}
-        groupby = _get_expanded_groupby(groupby, list(self.networks.keys()))
-        logger.info(f"combine_networks {groupby}")
-
         # Combine networks
-        for dst_metapath, src_metapaths in groupby.items():
+        for dst_metapath, src_metapaths in expanded_groupby.items():
             if not set(src_metapaths).issubset(set(self.networks.keys())):
                 logger.warn(f'Cannot compose {dst_metapath} from {src_metapaths}, one of which is missing.')
                 continue
@@ -222,7 +190,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Remove source networks if delete_sources is True
         for dst_metapath in new_networks:
-            old_metapaths = groupby[dst_metapath]
+            old_metapaths = expanded_groupby[dst_metapath]
             for old_metapath in old_metapaths:
                 if delete_sources and old_metapath in self.networks:
                     self.networks.pop(old_metapath)

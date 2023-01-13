@@ -13,7 +13,6 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from logzero import logger
-from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 from sklearn.preprocessing import MultiLabelBinarizer
 
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
@@ -21,10 +20,29 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.network.hetero import HeteroNetwork
 from moge.network.labels import to_list_of_strs
+from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 
 
-def get_slug(name: str, hparams: Namespace, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
-             exclude_etypes, feature, save_path):
+def get_slug_path(name: str, hparams: Namespace, labels_dataset: str, ntype_subset: List[str], pred_ntypes: List[str],
+                  add_parents: bool, go_etypes: List[str],
+                  exclude_etypes: List[str], feature: bool, save_path: str):
+    """
+    Get a unique slug for the dataset based on the parameters used to generate it, such that the same dataset can be loaded.
+    Args:
+        name (): Name of the dataset
+        hparams (): Hyperparameters
+        labels_dataset (): Name of the labels dataset (e.g. DGG, UniProtGOA)
+        ntype_subset (): Node types to include in the graph
+        pred_ntypes (): Node types to predict
+        add_parents (): Whether to add parent terms to the labels
+        go_etypes (): GO etypes to include in the graph
+        exclude_etypes (): GO etypes to exclude from the graph
+        feature (): Whether to include node features
+        save_path (): Path to save the dataset
+
+    Returns:
+        load_path (str): Path to the dataset with the slug appended.
+    """
     node_types = ['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein', 'biological_process', 'molecular_function',
                   'cellular_component']
     if ntype_subset:
@@ -37,6 +55,11 @@ def get_slug(name: str, hparams: Namespace, labels_dataset, ntype_subset, pred_n
         options = f"{hparams.species}.{options}"
 
     metapaths = ''.join([e[0] for e in go_etypes] if go_etypes else [])
+    if getattr(hparams, 'combine_networks', None):
+        combine_etypes = ''.join([dst_etype[0] if isinstance(dst_etype, str) else dst_etype[1][0] for dst_etype, _ in
+                                  hparams.combine_networks.items()])
+        metapaths = metapaths + combine_etypes
+
     try:
         ex_etypes = ''.join(etype.lower()[0] if isinstance(etype, str) else etype[1].lower()[0] \
                             for etype in exclude_etypes)
@@ -127,10 +150,10 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
     target = 'go_id'
 
     add_parents, deepgraphgo_path, exclude_etypes, feature, go_etypes, head_ntype, labels_dataset, ntype_subset, \
-    pred_ntypes, uniprotgoa_path, use_reverse = parse_options(hparams, dataset_path)
+        pred_ntypes, uniprotgoa_path, use_reverse = parse_options(hparams, dataset_path)
 
-    load_path = get_slug(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
-                         exclude_etypes, feature, save_path)
+    load_path = get_slug_path(name, hparams, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
+                              exclude_etypes, feature, save_path)
 
     if os.path.exists(os.path.expanduser(load_path)) and not rebuild:
         try:
@@ -265,13 +288,15 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
 
     # add parent terms to ['go_id'] column
     if add_parents:
-        logger.info(f"add_parents, before: {network.annotations[head_ntype][target].dropna().map(len).mean()}")
+        logger.info(
+            f"before add_parents, avg prot annotation : {network.annotations[head_ntype][target].dropna().map(len).mean()}")
         subgraph = geneontology.get_subgraph(edge_types="is_a")
         node_ancestors = {node: nx.ancestors(subgraph, node) for node in subgraph.nodes}
         agg = lambda s: get_predecessor_terms(s, g=node_ancestors, join_groups=True, keep_terms=True)
 
         network.annotations[head_ntype][target] = network.annotations[head_ntype][target].apply(agg)
-        logger.info(f"add_parents, after: {network.annotations[head_ntype][target].dropna().map(len).mean()}")
+        logger.info(
+            f"after add_parents, avg prot annotation : {network.annotations[head_ntype][target].dropna().map(len).mean()}")
 
     else:
         network.annotations[head_ntype][target] = network.annotations[head_ntype][target] \
