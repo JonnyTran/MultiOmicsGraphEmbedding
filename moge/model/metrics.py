@@ -668,7 +668,7 @@ class Smin(BinnedPrecisionRecallCurve):
                 "Smin must have at least one example before it can be computed."
             )
 
-        information_content = -torch.log2(self.occurence_counts / self.occurence_counts.sum())
+        information_content = -torch.log10(self.occurence_counts / self.occurence_counts.sum())
         information_content = torch.nan_to_num(information_content, nan=0, posinf=0, neginf=0)
 
         remaining_uncertainty = (self.FNs * information_content[:, None]).sum(axis=0) / self.num_samples
