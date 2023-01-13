@@ -162,53 +162,72 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         Modify the HeteroNetwork by combining multiple networks into a single network based on the groupby dict.
         Args:
             groupby: A dict of target metapath and list of source metapaths.
-            delete_sources: Whether to delete the source networks after combining, default True.
+            delete_sources: Whether to delete the source metapaths after having combined to new target metapaths, default True.
         """
+
+        def _get_expanded_groupby(groupby: Dict[Union[Tuple, str], List[Union[Tuple, str]]],
+                                  metapaths: List[Tuple[str, str, str]]):
+            expanded_groupby = {}
+
+            # Expand each arget etype to metapaths
+            for dst_metapath, src_metapaths in groupby.items():
+                if isinstance(dst_metapath, str):
+                    for metapath in metapaths:
+                        if metapath[0] == dst_metapath:
+                            expanded_groupby[metapath] = src_metapaths
+
+                elif isinstance(dst_metapath, tuple):
+                    expanded_groupby[dst_metapath] = src_metapaths
+
+                else:
+                    raise ValueError(f"Invalid metapath {dst_metapath}")
+
+            # Expand each source etype to metapaths
+            for dst_metapath, src_metapaths in expanded_groupby.items():
+                # replace etype str to matching metapath
+                src_metapaths = []
+                for etype in src_metapaths:
+                    if isinstance(etype, str):
+                        etype = next((tup for tup in metapaths \
+                                      if tup[1] == etype and {tup[0], tup[-1]} == {dst_metapath[0], dst_metapath[-1]}),
+                                     None)
+
+                    if isinstance(etype, tuple):
+                        src_metapath = etype
+                    elif etype is None:
+                        continue
+                    else:
+                        raise ValueError(f"Invalid metapath {etype}")
+
+                    src_metapaths.append(src_metapath)
+
+                expanded_groupby[dst_metapath] = src_metapaths
+
+            return expanded_groupby
+
         new_networks = {}
+        groupby = _get_expanded_groupby(groupby, list(self.networks.keys()))
+        logger.info(f"combine_networks {groupby}")
 
-        expanded_groupby = {}
-        for to_metapath, from_metapaths in groupby.items():
-            if isinstance(to_metapath, tuple):
-                # replace etype to matching metapath
-                from_metapaths = [next((m for m in self.networks.keys() \
-                                        if m[1] == etype and {m[0], m[-1]} == {to_metapath[0], to_metapath[-1]}),
-                                       etype) \
-                                      if isinstance(etype, str) else etype \
-                                  for etype in from_metapaths]
-
-                expanded_groupby[to_metapath] = from_metapaths
+        # Combine networks
+        for dst_metapath, src_metapaths in groupby.items():
+            if not set(src_metapaths).issubset(set(self.networks.keys())):
+                logger.warn(f'Cannot compose {dst_metapath} from {src_metapaths}, one of which is missing.')
+                continue
+            elif not isinstance(dst_metapath, (tuple)):
+                logger.warn(f'{dst_metapath} must be a tuple.')
                 continue
 
-            for metapath in self.networks.keys():
-                if metapath[1] == to_metapath and not metapath in expanded_groupby:
-                    from_metapaths_sub = [next((m for m in self.networks.keys() \
-                                                if m[1] == etype and {m[0], m[-1]} == {metapath[0], metapath[-1]}),
-                                               etype) \
-                                              if isinstance(etype, str) else etype \
-                                          for etype in from_metapaths]
+            new_networks[dst_metapath] = nx.compose_all([self.networks[m] for m in src_metapaths])
 
-                    expanded_groupby[metapath] = from_metapaths_sub
-
-        logger.info(f"combine_networks {expanded_groupby}")
-        groupby = expanded_groupby
-
-        for to_metapath, from_metapaths in groupby.items():
-            if not set(from_metapaths).issubset(set(self.networks.keys())):
-                logger.warn(f'Cannot compose {to_metapath} from {from_metapaths}, one of which is missing.')
-                continue
-            elif not isinstance(to_metapath, (tuple)):
-                logger.warn(f'{to_metapath} must be a tuple.')
-                continue
-
-            new_networks[to_metapath] = nx.compose_all([self.networks[m] for m in from_metapaths])
-
-        for to_metapath in new_networks:
-            old_metapaths = groupby[to_metapath]
+        # Remove source networks if delete_sources is True
+        for dst_metapath in new_networks:
+            old_metapaths = groupby[dst_metapath]
             for old_metapath in old_metapaths:
                 if delete_sources and old_metapath in self.networks:
                     self.networks.pop(old_metapath)
             # assign new combined network
-            self.networks[to_metapath] = new_networks[to_metapath]
+            self.networks[dst_metapath] = new_networks[dst_metapath]
 
     def isolated_nodes(self, ntypes: Set[str] = None) -> Dict[str, Set[str]]:
         """

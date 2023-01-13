@@ -10,6 +10,7 @@ import pandas as pd
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
+from openomics.database.ontology import GeneOntology
 from ruamel import yaml
 from torch_geometric.datasets import AMiner
 
@@ -21,8 +22,7 @@ from moge.dataset.dgl.node_generator import HeteroNeighborGenerator, DGLNodeGene
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
 from moge.network.hetero import HeteroNetwork
-from openomics.database.ontology import GeneOntology
-from run.datasets.uniprotgoa import build_uniprot_dataset
+from run.datasets.CAFA import build_uniprot_dataset
 from run.utils import add_node_embeddings
 
 

@@ -252,7 +252,7 @@ class RelationAttention(ABC):
                     elif isinstance(edge_values, Tensor) and edge_values.dim() < 2:
                         continue
 
-                    value, row, col = edge_values.median(1).cpu().numpy(), \
+                    value, row, col = edge_values.mean(1).cpu().numpy(), \
                         edge_index[0].cpu().numpy(), edge_index[1].cpu().numpy()
                     adj_coo = ssp.coo_matrix((value, (row, col)),
                                              shape=(global_node_index[head_type].shape[0],
