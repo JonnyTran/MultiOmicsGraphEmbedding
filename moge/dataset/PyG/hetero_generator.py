@@ -251,29 +251,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Load nodes list
         nodes = pd.read_pickle(join(path, 'nodes.pickle'))
-        self.nodes: Dict[str, pd.Index] = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
+        self.nodes = {ntype: nids for ntype, nids in nodes.items() if ntype in self.node_types}
 
         # Post-processing to fix some data inconsistencies
         ## Missing classes not in .obo
         for go_ntype in self.pred_ntypes:
-            extra_classes = None
-            if go_ntype in self.nodes:
-                extra_classes = pd.Index(self.classes).difference(self.nodes[go_ntype])
-                if extra_classes.size:
-                    logger.info(f"extra nodes {go_ntype}, {self.classes.shape}, {extra_classes.size}")
-                    self.nodes[go_ntype] = self.nodes[go_ntype].append(extra_classes)
-                assert not self.nodes[go_ntype].duplicated().any()
-
             # Missing nodes_namespace
             if go_ntype not in self.nodes_namespace:
                 self.nodes_namespace[go_ntype] = pd.Series([go_ntype for i in range(self.n_classes)],
                                                            index=self.classes)
-            if extra_classes is not None and extra_classes.size:
-                logger.info(
-                    f"nodes_namespace extra_classes {go_ntype}, {self.nodes_namespace[go_ntype].shape}, {extra_classes.size}")
-                self.nodes_namespace[go_ntype] = self.nodes_namespace[go_ntype].append(
-                    pd.Series([go_ntype for i in range(len(extra_classes))],
-                              index=self.classes))
 
         # Rename nodes_namespace
         self.nodes_namespace = {ntype: df.replace({'biological_process': 'BPO',

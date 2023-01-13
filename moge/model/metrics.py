@@ -21,9 +21,11 @@ from torchmetrics.utilities.data import METRIC_EPS, to_onehot
 from moge.model.tensor import filter_samples, tensor_sizes, activation
 
 
+@torch.no_grad()
 def add_aggregated_metrics(metrics: Dict[str, Any],
                            prefix: str = '',
-                           suffixes: List[str] = ['aupr', 'fmax', 'smin']) -> Dict[str, Any]:
+                           suffixes: List[str] = ['aupr', 'fmax', 'smin'],
+                           reduce='mean') -> Dict[str, Any]:
     """
     Group values from the `metrics` dict whose keys contains the same `suffixes` and reduce with mean. The new reduced
     values are added to `metrics` with `prefix` string prepended to the metric name.
@@ -43,22 +45,45 @@ def add_aggregated_metrics(metrics: Dict[str, Any],
         name = prefix + suffix
         if name in metrics:
             continue
-        values = [val for key, val in metrics.items() if key.endswith(suffix)]
+        groupby = [val for key, val in metrics.items() if key.endswith(suffix)]
 
-        if not values:
+        # Depending on the metric, the groupby list may contain float or tensor values.
+        if not groupby:
             continue
-        elif len(values) == 1:
-            mean_value = values[0]
-        elif any(isinstance(val, Tensor) for val in values):
-            mean_value = torch.stack(values, dim=0).mean(dim=0)
-        elif any(isinstance(val, np.ndarray) for val in values):
-            mean_value = np.stack(values, axis=0).mean(axis=0)
-        elif any(isinstance(val, (float, int)) for val in values):
-            mean_value = np.mean(values)
+
+        elif any(isinstance(val, Tensor) for val in groupby):
+            groupby = torch.stack(groupby, dim=0)
+
+            # Reduce function for tensors
+            if reduce == 'mean':
+                agg = torch.mean
+            elif reduce == 'sum':
+                agg = torch.sum
+            elif reduce == 'max':
+                agg = torch.max
+            elif reduce == 'min':
+                agg = torch.min
+            else:
+                raise ValueError(f'Invalid reduce value: {reduce}')
+
+        elif any(isinstance(val, (np.ndarray, float, int)) for val in groupby):
+            groupby = np.stack(groupby, axis=0)
+
+            # Reduce function for numpy arrays
+            if reduce == 'mean':
+                agg = np.mean
+            elif reduce == 'sum':
+                agg = np.sum
+            elif reduce == 'max':
+                agg = np.max
+            elif reduce == 'min':
+                agg = np.min
+            else:
+                raise ValueError(f'Invalid reduce value: {reduce}')
         else:
             continue
 
-        metrics[name] = mean_value
+        metrics[name] = agg(groupby)
 
     return metrics
 
