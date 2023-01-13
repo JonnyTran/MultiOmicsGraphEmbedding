@@ -13,6 +13,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from logzero import logger
+from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 from sklearn.preprocessing import MultiLabelBinarizer
 
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
@@ -20,7 +21,6 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.network.hetero import HeteroNetwork
 from moge.network.labels import to_list_of_strs
-from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 
 
 def get_slug(name: str, hparams: Namespace, labels_dataset, ntype_subset, pred_ntypes, add_parents, go_etypes,
