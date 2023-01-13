@@ -475,10 +475,10 @@ class LATTE(nn.Module, RelationMultiLayerAgg):
                                                  # order=list(range(1, layer_t_order + 1)),
                                                  order=layer_t_order,
                                                  tail_type=output_ntypes if is_last_layer else None,
-                                                 filter=hparams.filter_metapaths if 'filter_metapaths' in hparams else None,
-                                                 exclude=hparams.exclude_metapaths if 'exclude_metapaths' in hparams else None,
+                                                 filter=getattr(hparams, 'filter_metapaths', None),
+                                                 exclude=getattr(hparams, 'exclude_metapaths', None),
+                                                 filter_self_metapaths=getattr(hparams, 'filter_self_metapaths', None),
                                                  )
-
             layer = LATTEConv(input_dim=embedding_dim, output_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
                               metapaths=l_layer_metapaths, layer=l, t_order=self.t_order, activation=activation,
                               layernorm=hparams.layernorm, batchnorm=hparams.batchnorm,

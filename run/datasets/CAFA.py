@@ -13,6 +13,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from logzero import logger
+from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 from sklearn.preprocessing import MultiLabelBinarizer
 
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
@@ -20,12 +21,14 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.DeepGraphGO import load_protein_dataset
 from moge.network.hetero import HeteroNetwork
 from moge.network.labels import to_list_of_strs
-from openomics.database.ontology import UniProtGOA, get_predecessor_terms
 
 
 def get_slug_path(name: str, hparams: Namespace, labels_dataset: str, ntype_subset: List[str], pred_ntypes: List[str],
                   add_parents: bool, go_etypes: List[str],
-                  exclude_etypes: List[str], feature: bool, save_path: str):
+                  exclude_etypes: List[str], feature: bool, save_path: str,
+                  node_types=['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein', 'biological_process',
+                              'molecular_function',
+                              'cellular_component']):
     """
     Get a unique slug for the dataset based on the parameters used to generate it, such that the same dataset can be loaded.
     Args:
@@ -43,8 +46,6 @@ def get_slug_path(name: str, hparams: Namespace, labels_dataset: str, ntype_subs
     Returns:
         load_path (str): Path to the dataset with the slug appended.
     """
-    node_types = ['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein', 'biological_process', 'molecular_function',
-                  'cellular_component']
     if ntype_subset:
         node_types = [ntype for ntype in node_types if ntype in ntype_subset]
 

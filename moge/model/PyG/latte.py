@@ -10,10 +10,11 @@ from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
+from moge.model.PyG.metapaths import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, \
+    max_num_hops
 from moge.model.PyG.relations import RelationAttention, MetapathGATConv
 from moge.model.sampling import negative_sample
 from moge.preprocess.metapaths import tag_negative_metapath, untag_negative_metapath, is_negative
-from moge.model.PyG.metapaths import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -470,7 +471,11 @@ class LATTE(nn.Module):
 
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
                                                  order=list(range(1, min(l + 1, t_order) + 1)),
-                                                 tail_type=self.head_node_type if is_last_layer else None)
+                                                 tail_type=self.head_node_type if is_last_layer else None,
+                                                 filter=getattr(hparams, 'filter_metapaths', None),
+                                                 exclude=getattr(hparams, 'exclude_metapaths', None),
+                                                 filter_self_metapaths=getattr(hparams, 'filter_self_metapaths', None),
+                                                 )
 
             layers.append(
                 LATTEConv(input_dim=embedding_dim,

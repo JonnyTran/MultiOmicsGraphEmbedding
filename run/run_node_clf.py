@@ -4,6 +4,7 @@ import random
 import sys
 import warnings
 
+import pandas as pd
 
 warnings.filterwarnings("ignore")
 
@@ -20,7 +21,7 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf, HGTNodeClf, MLP
 from moge.model.dgl.node_clf import HANNodeClf, HGConv, R_HGNN
 from moge.model.PyG.DeepGOZero import DeepGOZero
-from moge.model.utils import tensor_sizes
+from moge.model.tensor import tensor_sizes
 
 from run.datasets.deepgraphgo import build_deepgraphgo_model
 from run.utils import parse_yaml_config, select_empty_gpus
@@ -194,6 +195,15 @@ def train(hparams):
         n_layers = 2
         dataset.neighbor_sizes = [2048, ] * n_layers
 
+        if t_order > 1:
+            ntype_metapaths = pd.DataFrame(dataset.metapaths, columns=['src', 'etype', 'dst']).query(
+                f'src == dst and src in {dataset.pred_ntypes}')
+            ntype_metapaths = ntype_metapaths.groupby('src')['etype'].unique().to_dict()
+            filter_metapaths = {ntype: [tuple([etype, ] * hops) for etype in etypes for hops in range(2, t_order + 1)] \
+                                for ntype, etypes in ntype_metapaths.items()}
+        else:
+            filter_metapaths = None
+
         default_args = {
             "embedding_dim": 512,
             "layer_pooling": "concat",
@@ -203,18 +213,8 @@ def train(hparams):
             'neighbor_sizes': dataset.neighbor_sizes,
             "batch_size": batch_size,
 
-            "filter_metapaths": {
-                'biological_process': {('is_a', 'is_a')},
-                'molecular_function': {('is_a', 'is_a')},
-                'cellular_component': {('is_a', 'is_a')},
-                'Protein': {('coexpression', 'coexpression'),
-                            ('cooccurence', 'cooccurence'),
-                            ('database', 'database'),
-                            ('fusion', 'fusion'),
-                            ('neighborhood', 'neighborhood'),
-                            ('textmining', 'textmining'),
-                            ('experimental', 'experimental')},
-            },
+            "filter_metapaths": filter_metapaths,
+            "filter_self_metapaths": True,
 
             "attn_heads": 8,
             "attn_activation": "LeakyReLU",

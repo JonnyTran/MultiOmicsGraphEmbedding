@@ -82,16 +82,16 @@ def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tu
                    tail_types: List[str] = None, skip_undirected=False, return_dict=False, ) \
         -> Dict[str, List[Tuple[str, str, str]]]:
     """
-
+    Join two metapaths list such that the tail type of metapath in metapaths_A matches the head type of metapath in metapaths_B.
     Args:
-        metapaths_A ():
-        metapaths_B ():
-        tail_types ():
+        metapaths_A (): list of metapaths
+        metapaths_B (): list of metapaths
+        tail_types (): list of tail types of metapaths in metapaths_A
         skip_undirected (): Enforce that two metapaths with same head/tail ntypes can only connect if they have the same etypes
         return_dict (): If True, return in from of Dict of new etypes names and list of metapaths.
 
     Returns:
-
+        output_metapaths (): list of metapaths that can be connected by metapaths in metapaths_A and metapaths_B
     """
     if return_dict:
         output_metapaths = {}
@@ -118,11 +118,12 @@ def filter_metapaths(metapaths: List[Tuple],
                      order: Union[int, List[int]] = None,
                      head_type: Union[str, List[str]] = None,
                      tail_type: Union[str, List[str]] = None,
-                     filter: Dict[str, Set[Tuple]] = None,
-                     exclude: Dict[str, Set[Tuple]] = None) \
+                     filter: Dict[str, Set[Tuple[str]]] = None,
+                     exclude: Dict[str, Set[Tuple[str]]] = None,
+                     filter_self_metapaths=False) \
         -> List[Tuple[str]]:
     """
-    A utility function to filter a set of given metapaths based on multiple conditions.
+    Filter a set of given metapaths based on multiple conditions.
 
     Args:
         metapaths (list):
@@ -139,12 +140,13 @@ def filter_metapaths(metapaths: List[Tuple],
         exclude (dict): default None
             Contain the list of multi-hop etypes not allowed if a metapath is multi-hop and its target ntype is in
             `exclude`. Used to limit the size of metapath generation.
-
+        filter_self_metapaths (bool): default False
+            If True, filter out metapaths that only contain self-loops.
     Returns:
         filtered_metapaths (list)
     """
 
-    def filter_func(metapath: Tuple[str]):
+    def _filter_func(metapath: Tuple[str]) -> bool:
         condition = True
         num_hops = len(metapath[1::2])
 
@@ -158,19 +160,25 @@ def filter_metapaths(metapaths: List[Tuple],
         if tail_type:
             condition = condition & (metapath[-1] in tail_type)
 
+        # Exclude metapaths if specified in `exclude`
         if num_hops > 1 and isinstance(exclude, dict) and metapath[-1] in exclude:
-            # Join the iterable of strings to be tuple or list agnostic
             if '.'.join(metapath[1::2]) in {".".join(tup) for tup in exclude[metapath[-1]]}:
                 condition = False
 
+        # Only allow a subset of etypes if specified in `filter`
         if num_hops > 1 and isinstance(filter, dict) and metapath[-1] in filter:
             if '.'.join(metapath[1::2]) not in {".".join(tup) for tup in filter[metapath[-1]]}:
+                condition = False
+
+        # If a metapath was chained with only self-loop metapaths, ensure that the self-loops are identical
+        if num_hops > 1 and filter_self_metapaths and len(set(metapath[0::2])) == 1:
+            if len(set(metapath[1::2])) != 1:
                 condition = False
 
         return condition
 
     uniq_metapaths = sorted(OrderedDict.fromkeys(metapaths))
-    return [m for m in uniq_metapaths if filter_func(m)]
+    return [m for m in uniq_metapaths if _filter_func(m)]
 
 
 def get_edge_index_values(edge_index_tup: Tuple[Tensor, Tensor],

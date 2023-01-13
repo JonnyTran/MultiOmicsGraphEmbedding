@@ -491,6 +491,11 @@ class RelationMultiLayerAgg:
     layers: List[RelationAttention]
 
     def get_metapaths_chain(self) -> List[List[Tuple[str, str, str]]]:
+        """
+        For each layer `t`, get the metapaths chain for `t`-order metapaths.
+        Returns:
+            A list of metapaths chain for every higher order metapaths.
+        """
         metapaths_chain = {}
         for layer in self.layers:
             for metapath in layer.metapaths:
