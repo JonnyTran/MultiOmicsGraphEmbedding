@@ -12,8 +12,8 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch_sparse import SparseTensor
 
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
+from moge.model.tensor import concat_dict_batch, filter_samples_weights, to_device
 from moge.model.trainer import NodeClfTrainer
-from moge.model.utils import concat_dict_batch, filter_samples_weights, to_device
 
 
 class DeepGOZero(NodeClfTrainer):
