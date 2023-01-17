@@ -22,8 +22,8 @@ from .HGT import HGT
 from .conv import HAN as Han
 from ..encoder import HeteroNodeFeatureEncoder, HeteroSequenceEncoder
 from ..sampling import sample_metapaths
+from ..tensor import tensor_sizes, stack_tensor_dicts, filter_samples_weights
 from ..trainer import NodeClfTrainer, print_pred_class_counts
-from ..utils import tensor_sizes, stack_tensor_dicts, filter_samples_weights
 
 
 class LATTENodeClf(NodeClfTrainer):
