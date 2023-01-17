@@ -26,9 +26,8 @@ from moge.network.labels import to_list_of_strs
 def get_slug_path(name: str, hparams: Namespace, labels_dataset: str, ntype_subset: List[str], pred_ntypes: List[str],
                   add_parents: bool, go_etypes: List[str],
                   exclude_etypes: List[str], feature: bool, save_path: str,
-                  node_types=['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein', 'biological_process',
-                              'molecular_function',
-                              'cellular_component']):
+                  node_types=['MicroRNA', 'MessengerRNA', 'LncRNA', 'Protein',
+                              'biological_process', 'molecular_function', 'cellular_component']):
     """
     Get a unique slug for the dataset based on the parameters used to generate it, such that the same dataset can be loaded.
     Args:
@@ -145,8 +144,8 @@ def parse_options(hparams, dataset_path):
            pred_ntypes, uniprotgoa_path, use_reverse
 
 
-def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
-                          save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True, rebuild=False) \
+def build_cafa_dataset(name: str, dataset_path: str, hparams: Namespace,
+                       save_path='~/Bioinformatics_ExternalData/LATTE2GO/', save=True, rebuild=False) \
         -> HeteroNodeClfDataset:
     target = 'go_id'
 
@@ -185,7 +184,7 @@ def build_uniprot_dataset(name: str, dataset_path: str, hparams: Namespace,
             with open(os.path.expanduser(dataset_path), "rb") as file:
                 network: HeteroNetwork = pickle.load(file)
 
-        elif dataset_path.endswith('.HeteroNetwork'):
+        elif dataset_path.rstrip('/').endswith('.HeteroNetwork'):
             network = HeteroNetwork.load(dataset_path)
         else:
             raise Exception(f"Cannot load HeteroNetwork from {dataset_path}")

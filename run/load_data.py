@@ -22,7 +22,7 @@ from moge.dataset.dgl.node_generator import HeteroNeighborGenerator, DGLNodeGene
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
 from moge.network.hetero import HeteroNetwork
-from run.datasets.CAFA import build_uniprot_dataset
+from run.datasets.CAFA import build_cafa_dataset
 from run.utils import add_node_embeddings
 
 
@@ -112,13 +112,13 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
     elif "HUMAN_MOUSE" in name or "MULTISPECIES" in name:
         extra_args = {}
         if name == 'HUMAN_MOUSE':
-            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRINGsplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRINGphyssplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
         elif name == 'HUMAN_MOUSE_unsplit':
             dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
             extra_args['save'] = False
             extra_args['rebuild'] = True
         elif name == "MULTISPECIES":
-            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRINGsplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRINGphyssplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
         elif name == "MULTISPECIES_unsplit":
             dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
             extra_args['save'] = False
@@ -132,17 +132,15 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
         with open('run/configs/_latte2go_helper.yaml', 'r') as f:
             hparams.__dict__.update(yaml.safe_load(f))
 
-        # if 'DeepGOZero' == hparams.method:
-        #     hparams.add_parents = False
         if 'LATTE2GO' in hparams.method and hparams.pred_ntypes not in hparams.ntype_subset:
             hparams.ntype_subset = hparams.ntype_subset + ' ' + hparams.pred_ntypes
 
-        dataset = build_uniprot_dataset('UniProt', dataset_path=dataset_path, hparams=hparams, **extra_args)
+        dataset = build_cafa_dataset('UniProt', dataset_path=dataset_path, hparams=hparams, **extra_args)
 
 
     elif 'UNIPROT' in name.upper() and (
             isinstance(dataset_path, HeteroNetwork) or (isinstance(dataset_path, str) and ".pickle" in dataset_path)):
-        dataset = build_uniprot_dataset(name, dataset_path=dataset_path, hparams=hparams)
+        dataset = build_cafa_dataset(name, dataset_path=dataset_path, hparams=hparams)
 
     else:
         raise Exception(f"dataset {name} not found")
