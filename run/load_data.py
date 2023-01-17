@@ -112,13 +112,13 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
     elif "HUMAN_MOUSE" in name or "MULTISPECIES" in name:
         extra_args = {}
         if name == 'HUMAN_MOUSE':
-            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRINGphyssplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRINGphyssplit_BioGRID_mRNAprotein_transcriptlevel.HeteroNetwork'
         elif name == 'HUMAN_MOUSE_unsplit':
             dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_HUMAN_MOUSE_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
             extra_args['save'] = False
             extra_args['rebuild'] = True
         elif name == "MULTISPECIES":
-            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRINGphyssplit_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
+            dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRINGphyssplit_BioGRID_mRNAprotein_transcriptlevel.HeteroNetwork'
         elif name == "MULTISPECIES_unsplit":
             dataset_path = '~/PycharmProjects/Multiplex-Graph-Embedding/data/heteronetwork/DGG_MirTarBase_TarBase_LncBase_RNAInter_STRING_BioGRID_mRNAprotein_transcriptlevel.network.pickle'
             extra_args['save'] = False
