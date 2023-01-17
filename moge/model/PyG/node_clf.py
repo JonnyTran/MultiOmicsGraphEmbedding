@@ -20,20 +20,22 @@ from sklearn.multiclass import OneVsRestClassifier
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+from torch_sparse import SparseTensor
 
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
-from moge.model.PyG.conv import HGT
+from moge.model.PyG.conv import HGT, RGCN
 from moge.model.PyG.latte import LATTE
 from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
+from moge.model.PyG.metapaths import get_edge_index_values
 from moge.model.PyG.relations import RelationAttention, RelationMultiLayerAgg
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier, LabelNodeClassifer
 from moge.model.dgl.DeepGraphGO import pair_aupr, fmax
 from moge.model.encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
-from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.tensor import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch, to_device
+from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -720,6 +722,91 @@ class HGTNodeClf(LATTEFlatNodeClf):
 
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
+
+
+class RGCNNodeClf(LATTEFlatNodeClf):
+    def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"], collate_fn=None) -> None:
+        super(LATTENodeClf, self).__init__(hparams, dataset, metrics)
+        self.head_node_type = dataset.head_node_type
+        self.dataset = dataset
+        self.multilabel = dataset.multilabel
+        self._name = f"RGCN-{hparams.n_layers}"
+        self.collate_fn = collate_fn
+        # Node attr input
+        if hasattr(dataset, 'seq_tokenizer'):
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
+
+        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(dataset.node_types):
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
+
+        self.relations = tuple(m for m in dataset.metapaths if m[0] == m[-1] and m[0] in self.head_node_type)
+        self.embedder = RGCN(hparams.embedding_dim, num_layers=hparams.n_layers, num_relations=len(self.relations))
+
+        # Output layer
+        self.classifier = DenseClassification(hparams)
+
+        use_cls_weight = 'use_class_weights' in hparams and hparams.use_class_weights
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                            class_weight=dataset.class_weight \
+                                                if use_cls_weight and hasattr(dataset, "class_weight") else None,
+                                            multilabel=dataset.multilabel,
+                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
+
+        self.hparams.n_params = self.get_n_params()
+        self.lr = self.hparams.lr
+
+    def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]],
+                return_embeddings=False, **kwargs) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+        batch_sizes = inputs["batch_size"]
+        if isinstance(self.classifier, LabelNodeClassifer):
+            # Ensure we count betas and alpha values for the `pred_ntypes`
+            batch_sizes = batch_sizes | self.classifier.class_sizes
+
+        h_out = {}
+        #  Node feature or embedding input
+        if 'sequences' in inputs and hasattr(self, "seq_encoder"):
+            h_out.update(self.seq_encoder.forward(inputs['sequences'],
+                                                  split_size=math.sqrt(self.hparams.batch_size // 4)))
+        # Node sequence features
+        global_node_index = {ntype: nids for ntype, nids in inputs["global_node_index"].items() \
+                             if ntype == self.head_node_type}
+        if len(h_out) < len(global_node_index.keys()):
+            embs = self.encoder.forward(inputs["x_dict"], global_node_index=global_node_index)
+            h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
+
+        # Build multi-relational edge_index
+        edge_index_dict = {m: get_edge_index_values(eid)[0] for m, eid in inputs["edge_index_dict"].items() \
+                           if m in self.relations}
+        edge_value_dict = {m: get_edge_index_values(eid)[1] for m, eid in inputs["edge_index_dict"].items() \
+                           if m in self.relations}
+        edge_index = torch.cat([edge_index_dict[m] for m in self.relations], dim=1)
+        edge_value = torch.cat([edge_value_dict[m] for m in self.relations], dim=0)
+        edge_type = torch.tensor([self.relations.index(m) for m in self.relations \
+                                  for i in range(edge_index_dict[m].size(1))], dtype=torch.long,
+                                 device=edge_index.device)
+
+        edge_index = SparseTensor.from_edge_index(edge_index, edge_value,
+                                                  sparse_sizes=(global_node_index[self.head_node_type].size(0),
+                                                                global_node_index[self.head_node_type].size(0)),
+                                                  trust_data=True)
+
+        h_out[self.head_node_type] = self.embedder.forward(h_out[self.head_node_type], edge_index=edge_index,
+                                                           edge_type=edge_type)
+
+        # Node classification
+        if hasattr(self, "classifier"):
+            head_ntype_embeddings = h_out[self.head_node_type]
+            if "batch_size" in inputs and self.head_node_type in batch_sizes:
+                head_ntype_embeddings = head_ntype_embeddings[:batch_sizes[self.head_node_type]]
+
+            logits = self.classifier.forward(head_ntype_embeddings, h_dict=h_out)
+        else:
+            logits = h_out[self.head_node_type]
+
+        if return_embeddings:
+            return h_out, logits
+        else:
+            return logits
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):

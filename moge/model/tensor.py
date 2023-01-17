@@ -238,25 +238,6 @@ def stack_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
 
     return y_pred, y_true, weights
 
-def edge_index_sizes(edge_index_dict):
-    output = {}
-    for m, edge_index in edge_index_dict.items():
-        if isinstance(edge_index, tuple):
-            edge_index, values_a = edge_index
-        else:
-            values_a = None
-
-        if edge_index.size(1) == 0:
-            output[m] = None
-        else:
-            sizes = edge_index.max(1).values.data.tolist()
-            if values_a is not None:
-                output[m] = (sizes, values_a.shape)
-            else:
-                output[m] = sizes
-
-    return output
-
 
 def preprocess_input(input, device, dtype=None, half=False):
     if isinstance(input, dict):
@@ -300,47 +281,3 @@ def pad_tensors(sequences):
     return out_tensor
 
 
-def collate_fn(batch):
-    protein_seqs_all, physical, genetic, correlation, y_all, idx_all = [], [], [], [], [], []
-    for X, y, idx in batch:
-        protein_seqs_all.append(torch.tensor(X["Protein_seqs"]))
-        physical.append(torch.tensor(X["Protein-Protein-physical"]))
-        genetic.append(torch.tensor(X["Protein-Protein-genetic"]))
-        correlation.append(torch.tensor(X["Protein-Protein-correlation"]))
-        y_all.append(torch.tensor(y))
-        idx_all.append(torch.tensor(idx))
-
-    X_all = {"Protein_seqs": torch.cat(protein_seqs_all, dim=0),
-             "Protein-Protein-physical": pad_tensors(physical),
-             "Protein-Protein-genetic": pad_tensors(genetic),
-             "Protein-Protein-correlation": pad_tensors(correlation), }
-    return X_all, torch.cat(y_all, dim=0), torch.cat(idx_all, dim=0)
-
-
-def get_multiplex_collate_fn(node_types, layers):
-    def multiplex_collate_fn(batch):
-        y_all, idx_all = [], []
-        node_type_concat = dict()
-        layer_concat = dict()
-        for node_type in node_types:
-            node_type_concat[node_type] = []
-        for layer in layers:
-            layer_concat[layer] = []
-
-        for X, y, idx in batch:
-            for node_type in node_types:
-                node_type_concat[node_type].append(torch.tensor(X[node_type]))
-            for layer in layers:
-                layer_concat[layer].append(torch.tensor(X[layer]))
-            y_all.append(torch.tensor(y))
-            idx_all.append(torch.tensor(idx))
-
-        X_all = {}
-        for node_type in node_types:
-            X_all[node_type] = torch.cat(node_type_concat[node_type])
-        for layer in layers:
-            X_all[layer] = pad_tensors(layer_concat[layer])
-
-        return X_all, torch.cat(y_all), torch.cat(idx_all)
-
-    return multiplex_collate_fn

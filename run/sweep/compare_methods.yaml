@@ -10,7 +10,7 @@ parameters:
     values: [ 'molecular_function', 'biological_process', 'cellular_component' ]
 
   method:
-    values: [ "LATTE2GO-1", "LATTE-1", "LATTE2GO-2", "HGT", "DeepGraphGO", "MLP", "DeepGOZero" ]
+    values: [ "LATTE2GO-1", "LATTE-1", "LATTE2GO-2", "HGT", "DeepGraphGO", "MLP", "DeepGOZero", 'RGCN' ]
 
   inductive:
     values: [ false ]

@@ -23,14 +23,7 @@ sequence: false
 
 head_node_type: "Protein"
 ntype_subset: "Protein"
-
-filter_metapaths:
-  biological_process:
-    - [ 'is_a', 'is_a' ]
-  molecular_function:
-    - [ 'is_a', 'is_a' ]
-  cellular_component:
-    - [ 'is_a', 'is_a' ]
+filter_self_metapaths: true
 
 use_reverse: true
 add_parents: true

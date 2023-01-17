@@ -28,7 +28,8 @@ class HGT(torch.nn.Module):
 
 
 class RGCN(torch.nn.Module):
-    def __init__(self, embedding_dim, num_layers, num_relations, num_bases, num_blocks) -> None:
+    def __init__(self, embedding_dim: int, num_layers: int, num_relations: int, num_bases=None,
+                 num_blocks=None) -> None:
         super().__init__()
 
         self.convs: List[FastRGCNConv] = torch.nn.ModuleList()
@@ -37,11 +38,11 @@ class RGCN(torch.nn.Module):
                                 num_bases=num_bases, num_blocks=num_blocks)
             self.convs.append(conv)
 
-    def forward(self, x_dict: Dict[str, Tensor], edge_index_dict: Dict[Tuple[str, str, str], Tensor], **kwargs):
+    def forward(self, x: Tensor, edge_index, edge_type):
         for conv in self.convs:
-            x_dict = conv(x_dict, edge_index_dict)
+            x = conv.forward(x, edge_index=edge_index, edge_type=edge_type)
 
-        return x_dict
+        return x
 
 
 class HeteroGNN(torch.nn.Module):

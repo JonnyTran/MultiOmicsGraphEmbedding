@@ -18,7 +18,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
-from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf, HGTNodeClf, MLP
+from moge.model.PyG.node_clf import MetaPath2Vec, LATTEFlatNodeClf, HGTNodeClf, MLP, RGCNNodeClf
 from moge.model.dgl.node_clf import HANNodeClf, HGConv, R_HGNN
 from moge.model.PyG.DeepGOZero import DeepGOZero
 from moge.model.tensor import tensor_sizes
@@ -106,31 +106,6 @@ def train(hparams):
         }
         model = MetaPath2Vec(Namespace(**default_args), dataset=dataset, metrics=METRICS)
 
-    elif hparams.method == "HGT":
-        USE_AMP = False
-        default_args = {
-            "embedding_dim": 128,
-            "n_layers": 2,
-            # "fanouts": [10, 10],
-            "batch_size": 2 ** 11,
-            "activation": "relu",
-            "attn_heads": 4,
-            "attn_activation": "sharpening",
-            "attn_dropout": 0.2,
-            "dropout": 0.5,
-            "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0,
-            "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
-            "n_classes": dataset.n_classes,
-            "use_norm": True,
-            "use_class_weights": False,
-            "lr": 1e-3,
-            "momentum": 0.9,
-            "weight_decay": 1e-2,
-        }
-
-        model = HGTNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
-
     elif hparams.method == "HGConv":
         default_args = {
             'seed': hparams.run,
@@ -171,6 +146,46 @@ def train(hparams):
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
         model = R_HGNN(default_args, dataset, metrics=METRICS)
+
+    elif hparams.method == "HGT":
+        USE_AMP = False
+        default_args = {
+            "embedding_dim": 256,
+            "n_layers": 2,
+            # "fanouts": [10, 10],
+            "batch_size": 2 ** 11,
+            "activation": "relu",
+            "attn_heads": 4,
+            "attn_dropout": 0.2,
+            "dropout": 0.5,
+            "nb_cls_dense_size": 0,
+            "nb_cls_dropout": 0,
+            "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "n_classes": dataset.n_classes,
+            "use_norm": True,
+            "use_class_weights": False,
+        }
+
+        model = HGTNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
+
+    elif hparams.method == "RGCN":
+        USE_AMP = False
+        default_args = {
+            "embedding_dim": 256,
+            "n_layers": 2,
+            "batch_size": 2 ** 11,
+            "activation": "relu",
+            "dropout": 0.5,
+            "nb_cls_dense_size": 0,
+            "nb_cls_dropout": 0,
+            "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "n_classes": dataset.n_classes,
+            "use_class_weights": False,
+            "lr": 1e-3,
+        }
+
+        model = RGCNNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
+
 
     elif "LATTE" in hparams.method:
         USE_AMP = False
