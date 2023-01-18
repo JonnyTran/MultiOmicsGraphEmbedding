@@ -2,7 +2,7 @@ from typing import Tuple, List, Dict
 
 import torch
 from torch import Tensor
-from torch_geometric.nn import GATConv, HGTConv, FastRGCNConv, HeteroConv
+from torch_geometric.nn import GATConv, HGTConv, FastRGCNConv, HeteroConv, RGCNConv
 
 from moge.model.PyG.metapaths import get_edge_index_values
 
@@ -34,8 +34,8 @@ class RGCN(torch.nn.Module):
 
         self.convs: List[FastRGCNConv] = torch.nn.ModuleList()
         for _ in range(num_layers):
-            conv = FastRGCNConv(in_channels=embedding_dim, out_channels=embedding_dim, num_relations=num_relations,
-                                num_bases=num_bases, num_blocks=num_blocks)
+            conv = RGCNConv(in_channels=embedding_dim, out_channels=embedding_dim, num_relations=num_relations,
+                            num_bases=num_bases, num_blocks=num_blocks)
             self.convs.append(conv)
 
     def forward(self, x: Tensor, edge_index, edge_type):

@@ -164,6 +164,9 @@ def train(hparams):
             "n_classes": dataset.n_classes,
             "use_norm": True,
             "use_class_weights": False,
+            "lr": 1e-3,
+            "momentum": 0.9,
+            "weight_decay": 1e-2,
         }
 
         model = HGTNodeClf(Namespace(**default_args), dataset, metrics=METRICS)
