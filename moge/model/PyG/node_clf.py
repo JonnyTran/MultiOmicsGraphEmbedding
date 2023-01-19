@@ -740,6 +740,7 @@ class RGCNNodeClf(LATTEFlatNodeClf):
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.relations = tuple(m for m in dataset.metapaths if m[0] == m[-1] and m[0] in self.head_node_type)
+        print(self.name(), self.relations)
         self.embedder = RGCN(hparams.embedding_dim, num_layers=hparams.n_layers, num_relations=len(self.relations))
 
         # Output layer
